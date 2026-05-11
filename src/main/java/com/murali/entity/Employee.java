@@ -16,7 +16,6 @@ import java.util.List;
 @AllArgsConstructor
 @Table(name = "employees")
 public class Employee{
-
     @Id
     private Long id;
 
@@ -40,5 +39,4 @@ public class Employee{
 
     @Column(name = "first_name", nullable = false, length = 100)
     private String firstName;
-
 }

@@ -1,5 +1,6 @@
 package com.murali.views;
 
+import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.applayout.AppLayout;
 import com.vaadin.flow.component.applayout.DrawerToggle;
 import com.vaadin.flow.component.button.Button;
@@ -10,31 +11,40 @@ import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.router.RouterLink;
 import com.vaadin.flow.spring.security.AuthenticationContext;
+import jakarta.annotation.security.PermitAll;
 
+@PermitAll
 public class MainLayout extends AppLayout {
 
     private final AuthenticationContext authContext;
+    private Button logout;
 
     public MainLayout(AuthenticationContext authContext) {
         this.authContext = authContext;
-
         createHeader();
         createDrawer();
     }
 
     private void createHeader() {
-        H1 logo = new H1("HR Portal");
-        logo.getStyle().set("font-size", "var(--lumo-font-size-l)").set("margin", "0");
+        H1 logo = new H1("Leave & Shift Approval Management System");
 
-        Button logout = new Button("Log out", e -> authContext.logout());
+        logout = new Button("Log out", e -> logoutProcedure());
+        org.springframework.security.core.userdetails.User currUser = (org.springframework.security.core.userdetails.User)authContext.getAuthenticatedUser(Object.class).get();
+        Span userLabel = new Span("Hello, " + currUser.getUsername());
+        userLabel.getStyle().set("margin-right", "10px");
 
-        HorizontalLayout header = new HorizontalLayout(new DrawerToggle(), logo, logout);
+        HorizontalLayout header = new HorizontalLayout(new DrawerToggle(), logo, userLabel,logout);
         header.setDefaultVerticalComponentAlignment(FlexComponent.Alignment.CENTER);
         header.expand(logo);
         header.setWidthFull();
-        header.addClassNames("py-0", "px-m");
 
         addToNavbar(header);
+    }
+
+    private void logoutProcedure(){
+        UI.getCurrent().getSession().close();
+        authContext.logout();
+        UI.getCurrent().getPage().setLocation("/login");
     }
 
     private void createDrawer() {

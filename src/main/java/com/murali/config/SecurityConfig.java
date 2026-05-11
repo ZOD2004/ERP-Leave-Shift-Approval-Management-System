@@ -20,17 +20,21 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
 
-        http
-//                .csrf(csrf -> csrf.disable())
-//                .authorizeHttpRequests(auth -> auth
-//                        .requestMatchers("/public/**", "/user/add", "/login").permitAll()
-//                        .requestMatchers("/admin/**").hasAuthority("Super Admin")
-//                        .requestMatchers("/hr/**").hasAnyAuthority("Super Admin", "HR Admin", "Auditor")
-//                        .anyRequest().authenticated()
-//                )
-                .with(VaadinSecurityConfigurer.vaadin(), config -> {
-                    config.loginView(LoginView.class, "/");
+        http.authorizeHttpRequests(auth -> auth
+                .requestMatchers("/logout").permitAll()
+                .requestMatchers("/login").permitAll()
+        );
+
+        http.with(VaadinSecurityConfigurer.vaadin(), config -> {
+                    config.loginView(LoginView.class,"/login");
                 })
+                .logout(logout -> logout
+                        .logoutUrl("/logout")
+                        .logoutSuccessUrl("/login")
+                        .invalidateHttpSession(true)
+                        .deleteCookies("JSESSIONID")
+                        .clearAuthentication(true)
+                )
                 .httpBasic(Customizer.withDefaults());
 
         return http.build();

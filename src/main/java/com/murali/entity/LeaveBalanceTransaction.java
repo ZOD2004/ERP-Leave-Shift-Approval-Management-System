@@ -44,6 +44,4 @@ public class LeaveBalanceTransaction {
     @Column(name = "created_at")
     @CreationTimestamp
     private LocalDateTime createdAt;
-
-
 }

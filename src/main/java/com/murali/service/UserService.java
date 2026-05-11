@@ -1,19 +1,13 @@
 package com.murali.service;
 
-import com.murali.entity.Role;
 import com.murali.entity.User;
-import com.murali.repository.RoleRepository;
 import com.murali.repository.UserRepository;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PutMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
 
 import java.util.List;
+import java.util.Optional;
 
 @Service
 public class UserService {
@@ -31,8 +25,12 @@ public class UserService {
         return userRepository.save(user);
     }
 
-    @PreAuthorize("hasAnyRole('Super Admin', 'HR Admin', 'Auditor')")
+    @PreAuthorize("hasAnyRole('Super Admin', 'HR Admin', 'Auditor','Manager')")
     public List<User> getUsers(){
         return userRepository.findAll();
+    }
+
+    public Optional<User> findByUsername(String username) {
+        return Optional.ofNullable(userRepository.findByUsername(username));
     }
 }

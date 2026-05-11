@@ -41,6 +41,4 @@ public class LeaveApproval {
     @Column(name = "acted_at")
     @CreationTimestamp
     private LocalDateTime actedAt;
-
-
 }
