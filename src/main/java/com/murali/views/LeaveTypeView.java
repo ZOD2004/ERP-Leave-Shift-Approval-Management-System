@@ -25,7 +25,7 @@ import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
 import jakarta.annotation.security.RolesAllowed;
 
-@Route("add-leave-types")
+@Route(value = "add-leave-types",layout = MainLayout.class)
 @PageTitle("Manage Leave Types")
 @RolesAllowed({"ROLE_SUPER_ADMIN", "ROLE_HR_ADMIN"})
 public class LeaveTypeView extends VerticalLayout {

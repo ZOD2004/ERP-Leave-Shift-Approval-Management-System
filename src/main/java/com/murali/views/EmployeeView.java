@@ -31,7 +31,7 @@ import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
 import jakarta.annotation.security.RolesAllowed;
 
-@Route("add-employees")
+@Route(value = "add-employees",layout = MainLayout.class)
 @PageTitle("Employee Directory")
 @RolesAllowed({"ROLE_SUPER_ADMIN", "ROLE_HR_ADMIN"})
 public class EmployeeView extends VerticalLayout {

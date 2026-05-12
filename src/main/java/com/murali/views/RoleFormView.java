@@ -4,6 +4,7 @@ import com.murali.entity.Role;
 import com.murali.service.RoleService;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.formlayout.FormLayout;
+import com.vaadin.flow.component.html.H1;
 import com.vaadin.flow.component.notification.Notification;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.textfield.TextField;
@@ -11,7 +12,7 @@ import com.vaadin.flow.data.binder.BeanValidationBinder;
 import com.vaadin.flow.router.Route;
 import jakarta.annotation.security.RolesAllowed;
 
-@Route("add-role")
+@Route(value = "add-role",layout = MainLayout.class)
 @RolesAllowed("ROLE_SUPER_ADMIN")
 public class RoleFormView extends VerticalLayout {
 
@@ -24,7 +25,7 @@ public class RoleFormView extends VerticalLayout {
 
     public RoleFormView(RoleService roleService) {
         this.roleService = roleService;
-
+        add(new H1("Add new Role"));
         FormLayout formLayout = new FormLayout(name, save);
         formLayout.setMaxWidth("400px");
         add(formLayout);

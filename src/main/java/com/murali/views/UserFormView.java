@@ -11,6 +11,7 @@ import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.checkbox.Checkbox;
 import com.vaadin.flow.component.combobox.ComboBox;
 import com.vaadin.flow.component.formlayout.FormLayout;
+import com.vaadin.flow.component.html.H1;
 import com.vaadin.flow.component.notification.Notification;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
@@ -45,6 +46,8 @@ public class UserFormView extends VerticalLayout {
         this.userService = userService;
         this.roleService = roleService;
 
+        add(new H1("Add new User"));
+
         setSizeFull();
         setAlignItems(Alignment.CENTER);
 
@@ -69,6 +72,7 @@ public class UserFormView extends VerticalLayout {
         binder.bindInstanceFields(this);
 
         save.addClickListener(event -> saveUser());
+        save.setTooltipText("Just creates a User not a Employee");
 
         cancel.addClickListener(event -> binder.setBean(new User()));
     }

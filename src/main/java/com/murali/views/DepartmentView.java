@@ -26,7 +26,7 @@ import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
 import jakarta.annotation.security.RolesAllowed;
 
-@Route("add-departments")
+@Route(value = "add-departments",layout = MainLayout.class)
 @PageTitle("Manage Departments")
 @RolesAllowed({"ROLE_SUPER_ADMIN", "ROLE_HR_ADMIN"})
 public class DepartmentView extends VerticalLayout {

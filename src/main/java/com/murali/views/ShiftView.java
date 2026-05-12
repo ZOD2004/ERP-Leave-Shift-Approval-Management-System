@@ -27,7 +27,7 @@ import jakarta.annotation.security.RolesAllowed;
 
 import java.time.Duration;
 
-@Route("add-shifts")
+@Route(value = "add-shifts",layout = MainLayout.class)
 @PageTitle("Manage Shifts")
 @RolesAllowed({"ROLE_SUPER_ADMIN", "ROLE_HR_ADMIN"})
 public class ShiftView extends VerticalLayout {

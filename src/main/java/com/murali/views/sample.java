@@ -6,12 +6,13 @@ import com.vaadin.flow.router.Route;
 import jakarta.annotation.security.PermitAll;
 import jakarta.annotation.security.RolesAllowed;
 
-@Route("")
+@Route(value = "",layout = MainLayout.class)
 //@RolesAllowed("ROLE_SUPER_ADMIN")
 //@RolesAllowed("ROLE_HR_ADMIN")
 //@RolesAllowed("Employee")
-@RolesAllowed("Manager")
+//@RolesAllowed("Manager")
 //@RolesAllowed("ROLE_AUDITOR")
+@PermitAll
 
 public class sample extends VerticalLayout {
     public sample(){
