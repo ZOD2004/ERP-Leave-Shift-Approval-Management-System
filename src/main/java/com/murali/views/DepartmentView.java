@@ -91,7 +91,7 @@ public class DepartmentView extends VerticalLayout {
     private void configureForm() {
         formDialog.setHeaderTitle("Department Details");
 
-        hod.setItems(employeeService.findAll());
+        hod.setItems(employeeService.findAllActive());
         hod.setItemLabelGenerator(Employee::getFirstName);
         hod.setPlaceholder("Select HOD (Optional)");
         hod.setClearButtonVisible(true);
@@ -121,7 +121,7 @@ public class DepartmentView extends VerticalLayout {
     private void openForm(Department department) {
         currentDepartment = department;
 
-        hod.setItems(employeeService.findAll());
+        hod.setItems(employeeService.findAllActive());
 
         binder.readBean(currentDepartment);
         formDialog.open();

@@ -2,7 +2,6 @@ package com.murali.service;
 
 import com.murali.entity.User;
 import com.murali.repository.UserRepository;
-import jakarta.annotation.security.PermitAll;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -33,7 +32,7 @@ public class UserService {
         return userRepository.findAll();
     }
 
-    public Optional<User> findByUsername(String username) {
-        return Optional.ofNullable(userRepository.findByUsername(username));
+    public User findByUsername(String username) {
+        return userRepository.findByUsername(username);
     }
 }
