@@ -36,10 +36,6 @@ public class EmployeeService {
         return employeeRepository.findAllManagers();
     }
 
-    public List<Employee> findByEmployeeCode() {
-        return employeeRepository.findByEmployeeCode();
-    }
-
     @PreAuthorize("hasAnyRole('ROLE_SUPER_ADMIN', 'ROLE_HR_ADMIN')")
 //    @PermitAll
     public List<Employee> findAll() {

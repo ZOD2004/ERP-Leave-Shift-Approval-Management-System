@@ -13,5 +13,4 @@ public interface EmployeeRepository extends JpaRepository<Employee,Long> {
     """)
     List<Employee> findAllManagers();
 
-    List<Employee> findByEmployeeCode();
 }

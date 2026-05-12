@@ -13,7 +13,7 @@ import jakarta.annotation.security.RolesAllowed;
 
 @Route("add-role")
 @RolesAllowed("ROLE_SUPER_ADMIN")
-public class RoleView extends VerticalLayout {
+public class RoleFormView extends VerticalLayout {
 
     private final RoleService roleService;
 
@@ -22,7 +22,7 @@ public class RoleView extends VerticalLayout {
 
     private BeanValidationBinder<Role> binder = new BeanValidationBinder<>(Role.class);
 
-    public RoleView(RoleService roleService) {
+    public RoleFormView(RoleService roleService) {
         this.roleService = roleService;
 
         FormLayout formLayout = new FormLayout(name, save);

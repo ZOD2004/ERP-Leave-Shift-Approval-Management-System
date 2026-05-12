@@ -17,12 +17,12 @@ public class LeaveTypeService {
         this.leaveTypeRepository = leaveTypeRepository;
     }
 
-    public List<LeaveType> getLeaveTypes() {
+    public List<LeaveType> getAllLeaveTypes() {
         return leaveTypeRepository.findAll();
     }
 
-    public LeaveType addLeaveType(LeaveType leaveType) {
-        return leaveTypeRepository.save(leaveType);
+    public void addLeaveType(LeaveType leaveType) {
+        leaveTypeRepository.save(leaveType);
     }
 
     public void deleteLeaveType(Long id) {
@@ -44,5 +44,9 @@ public class LeaveTypeService {
         currLeaveType.setMaxDaysPerYear(leaveType.getMaxDaysPerYear());
 
         return leaveTypeRepository.save(currLeaveType);
+    }
+
+    public List<LeaveType> search(String searchTerm) {
+        return leaveTypeRepository.findByNameContainingIgnoreCaseOrCodeContainingIgnoreCase(searchTerm,searchTerm);
     }
 }
