@@ -21,8 +21,8 @@ public class ShiftService {
         return shiftRepository.findAll();
     }
 
-    public Shift addShift(Shift shift){
-        return shiftRepository.save(shift);
+    public void addShift(Shift shift){
+        shiftRepository.save(shift);
     }
 
     public void deleteShift(Long id){
@@ -41,5 +41,9 @@ public class ShiftService {
         currShift.setEndTime(shift.getEndTime());
         currShift.setStartTime(shift.getStartTime());
         return shiftRepository.save(shift);
+    }
+
+    public List<Shift> search(String searchTerm) {
+        return shiftRepository.findByNameContainingIgnoreCase(searchTerm);
     }
 }
