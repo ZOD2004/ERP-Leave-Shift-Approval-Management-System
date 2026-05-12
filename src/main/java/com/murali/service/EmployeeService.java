@@ -3,6 +3,7 @@ package com.murali.service;
 import com.murali.entity.Employee;
 import com.murali.entity.User;
 import com.murali.repository.EmployeeRepository;
+import jakarta.annotation.security.PermitAll;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,7 +20,8 @@ public class EmployeeService {
         this.employeeRepository = employeeRepository;
     }
     @Transactional
-    @PreAuthorize("hasAnyRole('Super Admin', 'HR Admin')")
+    @PreAuthorize("hasAnyRole('ROLE_SUPER_ADMIN', 'ROLE_HR_ADMIN')")
+    @PermitAll
     public void createEmployeeWithUser(Employee employee, User user) {
         User finalUser = userService.findByUsername(user.getUsername())
                 .orElseGet(() -> userService.addUser(user));
@@ -28,9 +30,19 @@ public class EmployeeService {
         employeeRepository.save(employee);
     }
 
-    @PreAuthorize("hasAnyRole('Super Admin', 'HR Admin')")
+    @PreAuthorize("hasAnyRole('ROLE_SUPER_ADMIN', 'ROLE_HR_ADMIN')")
+//    @PermitAll
     public List<Employee> findAllManagers() {
         return employeeRepository.findAllManagers();
     }
 
+    public List<Employee> findByEmployeeCode() {
+        return employeeRepository.findByEmployeeCode();
+    }
+
+    @PreAuthorize("hasAnyRole('ROLE_SUPER_ADMIN', 'ROLE_HR_ADMIN')")
+//    @PermitAll
+    public List<Employee> findAll() {
+        return employeeRepository.findAll();
+    }
 }

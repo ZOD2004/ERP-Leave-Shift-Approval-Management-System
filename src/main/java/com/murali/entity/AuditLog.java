@@ -21,6 +21,7 @@ import java.time.LocalDateTime;
 public class AuditLog {
 
     @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "actor_user_id")

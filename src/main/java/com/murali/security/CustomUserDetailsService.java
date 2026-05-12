@@ -2,6 +2,7 @@ package com.murali.security;
 
 import com.murali.entity.User;
 import com.murali.repository.UserRepository;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
@@ -20,20 +21,15 @@ public class CustomUserDetailsService implements UserDetailsService {
     }
 
     @Override
-    public UserDetails loadUserByUsername(String username)
-            throws UsernameNotFoundException {
+    public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
 
-        User user = null;
-        String roleWithPrefix;
-        try {
-            user = userRepository.findByUsername(username);
-            roleWithPrefix = "ROLE_" + user.getRole().getName();
-        } catch (Exception e) {
-            throw new UsernameNotFoundException("User not found with name: "+username);
+        User user = userRepository.findByUsername(username);
+
+        if (user == null) {
+            throw new UsernameNotFoundException("User not found with name: " + username);
         }
-
-
-        SimpleGrantedAuthority authority = new SimpleGrantedAuthority(roleWithPrefix);
+        String role = user.getRole().getName();
+        SimpleGrantedAuthority authority = new SimpleGrantedAuthority(role);
 
         return new org.springframework.security.core.userdetails.User(
                 user.getUsername(),

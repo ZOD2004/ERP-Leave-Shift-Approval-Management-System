@@ -1,5 +1,6 @@
 package com.murali.entity;
 
+import com.fasterxml.jackson.annotation.JsonManagedReference;
 import jakarta.persistence.*;
 import java.util.ArrayList;
 import java.util.List;
@@ -18,6 +19,7 @@ import lombok.Setter;
 public class Department {
 
     @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
     @Column(nullable = false, unique = true, length = 100)
@@ -28,6 +30,7 @@ public class Department {
     private Employee hod;
 
     @OneToMany(mappedBy = "department", fetch = FetchType.LAZY)
+    @JsonManagedReference
     private List<Employee> employees = new ArrayList<>();
 
 }

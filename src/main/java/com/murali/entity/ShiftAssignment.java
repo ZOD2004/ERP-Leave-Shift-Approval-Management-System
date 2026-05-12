@@ -17,6 +17,7 @@ import java.time.LocalDate;
 public class ShiftAssignment {
 
     @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY)

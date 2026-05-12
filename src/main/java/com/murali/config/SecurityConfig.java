@@ -19,10 +19,12 @@ public class SecurityConfig {
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+        http.csrf(csrf -> csrf.ignoringRequestMatchers("/api/**"));
 
         http.authorizeHttpRequests(auth -> auth
                 .requestMatchers("/logout").permitAll()
                 .requestMatchers("/login").permitAll()
+                .requestMatchers("/api/**").permitAll()
         );
 
         http.with(VaadinSecurityConfigurer.vaadin(), config -> {
@@ -34,8 +36,8 @@ public class SecurityConfig {
                         .invalidateHttpSession(true)
                         .deleteCookies("JSESSIONID")
                         .clearAuthentication(true)
-                )
-                .httpBasic(Customizer.withDefaults());
+                );
+//                .httpBasic(Customizer.withDefaults());
 
         return http.build();
     }

@@ -7,11 +7,11 @@ import jakarta.annotation.security.PermitAll;
 import jakarta.annotation.security.RolesAllowed;
 
 @Route("")
-//@RolesAllowed("Super Admin")
-//@RolesAllowed("HR Admin")
+//@RolesAllowed("ROLE_SUPER_ADMIN")
+//@RolesAllowed("ROLE_HR_ADMIN")
 //@RolesAllowed("Employee")
 @RolesAllowed("Manager")
-//@RolesAllowed("Auditor")
+//@RolesAllowed("ROLE_AUDITOR")
 
 public class sample extends VerticalLayout {
     public sample(){

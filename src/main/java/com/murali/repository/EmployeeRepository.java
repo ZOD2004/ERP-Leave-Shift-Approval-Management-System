@@ -10,7 +10,8 @@ public interface EmployeeRepository extends JpaRepository<Employee,Long> {
     @Query("""
         SELECT DISTINCT e
         FROM Employee e
-        WHERE e.subordinates IS NOT EMPTY
     """)
     List<Employee> findAllManagers();
+
+    List<Employee> findByEmployeeCode();
 }

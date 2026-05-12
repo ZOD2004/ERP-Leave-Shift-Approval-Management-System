@@ -2,6 +2,7 @@ package com.murali.service;
 
 import com.murali.entity.Role;
 import com.murali.repository.RoleRepository;
+import jakarta.annotation.security.PermitAll;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -19,12 +20,14 @@ public class RoleService {
         this.roleRepository = roleRepository;
     }
 
-    @PreAuthorize("hasRole('Super Admin')")
+    @PreAuthorize("hasRole('ROLE_SUPER_ADMIN')")
+//    @PermitAll
     public Role addRole(Role role){
         return roleRepository.save(role);
     }
 
-    @PreAuthorize("hasAnyRole('Super Admin', 'Auditor','HR Admin')")
+    @PreAuthorize("hasAnyRole('ROLE_SUPER_ADMIN', 'ROLE_AUDITOR','ROLE_HR_ADMIN')")
+//    @PermitAll
     public List<Role> getRoles(){
         return roleRepository.findAll();
     }

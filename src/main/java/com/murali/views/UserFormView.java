@@ -24,7 +24,7 @@ import jakarta.annotation.security.RolesAllowed;
 
 @Route(value = "add-user",layout = MainLayout.class)
 @PageTitle("Add New User")
-@RolesAllowed({"Super Admin","HR Admin"})
+@RolesAllowed({"ROLE_SUPER_ADMIN","ROLE_HR_ADMIN"})
 public class UserFormView extends VerticalLayout {
 
     private final UserService userService;
