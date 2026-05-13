@@ -4,7 +4,6 @@ import com.murali.entity.Shift;
 import com.murali.exception.UserNotFoundException;
 import com.murali.repository.ShiftRepository;
 import org.springframework.stereotype.Service;
-import org.springframework.web.bind.annotation.GetMapping;
 
 import java.util.List;
 import java.util.Optional;
@@ -28,7 +27,7 @@ public class ShiftService {
     public void deleteShift(Long id){
         shiftRepository.deleteById(id);
     }
-    public Shift editShift(Long id,Shift shift){
+    public Shift updateShift(Long id,Shift shift){
         Optional<Shift> optShift = shiftRepository.findById(id);
         Shift currShift;
         if (optShift.isPresent()){
@@ -41,6 +40,10 @@ public class ShiftService {
         currShift.setEndTime(shift.getEndTime());
         currShift.setStartTime(shift.getStartTime());
         return shiftRepository.save(shift);
+    }
+
+    public Optional<Shift> getShiftById(Long id){
+        return shiftRepository.findById(id);
     }
 
     public List<Shift> search(String searchTerm) {

@@ -28,4 +28,23 @@ public class GlobalExceptionHandler extends Exception{
         ErrorDetails errorDetails = new ErrorDetails(e.getMessage(), request.getDescription(true), LocalDateTime.now());
         return new ResponseEntity<>(errorDetails, HttpStatus.BAD_REQUEST);
     }
+
+    @ExceptionHandler(EmployeeNotFoundException.class)
+    public ResponseEntity<ErrorDetails> EmployeeNotFoundException(EmployeeNotFoundException e, WebRequest request){
+        ErrorDetails errorDetails = new ErrorDetails(e.getMessage(), request.getDescription(true), LocalDateTime.now());
+        return new ResponseEntity<>(errorDetails, HttpStatus.BAD_REQUEST);
+    }
+
+    @ExceptionHandler(ShiftNotFoundException.class)
+    public ResponseEntity<ErrorDetails> ShiftNotFoundException(ShiftNotFoundException e, WebRequest request){
+        ErrorDetails errorDetails = new ErrorDetails(e.getMessage(), request.getDescription(true), LocalDateTime.now());
+        return new ResponseEntity<>(errorDetails, HttpStatus.BAD_REQUEST);
+    }
+
+    @ExceptionHandler(ShiftConflictException.class)
+    public ResponseEntity<ErrorDetails> ShiftConflictException(ShiftConflictException e, WebRequest request){
+        ErrorDetails errorDetails = new ErrorDetails(e.getMessage(), request.getDescription(true), LocalDateTime.now());
+        return new ResponseEntity<>(errorDetails, HttpStatus.CONFLICT);
+    }
+
 }

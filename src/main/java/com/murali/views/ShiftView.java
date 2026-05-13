@@ -144,6 +144,10 @@ public class ShiftView extends VerticalLayout {
 
     private void saveShift() {
         try {
+            if(startTimeField.getValue().isAfter(endTimeField.getValue())){
+                Notification.show("The start time comes after end time in case of wrong edit it")
+                        .addThemeVariants(NotificationVariant.INFO);
+            }
             binder.writeBean(currentShift);
             shiftService.addShift(currentShift);
 

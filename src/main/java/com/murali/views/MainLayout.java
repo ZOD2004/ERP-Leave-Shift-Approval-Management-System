@@ -83,9 +83,9 @@ public class MainLayout extends AppLayout {
     }
 
     private void addDrawerContent() {
-        Span appName = new Span("ERP SYSTEM");
+        Span appName = new Span("Leave & Shift Approval");
         appName.addClassNames(
-                LumoUtility.FontSize.SMALL,
+                LumoUtility.FontSize.MEDIUM,
                 LumoUtility.FontWeight.BOLD,
                 LumoUtility.Padding.LARGE,
                 LumoUtility.TextColor.SECONDARY);
@@ -124,10 +124,11 @@ public class MainLayout extends AppLayout {
                 LumoUtility.BorderColor.CONTRAST_10);
 
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        Avatar avatar = new Avatar(auth.getName());
+        String name1 = (auth != null)?auth.getName():"USER";
+        Avatar avatar = new Avatar(name1);
         avatar.addClassNames(LumoUtility.Margin.Right.SMALL);
 
-        Span name = new Span(auth.getName());
+        Span name = new Span(name1);
         name.addClassNames(LumoUtility.FontWeight.MEDIUM, LumoUtility.FontSize.XSMALL, LumoUtility.Flex.GROW);
 
         layout.add(avatar, name);
