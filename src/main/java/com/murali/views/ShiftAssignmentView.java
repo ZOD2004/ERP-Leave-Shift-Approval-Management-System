@@ -1,5 +1,6 @@
 package com.murali.views;
 
+import com.murali.dto.MonthlyPivotRowDTO;
 import com.murali.dto.PivotRowDTO;
 import com.murali.dto.ShiftAssignmentDTO;
 import com.murali.entity.Employee;
@@ -15,6 +16,7 @@ import com.vaadin.flow.component.datepicker.DatePicker;
 import com.vaadin.flow.component.dialog.Dialog;
 import com.vaadin.flow.component.formlayout.FormLayout;
 import com.vaadin.flow.component.grid.Grid;
+import com.vaadin.flow.component.grid.GridVariant;
 import com.vaadin.flow.component.html.*;
 import com.vaadin.flow.component.icon.Icon;
 import com.vaadin.flow.component.icon.VaadinIcon;
@@ -74,6 +76,10 @@ public class ShiftAssignmentView extends VerticalLayout {
     private final VerticalLayout dialogContentArea = new VerticalLayout();
     private final DatePicker singleDatePicker = new DatePicker("Assignment Date");
 
+    private final Grid<MonthlyPivotRowDTO> monthlyGrid = new Grid<>(MonthlyPivotRowDTO.class, false);
+    private LocalDate currentMonth = LocalDate.now().withDayOfMonth(1);
+    private final Span monthLabel = new Span();
+
     public ShiftAssignmentView(ShiftAssignmentService assignmentService, EmployeeService employeeService, ShiftService shiftService) {
         this.assignmentService = assignmentService;
         this.employeeService = employeeService;
@@ -88,7 +94,9 @@ public class ShiftAssignmentView extends VerticalLayout {
 
         Tab listTab = new Tab("List View");
         Tab calendarTab = new Tab("Weekly Calendar View");
-        tabs.add(listTab, calendarTab);
+        Tab monthlyTab = new Tab("Monthly Calendar View");
+
+        tabs.add(listTab, calendarTab, monthlyTab);
 
         contentArea.setSizeFull();
 
@@ -97,9 +105,12 @@ public class ShiftAssignmentView extends VerticalLayout {
             if (event.getSelectedTab().equals(listTab)) {
                 contentArea.add(buildListLayout());
                 refreshListGrid();
-            } else {
+            } else if (event.getSelectedTab().equals(calendarTab)) {
                 contentArea.add(buildPivotLayout());
                 refreshPivotGrid();
+            } else if (event.getSelectedTab().equals(monthlyTab)) {
+                contentArea.add(buildMonthlyLayout());
+                refreshMonthlyGrid();
             }
         });
 
@@ -375,4 +386,80 @@ public class ShiftAssignmentView extends VerticalLayout {
         Notification.show(message).addThemeVariants(notificationVariant);
     }
 
+    private Component buildMonthlyLayout() {
+        Button prevBtn = new Button(new Icon(VaadinIcon.ANGLE_LEFT), e -> shiftMonth(-1));
+        Button nextBtn = new Button(new Icon(VaadinIcon.ANGLE_RIGHT), e -> shiftMonth(1));
+
+        monthLabel.getStyle().set("font-weight", "bold").set("font-size", "1.2em").set("min-width", "150px");
+        monthLabel.getStyle().set("text-align", "center");
+        updateMonthLabel();
+
+        HorizontalLayout controls = new HorizontalLayout(prevBtn, monthLabel, nextBtn);
+        controls.setAlignItems(FlexComponent.Alignment.CENTER);
+        controls.setJustifyContentMode(FlexComponent.JustifyContentMode.CENTER);
+        controls.setWidthFull();
+
+        monthlyGrid.setSizeFull();
+
+        monthlyGrid.addThemeVariants(GridVariant.LUMO_COMPACT, GridVariant.LUMO_COLUMN_BORDERS);
+
+        VerticalLayout layout = new VerticalLayout(controls, monthlyGrid);
+        layout.setSizeFull();
+        layout.setPadding(false);
+        return layout;
+    }
+
+    private void shiftMonth(int monthsToAdd) {
+        currentMonth = currentMonth.plusMonths(monthsToAdd);
+        updateMonthLabel();
+        refreshMonthlyGrid();
+    }
+
+    private void updateMonthLabel() {
+        String monthString = currentMonth.getMonth().name();
+        monthString = monthString.substring(0, 1).toUpperCase() + monthString.substring(1).toLowerCase();
+        monthLabel.setText(monthString + " " + currentMonth.getYear());
+    }
+
+    private void setupMonthlyColumns() {
+        monthlyGrid.removeAllColumns();
+
+        monthlyGrid.addColumn(MonthlyPivotRowDTO::getEmployeeName)
+                .setHeader("Employee")
+                .setFrozen(true)
+                .setWidth("180px")
+                .setFlexGrow(0);
+
+        int daysInMonth = currentMonth.lengthOfMonth();
+        for (int i = 1; i <= daysInMonth; i++) {
+            final int day = i;
+            monthlyGrid.addColumn(row -> row.getShiftForDay(day))
+                    .setHeader(String.valueOf(day))
+                    .setAutoWidth(true);
+//                    .setFlexGrow(0);
+        }
+    }
+
+    private void refreshMonthlyGrid() {
+        setupMonthlyColumns();
+
+        LocalDate startOfMonth = currentMonth.withDayOfMonth(1);
+        LocalDate endOfMonth = currentMonth.withDayOfMonth(currentMonth.lengthOfMonth());
+
+        List<ShiftAssignmentDTO> flatAssignments = assignmentService.fetchAssignmentsForCalendarPivot(startOfMonth, endOfMonth);
+
+        java.util.Map<String, MonthlyPivotRowDTO> pivotData = new java.util.HashMap<>();
+
+        for (ShiftAssignmentDTO dto : flatAssignments) {
+            MonthlyPivotRowDTO row = pivotData.computeIfAbsent(
+                    dto.getEmployeeName(),
+                    k -> new MonthlyPivotRowDTO(dto.getEmployeeName())
+            );
+
+            int dayOfMonth = dto.getAssignmentDate().getDayOfMonth();
+            row.addShift(dayOfMonth, dto.getShiftName());
+        }
+
+        monthlyGrid.setItems(pivotData.values());
+    }
 }
