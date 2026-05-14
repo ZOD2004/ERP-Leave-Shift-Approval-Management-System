@@ -12,6 +12,7 @@ import com.murali.exception.ShiftConflictException;
 import com.murali.exception.ShiftNotFoundException;
 import com.murali.repository.*;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -139,7 +140,8 @@ public class ShiftAssignmentService {
     public Page<ShiftAssignmentDTO> fetchAssignmentsForGrid(int offset,int limit,
             LocalDate filterDate,String employeeNameSearch){
         int pageNumber = offset / limit;
-        Pageable pageable = PageRequest.of(pageNumber, limit);
+        Pageable pageable =
+        PageRequest.of(pageNumber, limit, Sort.by("assignmentDate").ascending());
 
         Page<ShiftAssignment> assignmentPage;
 

@@ -3,6 +3,7 @@ package com.murali.repository;
 import com.murali.entity.ShiftAssignment;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -28,27 +29,32 @@ public interface ShiftAssignmentRepository extends JpaRepository<ShiftAssignment
     boolean existsByEmployeeIdAndAssignmentDate(@Param("employeeId") Long employeeId,
             @Param("assignmentDate") LocalDate assignmentDate);
 
+    @EntityGraph(attributePaths = {"employee", "shift"})
+    @Query("""
+        SELECT sa
+        FROM ShiftAssignment sa
+        WHERE sa.assignmentDate >= CURRENT_DATE
+          AND sa.assignmentDate = :filterDate
+          AND LOWER(sa.employee.firstName)
+                LIKE LOWER(CONCAT('%', :employeeName, '%'))
+        """)
+    Page<ShiftAssignment> findFilteredAssignments(
+            @Param("filterDate") LocalDate filterDate,
+            @Param("employeeName") String employeeName,
+            Pageable pageable
+    );
+
+    @EntityGraph(attributePaths = {"employee", "shift"})
     @Query("""
     SELECT sa
     FROM ShiftAssignment sa
-    JOIN FETCH sa.employee e
-    JOIN FETCH sa.shift s
-    WHERE sa.assignmentDate = :filterDate
-      AND LOWER(e.firstName)
-            LIKE LOWER(CONCAT('%', :employeeName, '%'))
-""")
-    Page<ShiftAssignment> findFilteredAssignments(@Param("filterDate") LocalDate filterDate,
-            @Param("employeeName") String employeeName,Pageable pageable);
-
-    @Query("""
-    SELECT sa
-    FROM ShiftAssignment sa
-    JOIN FETCH sa.employee
-    JOIN FETCH sa.shift
-    WHERE sa.assignmentDate = :filterDate
-""")
-    Page<ShiftAssignment> findByDate(@Param("filterDate") LocalDate filterDate,Pageable pageable);
-
+    WHERE sa.assignmentDate >= CURRENT_DATE
+      AND sa.assignmentDate = :filterDate
+    """)
+    Page<ShiftAssignment> findByDate(
+            @Param("filterDate") LocalDate filterDate,
+            Pageable pageable
+    );
 
     @Query("""
     SELECT sa
@@ -59,19 +65,18 @@ public interface ShiftAssignmentRepository extends JpaRepository<ShiftAssignment
 """)
     List<ShiftAssignment> findByAssignmentDateBetween(@Param("startDate") LocalDate startDate,@Param("endDate") LocalDate endDate);
 
+    @EntityGraph(attributePaths = {"employee", "shift"})
     @Query("""
     SELECT sa
     FROM ShiftAssignment sa
-    JOIN FETCH sa.employee e
-    JOIN FETCH sa.shift
-    WHERE LOWER(e.firstName)
+    WHERE sa.assignmentDate >= CURRENT_DATE
+      AND LOWER(sa.employee.firstName)
             LIKE LOWER(CONCAT('%', :employeeName, '%'))
-""")
+    """)
     Page<ShiftAssignment> findByEmployeeName(
             @Param("employeeName") String employeeName,
             Pageable pageable
     );
-
     @Query("""
     SELECT sa
     FROM ShiftAssignment sa
@@ -81,12 +86,12 @@ public interface ShiftAssignmentRepository extends JpaRepository<ShiftAssignment
 """)
     List<ShiftAssignment> findByAssignmentDate(@Param("date") LocalDate date);
 
+    @EntityGraph(attributePaths = {"employee", "shift"})
     @Query("""
     SELECT sa
     FROM ShiftAssignment sa
-    JOIN FETCH sa.employee
-    JOIN FETCH sa.shift
-""")
+    WHERE sa.assignmentDate >= CURRENT_DATE
+    """)
     Page<ShiftAssignment> findAllAssignments(Pageable pageable);
 
     @Query("SELECT sa FROM ShiftAssignment sa WHERE sa.employee.id IN :employeeIds " +

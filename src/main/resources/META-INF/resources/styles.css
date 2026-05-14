@@ -1,1 +1,19 @@
-/* Add your styles here */
+[theme~="badge"] {
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 13px;
+    font-weight: bold;
+    display: inline-block;
+    background-color: lightgray;
+    color: black;
+}
+
+[theme~="success"] {
+    background-color: #28a745;
+    color: white;
+}
+
+[theme~="contrast"] {
+    background-color: #343a40;
+    color: white;
+}

@@ -66,7 +66,7 @@ public class MainLayout extends AppLayout {
             setDrawerOpened(!isDrawerOpened());
             updateToggleIcon();
         });
-        toggleButton.addThemeVariants(ButtonVariant.LUMO_TERTIARY, ButtonVariant.LUMO_CONTRAST);
+        toggleButton.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
 
         VerticalLayout navWrapper = new VerticalLayout(topRow);
         navWrapper.setPadding(false);
