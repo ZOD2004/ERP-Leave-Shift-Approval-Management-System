@@ -1,6 +1,7 @@
 package com.murali.views;
 
 import com.murali.entity.NavMenuItem;
+import com.murali.entity.User;
 import com.murali.service.NavigationService;
 import com.vaadin.flow.component.applayout.AppLayout;
 import com.vaadin.flow.component.avatar.Avatar;
