@@ -44,4 +44,13 @@ public interface LeaveRequestRepository extends JpaRepository<LeaveRequest, Long
     )
     boolean isEmployeeOnApprovedLeave(@Param("employeeId") Long employeeId,
             @Param("status") String status,@Param("date") LocalDate date);
+
+    @Query("SELECT l FROM LeaveRequest l WHERE l.employee.id IN :employeeIds " +
+            "AND l.status = :status " +
+            "AND l.startDate <= :endDate AND l.endDate >= :startDate")
+    List<LeaveRequest> findApprovedLeavesForEmployeesInRange(
+            @Param("employeeIds") List<Long> employeeIds,
+            @Param("status") String status,
+            @Param("startDate") LocalDate startDate,
+            @Param("endDate") LocalDate endDate);
 }

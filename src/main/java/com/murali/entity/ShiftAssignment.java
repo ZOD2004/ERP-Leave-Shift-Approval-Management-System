@@ -7,6 +7,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.time.LocalDate;
+import java.time.LocalTime;
 
 @AllArgsConstructor
 @NoArgsConstructor
@@ -30,5 +31,25 @@ public class ShiftAssignment {
 
     @Column(name = "assignment_date", nullable = false)
     private LocalDate assignmentDate;
+
+    @Column(name = "override_start_time")
+    private LocalTime overrideStartTime;
+
+    @Column(name = "override_end_time")
+    private LocalTime overrideEndTime;
+
+    @Column(name = "is_override")
+    private Boolean overrideApplied = false;
+
+    public LocalTime getEffectiveStartTime() {
+        return overrideStartTime != null
+                ? overrideStartTime
+                : shift.getStartTime();
+    }
+    public LocalTime getEffectiveEndTime() {
+        return overrideEndTime != null
+                ? overrideEndTime
+                : shift.getEndTime();
+    }
 
 }

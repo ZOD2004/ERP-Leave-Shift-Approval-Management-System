@@ -88,4 +88,11 @@ public interface ShiftAssignmentRepository extends JpaRepository<ShiftAssignment
     JOIN FETCH sa.shift
 """)
     Page<ShiftAssignment> findAllAssignments(Pageable pageable);
+
+    @Query("SELECT sa FROM ShiftAssignment sa WHERE sa.employee.id IN :employeeIds " +
+            "AND sa.assignmentDate BETWEEN :startDate AND :endDate")
+    List<ShiftAssignment> findByEmployeeIdInAndAssignmentDateBetween(
+            @Param("employeeIds") List<Long> employeeIds,
+            @Param("startDate") LocalDate startDate,
+            @Param("endDate") LocalDate endDate);
 }

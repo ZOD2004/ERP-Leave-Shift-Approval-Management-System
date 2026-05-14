@@ -1,8 +1,6 @@
 package com.murali.views;
 
-import com.murali.dto.MonthlyPivotRowDTO;
-import com.murali.dto.PivotRowDTO;
-import com.murali.dto.ShiftAssignmentDTO;
+import com.murali.dto.*;
 import com.murali.entity.Employee;
 import com.murali.entity.Shift;
 import com.murali.service.EmployeeService;
@@ -11,6 +9,9 @@ import com.murali.service.ShiftService;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
+import com.vaadin.flow.component.combobox.MultiSelectComboBox;
+import com.vaadin.flow.component.dependency.CssImport;
+import com.vaadin.flow.component.timepicker.TimePicker;
 import com.vaadin.flow.component.combobox.ComboBox;
 import com.vaadin.flow.component.datepicker.DatePicker;
 import com.vaadin.flow.component.dialog.Dialog;
@@ -80,6 +81,19 @@ public class ShiftAssignmentView extends VerticalLayout {
     private LocalDate currentMonth = LocalDate.now().withDayOfMonth(1);
     private final Span monthLabel = new Span();
 
+    private final Button batchPlanBtn = new Button("Batch Planning", new Icon(VaadinIcon.USERS));
+    private final Dialog batchSetupDialog = new Dialog();
+    private final MultiSelectComboBox<Employee> batchEmployees = new MultiSelectComboBox<>("Select Employees");
+    private final ComboBox<Shift> batchShift = new ComboBox<>("Select Shift");
+    private final DatePicker batchStartDate = new DatePicker("Start Date");
+    private final ComboBox<String> batchDuration = new ComboBox<>("Duration");
+
+    private final Dialog conflictDialog = new Dialog();
+    private final Grid<ShiftConflictDTO> hardConflictGrid = new Grid<>(ShiftConflictDTO.class, false);
+    private final Grid<ShiftConflictDTO> partialConflictGrid = new Grid<>(ShiftConflictDTO.class, false);
+
+    private BatchPreviewResponse currentBatchPreview;
+
     public ShiftAssignmentView(ShiftAssignmentService assignmentService, EmployeeService employeeService, ShiftService shiftService) {
         this.assignmentService = assignmentService;
         this.employeeService = employeeService;
@@ -91,6 +105,7 @@ public class ShiftAssignmentView extends VerticalLayout {
 
         buildDashboard();
         buildAssignmentDialog();
+        buildBatchSetupDialog();
 
         Tab listTab = new Tab("List View");
         Tab calendarTab = new Tab("Weekly Calendar View");
@@ -117,12 +132,23 @@ public class ShiftAssignmentView extends VerticalLayout {
         Button assignBtn = new Button("Assign Shifts", new Icon(VaadinIcon.CALENDAR_CLOCK));
         assignBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
         assignBtn.addClickListener(e -> assignmentDialog.open());
+        assignBtn.getStyle().set("flex-shrink", "0");
 
-        HorizontalLayout header = new HorizontalLayout(new H2("Shift Operations"), assignBtn);
+        batchPlanBtn.addClickListener(e->batchSetupDialog.open());
+        batchPlanBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+        batchPlanBtn.getStyle().set("max-width", "100%");
+        batchPlanBtn.getStyle().set("flex-shrink", "0");
+
+        HorizontalLayout buttonWrapper = new HorizontalLayout(assignBtn, batchPlanBtn);
+        buttonWrapper.setPadding(false);
+        buttonWrapper.getStyle().set("flex-wrap", "wrap");
+
+        HorizontalLayout header = new HorizontalLayout(new H2("Shift Operations"),buttonWrapper);
         header.setWidthFull();
         header.setJustifyContentMode(FlexComponent.JustifyContentMode.BETWEEN);
         header.setAlignItems(FlexComponent.Alignment.CENTER);
-        header.getStyle().set("padding", "0 1rem");
+        header.getStyle().set("padding", "1rem");
+        header.getStyle().set("box-sizing", "border-box");
 
         add(header, dashboardLayout, tabs, contentArea);
 
@@ -134,7 +160,6 @@ public class ShiftAssignmentView extends VerticalLayout {
         dashboardLayout.setWidthFull();
         dashboardLayout.getStyle().set("padding", "1rem").set("background-color", "var(--lumo-contrast-5pct)");
 
-        // Fetch stats for today
         Map<String, Long> stats = assignmentService.getTodayShiftCounts(LocalDate.now());
         stats.forEach((shiftName, count) -> {
             Div card = new Div();
@@ -164,17 +189,19 @@ public class ShiftAssignmentView extends VerticalLayout {
 
         listGrid.setSizeFull();
         listGrid.removeAllColumns();
-        listGrid.addColumn(ShiftAssignmentDTO::getEmployeeName).setHeader("Employee").setSortable(true);
-        listGrid.addColumn(ShiftAssignmentDTO::getAssignmentDate).setHeader("Date").setSortable(true);
+        listGrid.addColumn(ShiftAssignmentDTO::getEmployeeName).setHeader("Employee");
+        listGrid.addColumn(ShiftAssignmentDTO::getAssignmentDate).setHeader("Date");
 
         listGrid.addColumn(new ComponentRenderer<>(assignment -> {
             Span badge = new Span(assignment.getShiftName());
             String type = assignment.getShiftType().toLowerCase();
 
+            badge.getElement().getThemeList().add("badge");
+
             if (type.contains("morning")) {
-                badge.getElement().getThemeList().add("badge success");
+                badge.getElement().getThemeList().add("success");
             } else if (type.contains("night")) {
-                badge.getElement().getThemeList().add("badge contrast");
+                badge.getElement().getThemeList().add("contrast");
             } else {
                 badge.getElement().getThemeList().add("badge");
             }
@@ -459,7 +486,136 @@ public class ShiftAssignmentView extends VerticalLayout {
             int dayOfMonth = dto.getAssignmentDate().getDayOfMonth();
             row.addShift(dayOfMonth, dto.getShiftName());
         }
-
         monthlyGrid.setItems(pivotData.values());
+    }
+    private void buildBatchSetupDialog() {
+        batchSetupDialog.setHeaderTitle("Advanced Batch Planning");
+
+        batchEmployees.setItems(employeeService.findAllActive());
+        batchEmployees.setItemLabelGenerator(Employee::getFirstName);
+        batchEmployees.setWidthFull();
+
+        batchShift.setItems(shiftService.getShifts());
+        batchShift.setItemLabelGenerator(Shift::getName);
+
+        batchDuration.setItems("1 Week", "2 Weeks", "1 Month", "3 Months", "6 Months");
+
+        FormLayout form = new FormLayout(batchEmployees, batchShift, batchStartDate, batchDuration);
+        form.setColspan(batchEmployees, 2);
+
+        Button checkBtn = new Button("Check Conflicts & Assign", e -> runValidationEngine());
+        checkBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+
+        batchSetupDialog.add(form);
+        batchSetupDialog.getFooter().add(new Button("Cancel", e -> batchSetupDialog.close()), checkBtn);
+    }
+
+    private void runValidationEngine() {
+        if (batchEmployees.getValue().isEmpty() || batchShift.getValue() == null ||
+                batchStartDate.getValue() == null || batchDuration.getValue() == null) {
+            showNotification("Please fill all fields", NotificationVariant.LUMO_ERROR);
+            return;
+        }
+
+        // Extract IDs
+        List<Long> empIds = batchEmployees.getValue().stream().map(Employee::getId).toList();
+
+        // Call Service
+        currentBatchPreview = assignmentService.previewBatchAssignments(
+                empIds, batchShift.getValue().getId(), batchStartDate.getValue(), batchDuration.getValue()
+        );
+
+        batchSetupDialog.close();
+
+        // If no conflicts, save immediately!
+        if (currentBatchPreview.getHardConflicts().isEmpty() && currentBatchPreview.getPartialConflicts().isEmpty()) {
+            executeFinalSave();
+        } else {
+            // Conflicts found, open resolution UI
+            buildAndOpenConflictDialog();
+        }
+    }
+
+    private void buildAndOpenConflictDialog() {
+        conflictDialog.removeAll();
+        conflictDialog.setHeaderTitle("Conflict Resolution Required");
+        conflictDialog.setWidth("80vw");
+
+        VerticalLayout layout = new VerticalLayout();
+
+        // --- HARD CONFLICTS GRID (Holidays, Full Leaves, Overlaps) ---
+        if (!currentBatchPreview.getHardConflicts().isEmpty()) {
+            layout.add(new H4("Hard Conflicts (Will be Skipped)"));
+
+            hardConflictGrid.removeAllColumns();
+            hardConflictGrid.setItems(currentBatchPreview.getHardConflicts());
+            hardConflictGrid.addColumn(ShiftConflictDTO::getEmployeeName).setHeader("Employee");
+            hardConflictGrid.addColumn(ShiftConflictDTO::getConflictDate).setHeader("Date");
+            hardConflictGrid.addColumn(ShiftConflictDTO::getConflictType).setHeader("Reason");
+
+            // "Skip" Action just visually removes it from the grid
+            hardConflictGrid.addComponentColumn(conflict -> {
+                Button skipBtn = new Button("Skip", new Icon(VaadinIcon.CLOSE));
+                skipBtn.addThemeVariants(ButtonVariant.LUMO_ERROR, ButtonVariant.LUMO_TERTIARY);
+                skipBtn.addClickListener(e -> {
+                    currentBatchPreview.getHardConflicts().remove(conflict);
+                    hardConflictGrid.getDataProvider().refreshAll();
+                });
+                return skipBtn;
+            }).setHeader("Action");
+
+            layout.add(hardConflictGrid);
+        }
+
+
+        // --- PARTIAL CONFLICTS GRID (Half-Day Leaves) ---
+        if (!currentBatchPreview.getPartialConflicts().isEmpty()) {
+            layout.add(new H4("Partial Conflicts (Auto-Resolved)"));
+
+            partialConflictGrid.removeAllColumns();
+            partialConflictGrid.setItems(currentBatchPreview.getPartialConflicts());
+            partialConflictGrid.addColumn(ShiftConflictDTO::getEmployeeName).setHeader("Employee");
+            partialConflictGrid.addColumn(ShiftConflictDTO::getConflictDate).setHeader("Date");
+
+            partialConflictGrid.addColumn(ShiftConflictDTO::getSystemResolution)
+                    .setHeader("System Action")
+                    .setAutoWidth(true);
+
+            layout.add(partialConflictGrid);
+        }
+
+        Button proceedBtn = new Button("Proceed with Valid Assignments", e -> executeFinalSave());
+        proceedBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+
+        conflictDialog.add(layout);
+        conflictDialog.getFooter().add(new Button("Cancel", e -> conflictDialog.close()), proceedBtn);
+        conflictDialog.open();
+    }
+
+    private void executeFinalSave() {
+        List<ShiftAssignmentDTO> finalToSave = new ArrayList<>(currentBatchPreview.getReadyToSave());
+
+        // Convert the adjusted Partial Conflicts into valid assignments
+        for (ShiftConflictDTO partial : currentBatchPreview.getPartialConflicts()) {
+            ShiftAssignmentDTO dto = new ShiftAssignmentDTO();
+            dto.setEmployeeId(partial.getEmployeeId());
+            dto.setShiftId(partial.getShiftId());
+            dto.setAssignmentDate(partial.getConflictDate());
+
+            dto.setOverrideStartTime(partial.getSuggestedOverrideStart());
+            dto.setOverrideEndTime(partial.getSuggestedOverrideEnd());
+
+            finalToSave.add(dto);
+        }
+
+        try {
+            assignmentService.saveResolvedBatch(finalToSave);
+            showNotification("Batch Scheduled Successfully", NotificationVariant.LUMO_SUCCESS);
+            conflictDialog.close();
+            refreshListGrid();
+            refreshPivotGrid();
+        } catch (Exception ex) {
+            showNotification("Error saving batch: " + ex.getMessage(), NotificationVariant.LUMO_ERROR);
+        }
     }
 }
