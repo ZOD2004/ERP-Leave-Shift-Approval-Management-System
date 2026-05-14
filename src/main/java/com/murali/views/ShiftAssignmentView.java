@@ -208,6 +208,18 @@ public class ShiftAssignmentView extends VerticalLayout {
             return badge;
         })).setHeader("Shift");
 
+        listGrid.addComponentColumn(assignment -> {
+            Button editBtn = new Button(new Icon(VaadinIcon.EDIT));
+            editBtn.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
+            editBtn.addClickListener(e -> openEditDialog(assignment));
+
+            Button deleteBtn = new Button(new Icon(VaadinIcon.TRASH));
+            deleteBtn.addThemeVariants(ButtonVariant.LUMO_TERTIARY, ButtonVariant.LUMO_ERROR);
+            deleteBtn.addClickListener(e -> confirmDelete(assignment));
+
+            return new HorizontalLayout(editBtn, deleteBtn);
+        }).setHeader("Actions");
+
         DataProvider<ShiftAssignmentDTO, Void> dataProvider = DataProvider.fromCallbacks(
                 query -> assignmentService.fetchAssignmentsForGrid(
                         query.getOffset(),
@@ -339,7 +351,7 @@ public class ShiftAssignmentView extends VerticalLayout {
         singleDatePicker.addValueChangeListener(event -> {
             if (event.getValue() != null && employeeCombo.getValue() != null) {
                 try {
-                    assignmentService.validateShiftConflict(employeeCombo.getValue().getId(), event.getValue());
+                    assignmentService.validateShiftConflict(employeeCombo.getValue().getId(), event.getValue(),null);
                     singleDatePicker.setErrorMessage(null);
                     singleDatePicker.setInvalid(false);
                 } catch (Exception ex) {
@@ -386,18 +398,25 @@ public class ShiftAssignmentView extends VerticalLayout {
                     return;
                 }
 
-                if(startDatePicker.getValue().isAfter(endDatePicker.getValue())){
+                if(startDatePicker.getValue().isAfter(endDatePicker.getValue()) || startDatePicker.getValue().isEqual(endDatePicker.getValue())){
                     showNotification("Please select End Date greater than start date", NotificationVariant.LUMO_ERROR);
                     return;
                 }
 
-                assignmentService.assignShiftsBulk(
-                        employeeCombo.getValue().getId(),
+                currentBatchPreview = assignmentService.previewBatchAssignments(
+                        List.of(employeeCombo.getValue().getId()),
                         shiftCombo.getValue().getId(),
                         startDatePicker.getValue(),
                         endDatePicker.getValue()
                 );
-                showNotification("Bulk Shifts Assigned", NotificationVariant.LUMO_SUCCESS);
+
+                assignmentDialog.close();
+
+                if (currentBatchPreview.getHardConflicts().isEmpty() && currentBatchPreview.getPartialConflicts().isEmpty()) {
+                    executeFinalSave();
+                } else {
+                    buildAndOpenConflictDialog();
+                }
             }
 
             assignmentDialog.close();
@@ -616,6 +635,84 @@ public class ShiftAssignmentView extends VerticalLayout {
             refreshPivotGrid();
         } catch (Exception ex) {
             showNotification("Error saving batch: " + ex.getMessage(), NotificationVariant.LUMO_ERROR);
+        }
+    }
+
+    private void openEditDialog(ShiftAssignmentDTO assignment) {
+        Dialog editDialog = new Dialog();
+        editDialog.setHeaderTitle("Edit Shift for " + assignment.getEmployeeName());
+
+        // Shift Selection
+        ComboBox<Shift> shiftCombo = new ComboBox<>("Shift");
+        shiftCombo.setItems(shiftService.getShifts());
+        shiftCombo.setItemLabelGenerator(Shift::getName);
+        // Pre-select current shift (Requires your shiftService to have a findById method)
+        shiftService.getShiftById(assignment.getShiftId()).ifPresent(shiftCombo::setValue);
+
+        // Date Selection
+        DatePicker datePicker = new DatePicker("Assignment Date");
+        datePicker.setValue(assignment.getAssignmentDate());
+
+        // Overrides (Useful if they are resolving a half-day conflict)
+        TimePicker overrideStart = new TimePicker("Override Start Time");
+        overrideStart.setValue(assignment.getOverrideStartTime());
+        overrideStart.setClearButtonVisible(true);
+
+        TimePicker overrideEnd = new TimePicker("Override End Time");
+        overrideEnd.setValue(assignment.getOverrideEndTime());
+        overrideEnd.setClearButtonVisible(true);
+
+        Button saveBtn = new Button("Save Changes", e -> {
+            if (shiftCombo.getValue() == null || datePicker.getValue() == null) {
+                Notification.show("Shift and Date are required.", 3000, Notification.Position.TOP_CENTER)
+                        .addThemeVariants(NotificationVariant.LUMO_ERROR);
+                return;
+            }
+
+            // Update the DTO with new values
+            assignment.setShiftId(shiftCombo.getValue().getId());
+            assignment.setAssignmentDate(datePicker.getValue());
+            assignment.setOverrideStartTime(overrideStart.getValue());
+            assignment.setOverrideEndTime(overrideEnd.getValue());
+
+            try {
+                // Call your service layer.
+                // IMPORTANT: This method must throw an Exception if there is a conflict!
+                assignmentService.updateSingleAssignment(assignment);
+
+                Notification.show("Assignment Updated", 3000, Notification.Position.TOP_CENTER)
+                        .addThemeVariants(NotificationVariant.LUMO_SUCCESS);
+                editDialog.close();
+                refreshListGrid();
+
+            } catch (Exception ex) {
+                // Conflict detected! The dialog stays open so the user can resolve it.
+                Notification.show("Conflict: " + ex.getMessage(), 5000, Notification.Position.MIDDLE)
+                        .addThemeVariants(NotificationVariant.LUMO_ERROR);
+            }
+        });
+        saveBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+
+        Button cancelBtn = new Button("Cancel", e -> editDialog.close());
+
+        FormLayout form = new FormLayout(shiftCombo, datePicker, overrideStart, overrideEnd);
+        editDialog.add(form);
+        editDialog.getFooter().add(cancelBtn, saveBtn);
+
+        editDialog.open();
+    }
+    private void confirmDelete(ShiftAssignmentDTO assignment) {
+        try {
+            // Call your service layer to delete
+            assignmentService.deleteAssignment(assignment.getId());
+
+            Notification.show("Assignment Removed", 3000, Notification.Position.TOP_CENTER)
+                    .addThemeVariants(NotificationVariant.LUMO_SUCCESS);
+            refreshListGrid();
+
+        } catch (Exception ex) {
+            Notification.show("Error deleting assignment: " + ex.getMessage(), 4000, Notification.Position.TOP_CENTER)
+                    .addThemeVariants(NotificationVariant.LUMO_ERROR);
         }
     }
 }

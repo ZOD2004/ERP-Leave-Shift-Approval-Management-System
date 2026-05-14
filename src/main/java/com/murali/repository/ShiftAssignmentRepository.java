@@ -100,4 +100,14 @@ public interface ShiftAssignmentRepository extends JpaRepository<ShiftAssignment
             @Param("employeeIds") List<Long> employeeIds,
             @Param("startDate") LocalDate startDate,
             @Param("endDate") LocalDate endDate);
+
+    @Query("SELECT COUNT(sa) > 0 FROM ShiftAssignment sa " +
+            "WHERE sa.employee.id = :employeeId " +
+            "AND sa.assignmentDate = :assignmentDate " +
+            "AND (:excludeAssignmentId IS NULL OR sa.id <> :excludeAssignmentId)")
+    boolean existsConflictExcludingAssignment(
+            @Param("employeeId") Long employeeId,
+            @Param("assignmentDate") LocalDate assignmentDate,
+            @Param("excludeAssignmentId") Long excludeAssignmentId
+    );
 }

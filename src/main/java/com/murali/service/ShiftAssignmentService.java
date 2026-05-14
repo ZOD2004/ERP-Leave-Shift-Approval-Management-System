@@ -11,6 +11,7 @@ import com.murali.exception.EmployeeNotFoundException;
 import com.murali.exception.ShiftConflictException;
 import com.murali.exception.ShiftNotFoundException;
 import com.murali.repository.*;
+import jakarta.persistence.EntityNotFoundException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
@@ -43,17 +44,18 @@ public class ShiftAssignmentService {
     }
 
 
-    public void validateShiftConflict(Long employeeId, LocalDate assignmentDate) {
+    public void validateShiftConflict(Long employeeId, LocalDate assignmentDate, Long excludeAssignmentId) {
 
-        boolean hasExistingShift =
-                shiftAssignmentRepository.existsByEmployeeIdAndAssignmentDate(employeeId,assignmentDate);
-        if (hasExistingShift) {
+        boolean hasConflict = shiftAssignmentRepository.existsConflictExcludingAssignment(
+                employeeId, assignmentDate, excludeAssignmentId
+        );
+        if (hasConflict) {
             throw new ShiftConflictException("Employee already has a shift scheduled on " + assignmentDate);
         }
 
-        boolean isOnLeave =
-                leaveRequestRepository.isEmployeeOnApprovedLeave(employeeId,"FULLY_APPROVED",assignmentDate);
-
+        boolean isOnLeave = leaveRequestRepository.isEmployeeOnApprovedLeave(
+                employeeId, "FULLY_APPROVED", assignmentDate
+        );
         if (isOnLeave) {
             throw new ShiftConflictException("Employee is on approved leave on " + assignmentDate);
         }
@@ -61,7 +63,7 @@ public class ShiftAssignmentService {
 
     public ShiftAssignmentDTO assignSingleShift(ShiftAssignmentDTO assignmentDTO) {
 
-        validateShiftConflict(assignmentDTO.getEmployeeId(),assignmentDTO.getAssignmentDate());
+        validateShiftConflict(assignmentDTO.getEmployeeId(),assignmentDTO.getAssignmentDate(),null);
 
         Employee employee = employeeRepository.findById(assignmentDTO.getEmployeeId()).orElseThrow(() ->
                 new EmployeeNotFoundException("Employee not found with ID: "+ assignmentDTO.getEmployeeId()));
@@ -108,7 +110,6 @@ public class ShiftAssignmentService {
 
             // Check if they already have a shift scheduled that day
             boolean hasExistingShift = shiftAssignmentRepository.existsByEmployeeIdAndAssignmentDate(employeeId, currentDate);
-            validateShiftConflict(employeeId,currentDate);
 
             if (!isWeekend && !isHoliday && !isOnLeave && !hasExistingShift) {
 
@@ -204,12 +205,14 @@ public class ShiftAssignmentService {
         }
         return pivotData;
     }
-    public BatchPreviewResponse previewBatchAssignments(List<Long> employeeIds, Long shiftId,
-                                                        LocalDate startDate, String duration) {
+    public BatchPreviewResponse previewBatchAssignments(List<Long> employeeIds, Long shiftId, LocalDate startDate, String duration) {
+        LocalDate endDate = calculateEndDate(startDate, duration);
+        return previewBatchAssignments(employeeIds, shiftId, startDate, endDate);
+    }
+    public BatchPreviewResponse previewBatchAssignments(List<Long> employeeIds, Long shiftId
+            , LocalDate startDate, LocalDate endDate) {
         BatchPreviewResponse response = new BatchPreviewResponse();
 
-        // 1. Calculate end date
-        LocalDate endDate = calculateEndDate(startDate, duration);
 
         // 2. Fetch base entities directly (Throws exception immediately if missing to avoid Optional wrappers)
         Shift shift = shiftRepository.findById(shiftId)
@@ -349,6 +352,52 @@ public class ShiftAssignmentService {
         }
 
         shiftAssignmentRepository.saveAll(assignmentsToSave);
+    }
+
+    @Transactional
+    public ShiftAssignmentDTO updateSingleAssignment(ShiftAssignmentDTO assignmentDTO) {
+
+        // 1. Validate Overrides (Business logic regarding time inputs)
+        if ((assignmentDTO.getOverrideStartTime() == null) != (assignmentDTO.getOverrideEndTime() == null)) {
+            throw new IllegalArgumentException("Both override times must be provided, or both must be null.");
+        }
+
+        // 2. Context-Aware Conflict Validation
+        // We pass the ID so the engine ignores the very record we are editing
+        validateShiftConflict(
+                assignmentDTO.getEmployeeId(),
+                assignmentDTO.getAssignmentDate(),
+                assignmentDTO.getId()
+        );
+
+        // 3. Fetch existing record
+        ShiftAssignment existingAssignment = shiftAssignmentRepository.findById(assignmentDTO.getId())
+                .orElseThrow(() -> new EntityNotFoundException("Shift Assignment not found with ID: " + assignmentDTO.getId()));
+
+        // 4. Update Shift template if changed
+        if (!existingAssignment.getShift().getId().equals(assignmentDTO.getShiftId())) {
+            Shift newShift = shiftRepository.findById(assignmentDTO.getShiftId())
+                    .orElseThrow(() -> new ShiftNotFoundException("Shift not found with ID: " + assignmentDTO.getShiftId()));
+            existingAssignment.setShift(newShift);
+        }
+
+        // 5. Update remaining fields
+        existingAssignment.setAssignmentDate(assignmentDTO.getAssignmentDate());
+        existingAssignment.setOverrideStartTime(assignmentDTO.getOverrideStartTime());
+        existingAssignment.setOverrideEndTime(assignmentDTO.getOverrideEndTime());
+        existingAssignment.setOverrideApplied(assignmentDTO.getOverrideStartTime() != null);
+
+        // 6. Save and Map
+        ShiftAssignment savedAssignment = shiftAssignmentRepository.save(existingAssignment);
+        return mapToDTO(savedAssignment);
+    }
+
+    @Transactional
+    public void deleteAssignment(Long id) {
+        if (!shiftAssignmentRepository.existsById(id)) {
+            throw new ShiftNotFoundException("Cannot delete: Shift Assignment not found with ID: " + id);
+        }
+        shiftAssignmentRepository.deleteById(id);
     }
 
 
