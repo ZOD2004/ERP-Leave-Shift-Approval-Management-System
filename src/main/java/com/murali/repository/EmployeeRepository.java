@@ -7,6 +7,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public interface EmployeeRepository extends JpaRepository<Employee, Long> {
@@ -43,4 +44,6 @@ public interface EmployeeRepository extends JpaRepository<Employee, Long> {
         )
     """)
     List<Employee> searchActiveEmployees(@Param("searchTerm") String searchTerm);
+
+    Optional<Employee> findByEmployeeCode(String employeeCode);
 }

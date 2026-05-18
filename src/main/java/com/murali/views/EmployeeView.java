@@ -155,6 +155,8 @@ public class EmployeeView extends VerticalLayout {
         userBinder.forField(email).asRequired("Required").bind(User::getEmail, User::setEmail);
         userBinder.forField(password).bind(User::getPasswordHash, User::setPasswordHash);
 
+        userBinder.forField(role).asRequired("Role is required").bind(User::getRole, User::setRole);
+
         employeeBinder.forField(firstName).asRequired("Required").bind(Employee::getFirstName, Employee::setFirstName);
         employeeBinder.forField(employeeCode).asRequired("Required").bind(Employee::getEmployeeCode, Employee::setEmployeeCode);
         employeeBinder.forField(department).asRequired("Required").bind(Employee::getDepartment, Employee::setDepartment);

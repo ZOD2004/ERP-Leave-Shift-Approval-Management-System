@@ -53,4 +53,10 @@ public class GlobalExceptionHandler extends Exception{
         return new ResponseEntity<>(errorDetails, HttpStatus.CONFLICT);
     }
 
+    @ExceptionHandler(SelfApprovalException.class)
+    public ResponseEntity<ErrorDetails> SelfApprovalException(SelfApprovalException e, WebRequest request){
+        ErrorDetails errorDetails = new ErrorDetails(e.getMessage(), request.getDescription(true), LocalDateTime.now());
+        return new ResponseEntity<>(errorDetails, HttpStatus.CONFLICT);
+    }
+
 }

@@ -7,6 +7,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 import org.hibernate.annotations.CreationTimestamp;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @AllArgsConstructor
@@ -33,7 +34,7 @@ public class LeaveBalanceTransaction {
     private String transactionType;
 
     @Column(nullable = false, precision = 5, scale = 1)
-    private Integer days;
+    private BigDecimal days;
 
     @Column(name = "reference_id")
     private Long referenceId;

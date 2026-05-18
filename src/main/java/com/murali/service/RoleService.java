@@ -31,4 +31,20 @@ public class RoleService {
     public List<Role> getRoles(){
         return roleRepository.findAll();
     }
+    @PreAuthorize("hasAnyRole('ROLE_SUPER_ADMIN', 'ROLE_AUDITOR', 'ROLE_HR_ADMIN')")
+    public List<Role> findAll() {
+        return roleRepository.findAll();
+    }
+    @PreAuthorize("hasRole('ROLE_SUPER_ADMIN')")
+    public Role save(Role role) {
+        // You can add logic here to ensure names are always uppercase if desired
+        if (role.getName() != null) {
+            role.setName(role.getName().toUpperCase().trim());
+        }
+        return roleRepository.save(role);
+    }
+    @PreAuthorize("hasRole('ROLE_SUPER_ADMIN')")
+    public void delete(Role role) {
+        roleRepository.delete(role);
+    }
 }

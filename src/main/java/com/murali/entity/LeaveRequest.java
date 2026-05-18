@@ -46,4 +46,6 @@ public class LeaveRequest {
 
     @Column(name = "current_level")
     private Integer currentLevel = 1;
+
+    private LocalDate createdAt;
 }

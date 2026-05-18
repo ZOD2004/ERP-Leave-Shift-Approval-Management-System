@@ -39,6 +39,5 @@ public class LeaveApproval {
     private String comments;
 
     @Column(name = "acted_at")
-    @CreationTimestamp
     private LocalDateTime actedAt;
 }

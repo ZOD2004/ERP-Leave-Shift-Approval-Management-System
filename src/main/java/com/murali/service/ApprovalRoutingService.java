@@ -1,0 +1,253 @@
+package com.murali.service;
+
+import com.murali.entity.*;
+import com.murali.exception.EmployeeNotFoundException;
+import com.murali.exception.SelfApprovalException;
+import com.murali.repository.LeaveApprovalRepository;
+import com.murali.repository.LeaveRequestRepository;
+import com.murali.repository.UserRepository;
+import lombok.RequiredArgsConstructor;
+import org.jspecify.annotations.NonNull;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.LocalDateTime;
+import java.util.List;
+
+@Service
+public class ApprovalRoutingService {
+
+    private final LeaveApprovalRepository leaveApprovalRepository;
+    private final LeaveRequestRepository leaveRequestRepository;
+
+    private final LeaveBalanceService leaveBalanceService;
+    private final AttendanceSyncService attendanceSyncService;
+
+    private final UserRepository userRepository;
+
+
+    public static final String ACTION_REJECTED = "REJECTED";
+    public static final String ACTION_APPROVED = "APPROVED";
+    public static final String ACTION_PENDING = "PENDING";
+
+    public ApprovalRoutingService(LeaveApprovalRepository leaveApprovalRepository, LeaveRequestRepository leaveRequestRepository, LeaveBalanceService leaveBalanceService, AttendanceSyncService attendanceSyncService, UserRepository userRepository) {
+        this.leaveApprovalRepository = leaveApprovalRepository;
+        this.leaveRequestRepository = leaveRequestRepository;
+        this.leaveBalanceService = leaveBalanceService;
+        this.attendanceSyncService = attendanceSyncService;
+        this.userRepository = userRepository;
+    }
+
+
+    /**
+     * Helper to create the individual routing records.
+     */
+    private void createApprovalRecord(LeaveRequest request, User approver, int level) {
+        LeaveApproval approval = new LeaveApproval();
+        approval.setLeaveRequest(request);
+        approval.setApprover(approver);
+        approval.setApprovalLevel(level);
+        approval.setAction("PENDING");
+        leaveApprovalRepository.save(approval);
+    }
+
+    /**
+     * 2. Workflow Advancement: Called when a user clicks "Approve" or "Reject" in the UI.
+     */
+    @Transactional
+    public void processApprovalAction(Long leaveApprovalId, String action, String comments, User actor) {
+
+        // 1. Null Check & Input Validation
+        if (action == null || action.trim().isEmpty()) {
+            throw new IllegalArgumentException("Action cannot be null or empty");
+        }
+        String normalizedAction = action.toUpperCase();
+
+        if (!normalizedAction.equals(ACTION_APPROVED) && !normalizedAction.equals(ACTION_REJECTED)) {
+            throw new IllegalArgumentException("Invalid action: " + action);
+        }
+
+        // 2. Fetch the Approval Record
+        LeaveApproval approval = leaveApprovalRepository.findById(leaveApprovalId)
+                .orElseThrow(() -> new IllegalArgumentException("Approval record not found"));
+
+        LeaveRequest request = approval.getLeaveRequest();
+
+        if (!approval.getApprover().getId().equals(actor.getId())) {
+            throw new SecurityException("You are not authorized to process this approval step.");
+        }
+
+        if (!ACTION_PENDING.equals(approval.getAction())) {
+            throw new IllegalStateException("This approval step has already been processed.");
+        }
+
+        if (!approval.getApprovalLevel().equals(request.getCurrentLevel())) {
+            throw new IllegalStateException("Out of sequence: Request is currently at level "
+                    + request.getCurrentLevel() + " but this approval is for level " + approval.getApprovalLevel());
+        }
+
+        approval.setAction(normalizedAction);
+        approval.setComments(comments);
+        approval.setActedAt(LocalDateTime.now());
+
+        leaveApprovalRepository.save(approval);
+
+        if (ACTION_REJECTED.equals(normalizedAction)) {
+            handleRejection(request);
+        } else if (ACTION_APPROVED.equals(normalizedAction)) {
+            handleAdvancement(request);
+        }
+    }
+
+
+    private void handleAdvancement(LeaveRequest request) {
+        List<LeaveApproval> allSteps = leaveApprovalRepository
+                .findByLeaveRequestIdOrderByApprovalLevelAsc(request.getId());
+
+        Integer nextLevel = allSteps.stream()
+                .map(LeaveApproval::getApprovalLevel)
+                .filter(level -> level > request.getCurrentLevel())
+                .min(Integer::compareTo)
+                .orElse(null);
+
+        if (nextLevel != null) {
+            request.setCurrentLevel(nextLevel);
+            leaveRequestRepository.save(request);
+            // TODO: Trigger Email/Notification Service for the Next Level Approver
+        } else {
+            finalizeApproval(request);
+        }
+    }
+
+    /**
+     * 4. Finalization Trigger: The request is fully approved. Sync balances and calendars.
+     */
+    private void finalizeApproval(LeaveRequest request) {
+        request.setStatus(LeaveRequestService.STATUS_APPROVED);
+        leaveRequestRepository.save(request);
+
+        // 1. Ledger: Deduct the actual days and remove the pending hold
+        // Assuming current year based on start date
+        Integer year = request.getStartDate().getYear();
+
+        leaveBalanceService.deduct(
+                request.getEmployee(),
+                request.getLeaveType(),
+                request.getDurationDays(),
+                request.getId(),
+                year
+        );
+
+        // 2. Attendance Sync: Block out the calendar
+        attendanceSyncService.syncLeaveRecords(request);
+
+        // TODO: Trigger Email/Notification Service to Employee: "Your leave is approved"
+    }
+
+    /**
+     * 5. Handles Rejections.
+     */
+    private void handleRejection(LeaveRequest request) {
+        request.setStatus(LeaveRequestService.STATUS_REJECTED);
+        leaveRequestRepository.save(request);
+
+        Integer year = request.getStartDate().getYear();
+
+        // Ledger: We must release the "Pending Hold" we placed when the request was submitted.
+        leaveBalanceService.releasePendingHold(
+                request.getEmployee(),
+                request.getLeaveType(),
+                request.getDurationDays(),
+                year,
+                request.getId()
+        );
+
+        // TODO: Trigger Email/Notification Service to Employee: "Your leave was rejected"
+    }
+    /**
+     * Fetches all pending leave approvals assigned to a specific user (Manager, HR, or Dept Head).
+     * Use Case: Populating the "Approval Inbox" grid in the UI.
+     *
+     * @param userId The ID of the logged-in user (the approver).
+     * @return List of LeaveApproval records awaiting their action.
+     */
+    @Transactional(readOnly = true)
+    public List<LeaveApproval> getPendingApprovalsForUser(Long userId) {
+
+        return leaveApprovalRepository.findActivePendingApprovalsForUser(userId);
+
+    }
+
+    @Transactional
+    public void generateApprovalWorkflow(LeaveRequest request, List<LeaveApprovalRule> rules, boolean isNegativeBalance) {
+        Employee applicant = request.getEmployee();
+
+        for (LeaveApprovalRule rule : rules) {
+            String requiredRoleName = rule.getRequiredRole().getName();
+            User approver = resolveApproverForRole(applicant, requiredRoleName);
+
+            // PREVENT SELF-APPROVAL: If the resolved approver is the applicant, escalate to HR
+            if (approver.getId().equals(applicant.getUser().getId())) {
+                System.out.println("Self-approval detected for role " + requiredRoleName + ". Escalating to HR.");
+                approver = getFallbackAdminUser();
+            }
+
+            createApprovalRecord(request, approver, rule.getApprovalLevel());
+        }
+
+        if (isNegativeBalance) {
+            boolean hasLevel3 = false;
+
+            for (LeaveApprovalRule rule : rules) {
+                if (rule.getApprovalLevel() == 3) {
+                    hasLevel3 = true;
+                    break;
+                }
+            }
+            if (!hasLevel3) {
+                User deptHeadUser = resolveApproverForRole(applicant, "ROLE_DEPT_HEAD");
+
+                if (deptHeadUser.getId().equals(applicant.getUser().getId())) {
+                    deptHeadUser = getFallbackAdminUser();
+                }
+
+                createApprovalRecord(request, deptHeadUser, 3);
+            }
+        }
+    }
+
+    private User resolveApproverForRole(Employee applicant, String roleName) {
+        switch (roleName) {
+            case "ROLE_MANAGER":
+                if (applicant.getManager() != null) {
+                    return applicant.getManager().getUser();
+                }
+                // FALLBACK: If no manager, escalate directly to HR
+                return getFallbackAdminUser();
+
+            case "ROLE_DEPT_HEAD":
+                if (applicant.getDepartment() != null && applicant.getDepartment().getHod() != null) {
+                    return applicant.getDepartment().getHod().getUser();
+                }
+                // FALLBACK: If no Dept Head, escalate to HR
+                return getFallbackAdminUser();
+
+            case "ROLE_HR_ADMIN":
+                return getFallbackAdminUser();
+
+            default:
+                throw new IllegalArgumentException("Unknown routing role: " + roleName);
+        }
+    }
+
+
+    private User getFallbackAdminUser() {
+        List<User> users = userRepository.findFirstByRoleName("ROLE_HR_ADMIN");
+        if (users.isEmpty()) {
+            throw new EmployeeNotFoundException(
+                    "CRITICAL SYSTEM ERROR: No HR Admin found in the system to route approvals."
+            );
+        }
+        return users.getFirst();
+       }
+}

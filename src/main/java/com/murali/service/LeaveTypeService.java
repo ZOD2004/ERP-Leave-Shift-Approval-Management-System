@@ -4,6 +4,7 @@ import com.murali.entity.LeaveType;
 import com.murali.exception.LeaveTypeNotFoundException;
 import com.murali.repository.LeaveTypeRepository;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Optional;
@@ -48,5 +49,14 @@ public class LeaveTypeService {
 
     public List<LeaveType> search(String searchTerm) {
         return leaveTypeRepository.findByNameContainingIgnoreCaseOrCodeContainingIgnoreCase(searchTerm,searchTerm);
+    }
+    @Transactional(readOnly = true)
+    public List<LeaveType> getAvailableLeaveTypes() {
+        return leaveTypeRepository.findAll();
+    }
+    @Transactional(readOnly = true)
+    public LeaveType getLeaveTypeByCode(String code) {
+        return leaveTypeRepository.findByCode(code)
+                .orElseThrow(() -> new IllegalArgumentException("Leave type code not found: " + code));
     }
 }

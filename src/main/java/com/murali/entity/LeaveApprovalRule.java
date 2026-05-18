@@ -34,7 +34,7 @@ public class LeaveApprovalRule {
     private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "leave_type_id")
+    @JoinColumn(name = "leave_type_id",nullable = false)
     private LeaveType leaveType;
 
     @Column(name = "min_days", nullable = false, precision = 3, scale = 1)
@@ -47,7 +47,7 @@ public class LeaveApprovalRule {
     private Integer approvalLevel;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "required_role_id")
+    @JoinColumn(name = "required_role_id",nullable = false)
     private Role requiredRole;
 
 }

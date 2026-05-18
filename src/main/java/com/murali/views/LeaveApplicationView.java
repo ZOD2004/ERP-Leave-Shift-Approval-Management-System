@@ -1,0 +1,329 @@
+package com.murali.views;
+
+import com.murali.entity.Employee;
+import com.murali.entity.LeaveRequest;
+import com.murali.entity.LeaveType;
+import com.murali.service.*;
+import com.vaadin.flow.component.Component;
+import com.vaadin.flow.component.button.Button;
+import com.vaadin.flow.component.button.ButtonVariant;
+import com.vaadin.flow.component.combobox.ComboBox;
+import com.vaadin.flow.component.datepicker.DatePicker;
+import com.vaadin.flow.component.dialog.Dialog;
+import com.vaadin.flow.component.formlayout.FormLayout;
+import com.vaadin.flow.component.grid.Grid;
+import com.vaadin.flow.component.grid.GridVariant;
+import com.vaadin.flow.component.html.H2;
+import com.vaadin.flow.component.html.H3;
+import com.vaadin.flow.component.html.Span;
+import com.vaadin.flow.component.icon.Icon;
+import com.vaadin.flow.component.icon.VaadinIcon;
+import com.vaadin.flow.component.notification.Notification;
+import com.vaadin.flow.component.notification.NotificationVariant;
+import com.vaadin.flow.component.orderedlayout.FlexComponent;
+import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
+import com.vaadin.flow.component.orderedlayout.VerticalLayout;
+import com.vaadin.flow.component.textfield.NumberField;
+import com.vaadin.flow.component.textfield.TextArea;
+import com.vaadin.flow.data.binder.Binder;
+import com.vaadin.flow.data.binder.ValidationException;
+import com.vaadin.flow.router.PageTitle;
+import com.vaadin.flow.router.Route;
+import com.vaadin.flow.theme.lumo.LumoUtility;
+import jakarta.annotation.security.PermitAll;
+
+import java.math.BigDecimal;
+import java.time.LocalDate;
+
+@PermitAll
+@PageTitle("Leave Dashboard")
+@Route(value = "apply-leave", layout = MainLayout.class)
+public class LeaveApplicationView extends VerticalLayout {
+
+    // Services
+    private final LeaveRequestService leaveRequestService;
+    private final AttendanceSyncService attendanceSyncService;
+    private final LeaveTypeService leaveTypeService;
+    private final EmployeeService employeeService;
+    private final DurationEngineService durationEngineService;
+    private final SecurityService securityService;
+
+    private final Employee currentEmployee;
+    private final LeaveRequest currentRequest = new LeaveRequest();
+    private final Binder<LeaveRequest> binder = new Binder<>(LeaveRequest.class);
+
+    private final ComboBox<LeaveType> leaveType = new ComboBox<>("Leave Type");
+    private final DatePicker startDate = new DatePicker("Start Date");
+    private final DatePicker endDate = new DatePicker("End Date");
+    private final NumberField durationDays = new NumberField("Net Duration (Days)");
+    private final TextArea reason = new TextArea("Reason for Leave");
+
+    private final Grid<LeaveRequest> historyGrid = new Grid<>(LeaveRequest.class, false);
+    private final HorizontalLayout balanceLayout = new HorizontalLayout();
+
+    public LeaveApplicationView(LeaveRequestService leaveRequestService,
+                                AttendanceSyncService attendanceSyncService,
+                                LeaveTypeService leaveTypeService,
+                                EmployeeService employeeService,
+                                DurationEngineService durationEngineService,
+                                SecurityService securityService) {
+
+        this.leaveRequestService = leaveRequestService;
+        this.attendanceSyncService = attendanceSyncService;
+        this.leaveTypeService = leaveTypeService;
+        this.employeeService = employeeService;
+        this.durationEngineService = durationEngineService;
+        this.securityService = securityService;
+
+        this.currentEmployee = securityService.getCurrentEmployee();
+
+        buildMainView();
+        setupBinder();
+        setupDateCalculations();
+        refreshBalanceAndHistory();
+    }
+
+    private void buildMainView() {
+        addClassNames(LumoUtility.Padding.LARGE);
+        setSizeFull();
+
+        H2 title = new H2("My Leave Dashboard");
+        title.addClassNames(LumoUtility.Margin.NONE);
+
+        Button applyLeaveBtn = new Button("Apply Leave", VaadinIcon.PLUS.create());
+        applyLeaveBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+        applyLeaveBtn.addClickListener(e -> openApplyLeaveDialog());
+
+        HorizontalLayout header = new HorizontalLayout(title, applyLeaveBtn);
+        header.setWidthFull();
+        header.setJustifyContentMode(FlexComponent.JustifyContentMode.BETWEEN);
+        header.setAlignItems(FlexComponent.Alignment.CENTER);
+        header.addClassNames(LumoUtility.Margin.Bottom.MEDIUM);
+
+        add(header, createBalanceSection(), createHistorySection());
+    }
+
+    private Component createBalanceSection() {
+        balanceLayout.setWidthFull();
+        balanceLayout.addClassNames(LumoUtility.FlexWrap.WRAP, LumoUtility.Gap.MEDIUM);
+
+        VerticalLayout wrapper = new VerticalLayout(new H3("Leave Balances"), balanceLayout);
+        wrapper.setPadding(false);
+        return wrapper;
+    }
+
+    private Component createHistorySection() {
+        H3 title = new H3("Recent Requests");
+        title.addClassNames(LumoUtility.Margin.Top.LARGE, LumoUtility.Margin.Bottom.SMALL);
+
+        historyGrid.addColumn(LeaveRequest::getStartDate)
+                .setHeader("Start")
+                .setAutoWidth(true);
+
+        historyGrid.addColumn(req -> req.getLeaveType() != null ? req.getLeaveType().getName() : "")
+                .setHeader("Type")
+                .setAutoWidth(true);
+
+        historyGrid.addColumn(LeaveRequest::getDurationDays)
+                .setHeader("Days")
+                .setAutoWidth(true);
+
+        historyGrid.addComponentColumn(req -> {
+            Span badge = new Span(req.getStatus());
+            badge.getElement().getThemeList().add("badge pill");
+            if ("APPROVED".equalsIgnoreCase(req.getStatus())) {
+                badge.getElement().getThemeList().add("success");
+            } else if ("REJECTED".equalsIgnoreCase(req.getStatus())) {
+                badge.getElement().getThemeList().add("error");
+            }
+            return badge;
+        }).setHeader("Status").setAutoWidth(true);
+
+        historyGrid.addThemeVariants(GridVariant.LUMO_NO_BORDER, GridVariant.LUMO_ROW_STRIPES);
+        historyGrid.setSizeFull();
+
+        VerticalLayout wrapper = new VerticalLayout(title, historyGrid);
+        wrapper.setPadding(false);
+        wrapper.setSizeFull();
+
+        expand(wrapper);
+        return wrapper;
+    }
+
+    private Component createMiniCard(String title, String value, VaadinIcon icon) {
+        HorizontalLayout card = new HorizontalLayout();
+        card.addClassNames(
+                LumoUtility.Background.BASE, LumoUtility.Border.ALL, LumoUtility.BorderColor.CONTRAST_10,
+                LumoUtility.BorderRadius.MEDIUM, LumoUtility.Padding.MEDIUM,
+                LumoUtility.BoxShadow.XSMALL, LumoUtility.AlignItems.CENTER
+        );
+        card.setMinWidth("200px");
+
+        Icon i = icon.create();
+        i.addClassName(LumoUtility.TextColor.PRIMARY);
+
+        Span titleSpan = new Span(title);
+        titleSpan.addClassNames(LumoUtility.FontSize.XSMALL, LumoUtility.TextColor.SECONDARY);
+
+        Span valueSpan = new Span(value);
+        valueSpan.addClassNames(LumoUtility.FontWeight.BOLD);
+
+        VerticalLayout textLayout = new VerticalLayout(titleSpan, valueSpan);
+        textLayout.setSpacing(false);
+        textLayout.setPadding(false);
+
+        card.add(i, textLayout);
+        return card;
+    }
+
+    private void openApplyLeaveDialog() {
+        Dialog dialog = new Dialog();
+        dialog.setHeaderTitle("New Leave Request");
+        dialog.setWidth("500px");
+
+        leaveType.setItems(leaveTypeService.getAvailableLeaveTypes());
+        leaveType.setItemLabelGenerator(LeaveType::getName);
+
+        durationDays.setReadOnly(true);
+        durationDays.setPrefixComponent(VaadinIcon.CLOCK.create());
+        durationDays.setHelperText("Excludes weekends/holidays");
+        reason.setMinHeight("100px");
+
+        FormLayout formLayout = new FormLayout();
+        formLayout.add(leaveType, 2);
+        formLayout.add(startDate, 1);
+        formLayout.add(endDate, 1);
+        formLayout.add(durationDays, 2);
+        formLayout.add(reason, 2);
+        formLayout.setResponsiveSteps(new FormLayout.ResponsiveStep("0", 2));
+
+        Span infoNote = new Span(VaadinIcon.INFO_CIRCLE.create(), new Span(" Routed to immediate manager."));
+        infoNote.addClassNames(LumoUtility.FontSize.XSMALL, LumoUtility.TextColor.SECONDARY, LumoUtility.Display.FLEX, LumoUtility.Gap.XSMALL, LumoUtility.Margin.Top.SMALL);
+
+        VerticalLayout dialogLayout = new VerticalLayout(formLayout, infoNote);
+        dialogLayout.setPadding(false);
+        dialog.add(dialogLayout);
+
+        Button submitBtn = new Button("Submit", e -> {
+            if (attemptSubmit()) {
+                dialog.close();
+            }
+        });
+        submitBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+
+        Button cancelBtn = new Button("Cancel", e -> {
+            clearForm();
+            dialog.close();
+        });
+
+        dialog.getFooter().add(cancelBtn, submitBtn);
+        dialog.open();
+    }
+
+    private void setupBinder() {
+        binder.forField(leaveType)
+                .asRequired("Please select a leave type")
+                .bind(LeaveRequest::getLeaveType, LeaveRequest::setLeaveType);
+
+        binder.forField(startDate)
+                .asRequired("Start date is required")
+                .withValidator(date -> !date.isBefore(LocalDate.now()), "Start date cannot be in the past")
+                .bind(LeaveRequest::getStartDate, LeaveRequest::setStartDate);
+
+        binder.forField(endDate)
+                .asRequired("End date is required")
+                .withValidator(date -> startDate.getValue() == null || !date.isBefore(startDate.getValue()),
+                        "End date cannot be before start date")
+                .bind(LeaveRequest::getEndDate, LeaveRequest::setEndDate);
+
+        binder.forField(reason)
+                .asRequired("Please provide a reason")
+                .withValidator(text -> text.length() >= 5, "Reason must be at least 5 characters")
+                .bind(LeaveRequest::getReason, LeaveRequest::setReason);
+
+        binder.readBean(currentRequest);
+    }
+
+    private void setupDateCalculations() {
+        leaveType.addValueChangeListener(e -> calculateDuration());
+        endDate.addValueChangeListener(e -> calculateDuration());
+        startDate.addValueChangeListener(e -> {
+            endDate.setMin(e.getValue());
+            calculateDuration();
+        });
+    }
+
+    private void calculateDuration() {
+        LeaveType type = leaveType.getValue();
+        LocalDate start = startDate.getValue();
+        LocalDate end = endDate.getValue();
+
+        if (type != null && start != null && end != null && !end.isBefore(start)) {
+            try {
+                boolean applySandwich = true;
+                BigDecimal netDays = durationEngineService.calculateNetLeaveDays(
+                        start, end, currentEmployee, type, applySandwich
+                );
+                durationDays.setValue(netDays.doubleValue());
+            } catch (Exception ex) {
+                durationDays.clear();
+                Notification.show("Error calculating days: " + ex.getMessage(), 3000, Notification.Position.MIDDLE)
+                        .addThemeVariants(NotificationVariant.LUMO_ERROR);
+            }
+        } else {
+            durationDays.clear();
+        }
+    }
+
+    private boolean attemptSubmit() {
+        try {
+            binder.writeBean(currentRequest);
+
+            if (durationDays.getValue() == null || durationDays.getValue() <= 0) {
+                Notification.show("Duration must be greater than 0", 3000, Notification.Position.MIDDLE)
+                        .addThemeVariants(NotificationVariant.LUMO_ERROR);
+                return false;
+            }
+
+            leaveRequestService.submitLeaveRequest(
+                    currentEmployee,
+                    currentRequest.getLeaveType(),
+                    currentRequest.getStartDate(),
+                    currentRequest.getEndDate(),
+                    currentRequest.getReason(),
+                    LocalDate.now().getYear()
+            );
+
+            Notification.show("Leave request submitted successfully!", 4000, Notification.Position.TOP_END)
+                    .addThemeVariants(NotificationVariant.LUMO_SUCCESS);
+
+            clearForm();
+            refreshBalanceAndHistory();
+            return true;
+
+        } catch (ValidationException e) {
+            Notification.show("Please fix the errors in the form.", 3000, Notification.Position.MIDDLE)
+                    .addThemeVariants(NotificationVariant.LUMO_ERROR);
+            return false;
+        } catch (Exception e) {
+            Notification.show("Submission failed: " + e.getMessage(), 5000, Notification.Position.MIDDLE)
+                    .addThemeVariants(NotificationVariant.LUMO_ERROR);
+            return false;
+        }
+    }
+
+    private void clearForm() {
+        binder.readBean(new LeaveRequest());
+        durationDays.clear();
+        endDate.setMin(null);
+    }
+
+    private void refreshBalanceAndHistory() {
+        balanceLayout.removeAll();
+        leaveTypeService.getAvailableLeaveTypes().forEach(type -> {
+            balanceLayout.add(createMiniCard(type.getName(), "12 Days Left", VaadinIcon.PIE_CHART));
+        });
+
+        historyGrid.setItems(leaveRequestService.getLeaveHistoryForEmployee(currentEmployee.getId()));
+    }
+}

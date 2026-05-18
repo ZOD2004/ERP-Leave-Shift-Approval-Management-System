@@ -1,6 +1,8 @@
 package com.murali.repository;
 
 import com.murali.entity.LeaveRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -54,5 +56,15 @@ public interface LeaveRequestRepository extends JpaRepository<LeaveRequest, Long
             @Param("startDate") LocalDate startDate,
             @Param("endDate") LocalDate endDate);
 
+
+    @Query("SELECT r FROM LeaveRequest r WHERE r.status = :status ORDER BY r.startDate ASC")
+    List<LeaveRequest> findPendingRequests(@Param("status") String status, Pageable pageable);
+    long countByStatus(String status);
+
+    @Query("SELECT COUNT(r) FROM LeaveRequest r WHERE r.status = 'APPROVED' " +
+            "AND :targetDate >= r.startDate AND :targetDate <= r.endDate")
+    long countActiveLeavesForDate(@Param("targetDate") LocalDate targetDate);
+
+    @EntityGraph(attributePaths = {"leaveType"})
     List<LeaveRequest> findByEmployeeIdOrderByStartDateDesc(Long employeeId);
 }
