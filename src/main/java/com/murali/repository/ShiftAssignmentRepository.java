@@ -11,6 +11,7 @@ import org.springframework.stereotype.Repository;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public interface ShiftAssignmentRepository extends JpaRepository<ShiftAssignment, Long> {
@@ -110,4 +111,7 @@ public interface ShiftAssignmentRepository extends JpaRepository<ShiftAssignment
             @Param("assignmentDate") LocalDate assignmentDate,
             @Param("excludeAssignmentId") Long excludeAssignmentId
     );
+
+    @Query("SELECT sa FROM ShiftAssignment sa JOIN FETCH sa.shift WHERE sa.employee.id = :employeeId AND sa.assignmentDate = :date")
+    Optional<ShiftAssignment> findByEmployeeIdAndAssignmentDate(@Param("employeeId") Long employeeId, @Param("date") LocalDate date);
 }

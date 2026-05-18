@@ -46,4 +46,7 @@ public interface EmployeeRepository extends JpaRepository<Employee, Long> {
     List<Employee> searchActiveEmployees(@Param("searchTerm") String searchTerm);
 
     Optional<Employee> findByEmployeeCode(String employeeCode);
+
+    @Query("SELECT e.id FROM Employee e JOIN e.user u WHERE u.active = true")
+    List<Long> findAllActiveEmployeeIds();
 }

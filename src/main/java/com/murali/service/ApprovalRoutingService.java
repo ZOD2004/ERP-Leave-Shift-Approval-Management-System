@@ -188,7 +188,7 @@ public class ApprovalRoutingService {
 
             // PREVENT SELF-APPROVAL: If the resolved approver is the applicant, escalate to HR
             if (approver.getId().equals(applicant.getUser().getId())) {
-                System.out.println("Self-approval detected for role " + requiredRoleName + ". Escalating to HR.");
+//                System.out.println("Self-approval detected for role " + requiredRoleName + ". Escalating to HR.");
                 approver = getFallbackAdminUser();
             }
 

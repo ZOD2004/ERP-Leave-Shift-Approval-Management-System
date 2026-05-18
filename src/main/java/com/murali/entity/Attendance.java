@@ -14,7 +14,9 @@ import java.time.LocalDateTime;
 @Getter
 @Setter
 @Entity
-@Table(name = "attendance")
+@Table(name = "attendance", uniqueConstraints = {
+        @UniqueConstraint(columnNames = {"employee_id", "attendance_date"})
+})
 public class Attendance {
 
     @Id

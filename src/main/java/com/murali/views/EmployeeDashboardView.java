@@ -10,6 +10,7 @@ import com.murali.service.SecurityService;
 import com.murali.service.ShiftAssignmentService;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.button.Button;
+import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.combobox.ComboBox;
 import com.vaadin.flow.component.datepicker.DatePicker;
 import com.vaadin.flow.component.grid.Grid;
@@ -64,12 +65,15 @@ public class EmployeeDashboardView extends VerticalLayout {
         if (employeeId == null) {
             return;
         }
-
+        Button attendanceBtn = new Button("Mark Attendance / History", VaadinIcon.TIME_FORWARD.create(),
+                e -> getUI().ifPresent(ui -> ui.navigate("my-attendance")));
         HorizontalLayout header = new HorizontalLayout(
                 new H2("Welcome back, " + securityService.getAuthenticatedUser().getUsername() + "!"),
-                new Button("New Leave Request", VaadinIcon.PLUS.create(),
-                        e -> getUI().ifPresent(ui -> ui.navigate("apply-leave")))
-        );
+                new HorizontalLayout(
+                        attendanceBtn,
+                        new Button("New Leave Request", VaadinIcon.PLUS.create(),
+                                e -> getUI().ifPresent(ui -> ui.navigate("apply-leave")))
+                ));
 
         header.setWidthFull();
         header.setAlignItems(FlexComponent.Alignment.CENTER);
