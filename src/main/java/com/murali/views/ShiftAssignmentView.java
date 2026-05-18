@@ -245,8 +245,11 @@ public class ShiftAssignmentView extends VerticalLayout {
 
     private Component buildPivotLayout() {
         weekSelector.setValue(LocalDate.now());
-        weekSelector.addValueChangeListener(e -> refreshPivotGrid());
-
+        weekSelector.addValueChangeListener(e -> {
+            if (e.getValue() != null) {
+                refreshPivotGrid();
+            }
+        });
         pivotGrid.setSizeFull();
         setupPivotColumns(LocalDate.now());
 
@@ -272,8 +275,11 @@ public class ShiftAssignmentView extends VerticalLayout {
     }
 
     private void refreshPivotGrid() {
-        LocalDate startOfWeek = weekSelector.getValue()
-                .with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+        LocalDate selectedDate = weekSelector.getValue() != null
+                ? weekSelector.getValue()
+                : LocalDate.now();
+
+        LocalDate startOfWeek = selectedDate.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
         LocalDate endOfWeek = startOfWeek.plusDays(6);
 
         setupPivotColumns(startOfWeek);

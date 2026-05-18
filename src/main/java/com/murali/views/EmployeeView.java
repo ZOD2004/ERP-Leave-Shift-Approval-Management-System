@@ -1,9 +1,7 @@
 package com.murali.views;
 
-import com.murali.entity.Department;
-import com.murali.entity.Employee;
-import com.murali.entity.Role;
-import com.murali.entity.User;
+import com.murali.entity.*;
+import com.murali.repository.LeaveTypeRepository;
 import com.murali.service.DepartmentService;
 import com.murali.service.EmployeeService;
 import com.murali.service.RoleService;
@@ -11,6 +9,7 @@ import com.murali.service.UserService;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.combobox.ComboBox;
+import com.vaadin.flow.component.combobox.MultiSelectComboBox;
 import com.vaadin.flow.component.dialog.Dialog;
 import com.vaadin.flow.component.formlayout.FormLayout;
 import com.vaadin.flow.component.grid.Grid;
@@ -40,6 +39,7 @@ public class EmployeeView extends VerticalLayout {
     private final DepartmentService deptService;
     private final RoleService roleService;
     private final UserService userService;
+    private final LeaveTypeRepository leaveTypeRepository;
 
     private final Grid<Employee> grid = new Grid<>(Employee.class, false);
     private final TextField searchField = new TextField();
@@ -62,16 +62,19 @@ public class EmployeeView extends VerticalLayout {
     private final Binder<User> userBinder = new BeanValidationBinder<>(User.class);
     private final Binder<Employee> employeeBinder = new BeanValidationBinder<>(Employee.class);
 
+    MultiSelectComboBox<LeaveType> applicableLeavesField = new MultiSelectComboBox<>("Applicable Leave Types");
+
     private Employee currentEmployee;
     private User currentUser;
     private boolean isExistingUserLinked = false;
 
     public EmployeeView(EmployeeService employeeService, DepartmentService deptService,
-                        RoleService roleService, UserService userService) {
+                        RoleService roleService, UserService userService, LeaveTypeRepository leaveTypeRepository) {
         this.employeeService = employeeService;
         this.deptService = deptService;
         this.roleService = roleService;
         this.userService = userService;
+        this.leaveTypeRepository = leaveTypeRepository;
 
         setSizeFull();
         configureGrid();
@@ -162,12 +165,16 @@ public class EmployeeView extends VerticalLayout {
         employeeBinder.forField(department).asRequired("Required").bind(Employee::getDepartment, Employee::setDepartment);
         employeeBinder.forField(manager).bind(Employee::getManager, Employee::setManager);
 
+        applicableLeavesField.setItems(leaveTypeRepository.findAll());
+        applicableLeavesField.setItemLabelGenerator(LeaveType::getName);
+        applicableLeavesField.setPlaceholder("Defaults to ALL if left blank");
+
         FormLayout userLayout = new FormLayout(username, email, password, role);
         FormLayout empLayout = new FormLayout(employeeCode, firstName, department, manager);
 
         VerticalLayout dialogBody = new VerticalLayout(
                 new H3("User Identity"), userLayout,
-                new H3("Work Profile"), empLayout
+                new H3("Work Profile"), empLayout,applicableLeavesField
         );
         dialogBody.setPadding(false);
 
@@ -197,6 +204,12 @@ public class EmployeeView extends VerticalLayout {
         employeeBinder.readBean(currentEmployee);
         userBinder.readBean(currentUser);
 
+        if (currentEmployee.getApplicableLeaveTypes() != null) {
+            applicableLeavesField.setValue(currentEmployee.getApplicableLeaveTypes());
+        } else {
+            applicableLeavesField.clear();
+        }
+
         username.setEnabled(currentEmployee.getId() == null);
 
         formDialog.open();
@@ -207,7 +220,8 @@ public class EmployeeView extends VerticalLayout {
             userBinder.writeBean(currentUser);
             employeeBinder.writeBean(currentEmployee);
 
-            employeeService.createOrUpdateEmployeeWithUser(currentEmployee, currentUser, isExistingUserLinked);
+            java.util.Set<LeaveType> selectedLeaves = applicableLeavesField.getValue();
+            employeeService.createOrUpdateEmployeeWithUser(currentEmployee, currentUser, isExistingUserLinked, selectedLeaves);
 
             showNotification("Saved successfully!", NotificationVariant.LUMO_SUCCESS);
             updateList();

@@ -8,7 +8,9 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 @Entity
 @Getter
@@ -42,4 +44,12 @@ public class Employee{
 
     @Column(name = "first_name", nullable = false, length = 100)
     private String firstName;
+
+    @ManyToMany(fetch = FetchType.EAGER)
+    @JoinTable(
+            name = "employee_applicable_leaves",
+            joinColumns = @JoinColumn(name = "employee_id"),
+            inverseJoinColumns = @JoinColumn(name = "leave_type_id")
+    )
+    private Set<LeaveType> applicableLeaveTypes = new HashSet<>();
 }

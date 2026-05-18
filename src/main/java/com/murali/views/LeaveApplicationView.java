@@ -1,6 +1,7 @@
 package com.murali.views;
 
 import com.murali.entity.Employee;
+import com.murali.entity.LeaveBalance;
 import com.murali.entity.LeaveRequest;
 import com.murali.entity.LeaveType;
 import com.murali.service.*;
@@ -34,6 +35,7 @@ import jakarta.annotation.security.PermitAll;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.List;
 
 @PermitAll
 @PageTitle("Leave Dashboard")
@@ -47,6 +49,7 @@ public class LeaveApplicationView extends VerticalLayout {
     private final EmployeeService employeeService;
     private final DurationEngineService durationEngineService;
     private final SecurityService securityService;
+    private final LeaveBalanceService leaveBalanceService;
 
     private final Employee currentEmployee;
     private final LeaveRequest currentRequest = new LeaveRequest();
@@ -66,7 +69,7 @@ public class LeaveApplicationView extends VerticalLayout {
                                 LeaveTypeService leaveTypeService,
                                 EmployeeService employeeService,
                                 DurationEngineService durationEngineService,
-                                SecurityService securityService) {
+                                SecurityService securityService, LeaveBalanceService leaveBalanceService) {
 
         this.leaveRequestService = leaveRequestService;
         this.attendanceSyncService = attendanceSyncService;
@@ -76,6 +79,7 @@ public class LeaveApplicationView extends VerticalLayout {
         this.securityService = securityService;
 
         this.currentEmployee = securityService.getCurrentEmployee();
+        this.leaveBalanceService = leaveBalanceService;
 
         buildMainView();
         setupBinder();
@@ -150,7 +154,7 @@ public class LeaveApplicationView extends VerticalLayout {
         return wrapper;
     }
 
-    private Component createMiniCard(String title, String value, VaadinIcon icon) {
+    private Component createMiniCard(String title, String value, String stats, VaadinIcon icon) {
         HorizontalLayout card = new HorizontalLayout();
         card.addClassNames(
                 LumoUtility.Background.BASE, LumoUtility.Border.ALL, LumoUtility.BorderColor.CONTRAST_10,
@@ -168,7 +172,10 @@ public class LeaveApplicationView extends VerticalLayout {
         Span valueSpan = new Span(value);
         valueSpan.addClassNames(LumoUtility.FontWeight.BOLD);
 
-        VerticalLayout textLayout = new VerticalLayout(titleSpan, valueSpan);
+        Span statsSpan = new Span(stats);
+        statsSpan.addClassNames(LumoUtility.FontSize.XSMALL, LumoUtility.TextColor.TERTIARY);
+
+        VerticalLayout textLayout = new VerticalLayout(titleSpan, valueSpan, statsSpan);
         textLayout.setSpacing(false);
         textLayout.setPadding(false);
 
@@ -320,9 +327,26 @@ public class LeaveApplicationView extends VerticalLayout {
 
     private void refreshBalanceAndHistory() {
         balanceLayout.removeAll();
-        leaveTypeService.getAvailableLeaveTypes().forEach(type -> {
-            balanceLayout.add(createMiniCard(type.getName(), "12 Days Left", VaadinIcon.PIE_CHART));
-        });
+
+        List<LeaveBalance> balances = leaveBalanceService.getBalancesForEmployee(
+                currentEmployee.getId(), LocalDate.now().getYear()
+        );
+
+        for (LeaveBalance balance : balances) {
+            BigDecimal total = balance.getTotalEntitled();
+            BigDecimal remaining = leaveBalanceService.getEffectiveBalance(balance);
+            double used = total.subtract(remaining).doubleValue();
+
+            String daysLeftText = remaining + " Days Left";
+            String statsText = String.format("Used: %s / %s total", used, total);
+
+            balanceLayout.add(createMiniCard(
+                    balance.getLeaveType().getName(),
+                    daysLeftText,
+                    statsText,
+                    VaadinIcon.PIE_CHART
+            ));
+        }
 
         historyGrid.setItems(leaveRequestService.getLeaveHistoryForEmployee(currentEmployee.getId()));
     }

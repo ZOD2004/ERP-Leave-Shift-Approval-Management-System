@@ -61,9 +61,12 @@ public class LeaveBalanceService {
 
     @Transactional
     public void initializeBalancesForEmployee(Employee employee, Integer year) {
-        List<LeaveType> leaveTypes = leaveTypeRepository.findAll();
+        java.util.Set<LeaveType> allowedLeaveTypes = employee.getApplicableLeaveTypes();
+        if (allowedLeaveTypes == null || allowedLeaveTypes.isEmpty()) {
+            return;
+        }
 
-        for (LeaveType leaveType : leaveTypes) {
+        for (LeaveType leaveType : allowedLeaveTypes) {
             boolean exists = leaveBalanceRepository.findByEmployeeIdAndLeaveTypeIdAndYear(
                     employee.getId(), leaveType.getId(), year).isPresent();
 
@@ -90,7 +93,6 @@ public class LeaveBalanceService {
             }
         }
     }
-
     @Transactional
     public void holdPendingBalance(Employee employee, LeaveType leaveType, BigDecimal duration, Integer year, Long referenceId) {
         LeaveBalance balance = getOrCreateBalance(employee, leaveType, year);

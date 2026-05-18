@@ -2,8 +2,10 @@ package com.murali.service;
 
 import com.murali.entity.Employee;
 import com.murali.entity.LeaveBalance;
+import com.murali.entity.LeaveType;
 import com.murali.entity.User;
 import com.murali.repository.EmployeeRepository;
+import com.murali.repository.LeaveTypeRepository;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,10 +20,12 @@ public class EmployeeService {
     private final UserService userService;
     private final EmployeeRepository employeeRepository;
     private final LeaveBalanceService leaveBalanceService;
-    public EmployeeService(UserService userService, EmployeeRepository employeeRepository, LeaveBalanceService leaveBalanceService){
+    private final LeaveTypeRepository leaveTypeRepository;
+    public EmployeeService(UserService userService, EmployeeRepository employeeRepository, LeaveBalanceService leaveBalanceService, LeaveTypeRepository leaveTypeRepository){
         this.userService = userService;
         this.employeeRepository = employeeRepository;
         this.leaveBalanceService = leaveBalanceService;
+        this.leaveTypeRepository = leaveTypeRepository;
     }
 
     @PreAuthorize("hasAnyRole('ROLE_SUPER_ADMIN', 'ROLE_HR_ADMIN')")
@@ -31,7 +35,8 @@ public class EmployeeService {
 
     @Transactional
     @PreAuthorize("hasAnyRole('ROLE_SUPER_ADMIN', 'ROLE_HR_ADMIN')")
-    public void createOrUpdateEmployeeWithUser(Employee currentEmployee, User currentUser, boolean isExistingUserLinked) {
+    public void createOrUpdateEmployeeWithUser(Employee currentEmployee, User currentUser,
+                                               boolean isExistingUserLinked, java.util.Set<LeaveType> selectedLeaves) {
         User finalUser = currentUser;
 
         if (isExistingUserLinked && currentUser != null && currentUser.getUsername() != null) {
@@ -41,9 +46,17 @@ public class EmployeeService {
             finalUser = userService.save(currentUser);
         }
         currentEmployee.setUser(finalUser);
+
+        if (selectedLeaves == null || selectedLeaves.isEmpty()) {
+            java.util.List<LeaveType> allLeaves = leaveTypeRepository.findAll();
+            currentEmployee.setApplicableLeaveTypes(new java.util.HashSet<>(allLeaves));
+        } else {
+            currentEmployee.setApplicableLeaveTypes(selectedLeaves);
+        }
+
         Integer currentYear = LocalDate.now().getYear();
         employeeRepository.save(currentEmployee);
-        leaveBalanceService.initializeBalancesForEmployee(currentEmployee,currentYear);
+        leaveBalanceService.initializeBalancesForEmployee(currentEmployee, currentYear);
     }
     @Transactional
     @PreAuthorize("hasAnyRole('ROLE_SUPER_ADMIN', 'ROLE_HR_ADMIN')")

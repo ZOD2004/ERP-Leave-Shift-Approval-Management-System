@@ -1,11 +1,13 @@
 package com.murali.views;
 
+import com.murali.dto.ShiftAssignmentDTO;
 import com.murali.entity.LeaveBalance;
 import com.murali.entity.LeaveRequest;
 import com.murali.security.CustomUserDetails;
 import com.murali.service.LeaveBalanceService;
 import com.murali.service.LeaveRequestService;
 import com.murali.service.SecurityService;
+import com.murali.service.ShiftAssignmentService;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.combobox.ComboBox;
@@ -19,6 +21,7 @@ import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.icon.Icon;
 import com.vaadin.flow.component.icon.VaadinIcon;
 import com.vaadin.flow.component.orderedlayout.FlexComponent;
+import com.vaadin.flow.component.orderedlayout.FlexLayout;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.router.PageTitle;
@@ -30,6 +33,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.Arrays;
 import java.util.List;
 
 @PermitAll // Update with your specific role e.g., @RolesAllowed("EMPLOYEE")
@@ -40,12 +44,14 @@ public class EmployeeDashboardView extends VerticalLayout {
     private final LeaveBalanceService leaveBalanceService;
     private final LeaveRequestService leaveRequestService;
     private final SecurityService securityService;
+    private final ShiftAssignmentService shiftAssignmentService;
 
     public EmployeeDashboardView(LeaveBalanceService leaveBalanceService,
-                                 LeaveRequestService leaveRequestService, SecurityService securityService) {
+                                 LeaveRequestService leaveRequestService, SecurityService securityService, ShiftAssignmentService shiftAssignmentService) {
         this.leaveBalanceService = leaveBalanceService;
         this.leaveRequestService = leaveRequestService;
         this.securityService = securityService;
+        this.shiftAssignmentService = shiftAssignmentService;
 
         setSizeFull();
         addClassNames(LumoUtility.Padding.LARGE);
@@ -71,12 +77,15 @@ public class EmployeeDashboardView extends VerticalLayout {
 
         Component balanceSection = createBalanceSection(employeeId);
 
+        Component shiftSection = createShiftSection(employeeId);
+
         Component historySection = createHistorySection(employeeId);
 
         add(
                 header,
                 new Hr(),
                 balanceSection,
+                shiftSection,
                 historySection
         );
     }
@@ -89,19 +98,24 @@ public class EmployeeDashboardView extends VerticalLayout {
         H3 title = new H3("Your Leave Balances");
         title.addClassNames(LumoUtility.Margin.Top.MEDIUM, LumoUtility.Margin.Bottom.NONE);
 
-        // This calls the method that creates the actual cards
-        HorizontalLayout cards = createBalanceCards(employeeId, LocalDate.now().getYear());
+        FlexLayout cards = createBalanceCards(employeeId, LocalDate.now().getYear());
 
         section.add(title, cards);
         return section;
     }
 
-    private HorizontalLayout createBalanceCards(Long employeeId, int year) {
-        HorizontalLayout cardsLayout = new HorizontalLayout();
-        cardsLayout.setWidthFull();
-        cardsLayout.addClassNames(LumoUtility.Gap.MEDIUM, LumoUtility.FlexWrap.WRAP);
+    private FlexLayout createBalanceCards(Long employeeId, int year) {
+        FlexLayout cardsLayout = new FlexLayout();
 
-        List<LeaveBalance> balances = leaveBalanceService.getBalancesForEmployee(employeeId, year);
+        cardsLayout.setWidthFull();
+        cardsLayout.setFlexWrap(FlexLayout.FlexWrap.WRAP);
+        cardsLayout.setJustifyContentMode(FlexComponent.JustifyContentMode.START);
+        cardsLayout.setAlignItems(FlexComponent.Alignment.START);
+
+        cardsLayout.getStyle().set("gap", "var(--lumo-space-m)");
+
+        List<LeaveBalance> balances =
+                leaveBalanceService.getBalancesForEmployee(employeeId, year);
 
         for (LeaveBalance balance : balances) {
             cardsLayout.add(createSingleCard(balance));
@@ -113,9 +127,18 @@ public class EmployeeDashboardView extends VerticalLayout {
 
     private Component createSingleCard(LeaveBalance balance) {
         VerticalLayout card = new VerticalLayout();
-        card.addClassNames(LumoUtility.Background.BASE, LumoUtility.BorderRadius.LARGE,
-                LumoUtility.BoxShadow.SMALL, LumoUtility.Padding.LARGE, LumoUtility.Border.ALL);
-        card.setMinWidth("260px");
+        card.addClassNames(
+                LumoUtility.Background.BASE,
+                LumoUtility.BorderRadius.LARGE,
+                LumoUtility.BoxShadow.SMALL,
+                LumoUtility.Padding.LARGE,
+                LumoUtility.Border.ALL
+        );
+
+        card.setWidth("260px");
+        card.getStyle().set("flex", "1 1 260px");
+        card.setMaxWidth("320px");
+
         card.setSpacing(false);
 
         BigDecimal total = balance.getTotalEntitled();
@@ -244,6 +267,56 @@ public class EmployeeDashboardView extends VerticalLayout {
         layout.add(title, toolbar, grid);
         return layout;
     }
+    private Component createShiftSection(Long employeeId) {
+        VerticalLayout section = new VerticalLayout();
+        section.setPadding(false);
+        section.setSpacing(true);
 
+        H3 title = new H3("Your Upcoming Shift Schedule");
+        title.addClassNames(LumoUtility.Margin.Top.MEDIUM, LumoUtility.Margin.Bottom.NONE);
 
+        Grid<ShiftAssignmentDTO> shiftGrid = new Grid<>(ShiftAssignmentDTO.class, false);
+        shiftGrid.addThemeVariants(GridVariant.LUMO_ROW_STRIPES, GridVariant.LUMO_COMPACT);
+        shiftGrid.setWidthFull();
+        shiftGrid.setHeight("200px");
+
+        shiftGrid.addColumn(ShiftAssignmentDTO::getAssignmentDate)
+                .setHeader("Date")
+                .setAutoWidth(true)
+                .setSortable(true);
+
+        shiftGrid.addColumn(ShiftAssignmentDTO::getShiftName)
+                .setHeader("Shift Template")
+                .setAutoWidth(true);
+
+        shiftGrid.addColumn(dto -> dto.getStartTime() + " - " + dto.getEndTime())
+                .setHeader("Working Hours")
+                .setAutoWidth(true);
+
+        shiftGrid.addComponentColumn(dto -> {
+            if (Boolean.TRUE.equals(dto.getIsOverride())) {
+                Span badge = new Span("Adjusted");
+                badge.getElement().getThemeList().add("badge warning small");
+                return badge;
+            }
+            return new Span("-");
+        }).setHeader("Schedule Type").setAutoWidth(true);
+
+        LocalDate today = LocalDate.now();
+        LocalDate nextWeek = today.plusDays(7);
+
+        List<ShiftAssignmentDTO> myShifts = shiftAssignmentService.fetchAssignmentsForCalendarPivot(today, nextWeek)
+                .stream()
+                .filter(assignment -> assignment.getEmployeeId().equals(employeeId))
+                .toList();
+
+        for(ShiftAssignmentDTO i: myShifts){
+            System.out.println(i.toString());
+        }
+
+        shiftGrid.setItems(myShifts);
+
+        section.add(title, shiftGrid);
+        return section;
+    }
 }
