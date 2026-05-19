@@ -131,9 +131,17 @@ public class EmployeeView extends VerticalLayout {
         role.setItems(roleService.getRoles());
         role.setItemLabelGenerator(Role::getName);
 
-        manager.setItems(employeeService.findAllManagers());
         manager.setItemLabelGenerator(e -> e.getFirstName() + " (" + e.getEmployeeCode() + ")");
         manager.setClearButtonVisible(true);
+
+        department.addValueChangeListener(event -> {
+            Department selectedDept = event.getValue();
+            if (selectedDept != null) {
+                manager.setItems(employeeService.findAvailableManagers(selectedDept.getId()));
+            } else {
+                manager.setItems(java.util.Collections.emptyList());
+            }
+        });
 
         username.setValueChangeMode(ValueChangeMode.LAZY);
         username.addValueChangeListener(event -> {
@@ -200,6 +208,12 @@ public class EmployeeView extends VerticalLayout {
     private void openForm(Employee employee, User user) {
         currentEmployee = employee;
         currentUser = user;
+
+        if (currentEmployee.getDepartment() != null) {
+            manager.setItems(employeeService.findAvailableManagers(currentEmployee.getDepartment().getId()));
+        } else {
+            manager.setItems(java.util.Collections.emptyList());
+        }
 
         employeeBinder.readBean(currentEmployee);
         userBinder.readBean(currentUser);
