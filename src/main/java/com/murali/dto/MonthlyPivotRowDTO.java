@@ -9,7 +9,7 @@ import lombok.NoArgsConstructor;
 @Data
 public class MonthlyPivotRowDTO {
     private String employeeName;
-    private java.util.Map<Integer, String> schedule = new java.util.HashMap<>();
+    private java.util.Map<Integer, ShiftAssignmentDTO> schedule = new java.util.HashMap<>();
 
     public MonthlyPivotRowDTO(String employeeName) {
         this.employeeName = employeeName;
@@ -17,14 +17,11 @@ public class MonthlyPivotRowDTO {
 
     public String getEmployeeName() { return employeeName; }
 
-    public void addShift(int dayOfMonth, String shiftName) {
-        String shortCode = (shiftName != null && !shiftName.isEmpty())
-                ? shiftName.substring(0, 4)
-                : "-";
-        schedule.put(dayOfMonth, shortCode);
+    public void addShift(int dayOfMonth, ShiftAssignmentDTO assignment) {
+        schedule.put(dayOfMonth, assignment);
     }
 
-    public String getShiftForDay(int dayOfMonth) {
-        return schedule.getOrDefault(dayOfMonth, "-");
+    public ShiftAssignmentDTO getAssignmentForDay(int dayOfMonth) {
+        return schedule.get(dayOfMonth);
     }
 }
