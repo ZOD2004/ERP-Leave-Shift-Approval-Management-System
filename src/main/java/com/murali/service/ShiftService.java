@@ -20,9 +20,6 @@ public class ShiftService {
         return shiftRepository.findAll();
     }
 
-    public void addShift(Shift shift){
-        shiftRepository.save(shift);
-    }
 
     public void deleteShift(Long id){
         shiftRepository.deleteById(id);
@@ -39,7 +36,22 @@ public class ShiftService {
         currShift.setName(shift.getName());
         currShift.setEndTime(shift.getEndTime());
         currShift.setStartTime(shift.getStartTime());
-        return shiftRepository.save(shift);
+        currShift.setWorkingDays(shift.getWorkingDays());
+        return shiftRepository.save(currShift);
+    }
+    public void addShift(Shift shift) {
+        validateShift(shift);
+        shiftRepository.save(shift);
+    }
+    private void validateShift(Shift shift) {
+
+        if (shift.getWorkingDays() == null || shift.getWorkingDays().isEmpty()) {
+            throw new IllegalArgumentException("At least one working day is required");
+        }
+
+        if (shift.getStartTime().equals(shift.getEndTime())) {
+            throw new IllegalArgumentException("Start time and end time cannot be same");
+        }
     }
 
     public Optional<Shift> getShiftById(Long id){

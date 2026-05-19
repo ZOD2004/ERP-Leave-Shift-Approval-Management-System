@@ -58,6 +58,7 @@ public class AttendanceSyncService {
 
             if(holidays.contains(currentDate) || currentDate.getDayOfWeek() == DayOfWeek.SATURDAY || currentDate.getDayOfWeek() == DayOfWeek.SUNDAY){
                 currentDate = currentDate.plusDays(1);
+                continue;
             }
 
             Attendance attendance = attendanceMap.getOrDefault(currentDate, new Attendance());

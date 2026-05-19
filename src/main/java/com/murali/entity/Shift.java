@@ -7,6 +7,8 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.time.LocalTime;
+import java.util.HashSet;
+import java.util.Set;
 
 @AllArgsConstructor
 @NoArgsConstructor
@@ -32,4 +34,12 @@ public class Shift {
     @Column(name = "end_time", nullable = false)
     private LocalTime endTime;
 
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(
+            name = "shift_working_days",
+            joinColumns = @JoinColumn(name = "shift_id")
+    )
+    @Enumerated(EnumType.STRING)
+    @Column(name = "working_day")
+    private Set<WorkingDay> workingDays = new HashSet<>();
 }
