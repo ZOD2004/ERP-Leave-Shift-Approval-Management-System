@@ -67,4 +67,21 @@ public interface LeaveRequestRepository extends JpaRepository<LeaveRequest, Long
 
     @EntityGraph(attributePaths = {"leaveType"})
     List<LeaveRequest> findByEmployeeIdOrderByStartDateDesc(Long employeeId);
+
+    boolean existsByEmployeeIdAndStatusInAndStartDateLessThanEqualAndEndDateGreaterThanEqual(
+            Long employeeId,
+            List<String> statuses,
+            LocalDate newEndDate,
+            LocalDate newStartDate
+    );
+    @Query("SELECT CASE WHEN COUNT(lr) > 0 THEN true ELSE false END FROM LeaveRequest lr " +
+            "WHERE lr.employee.id = :employeeId " +
+            "AND lr.status IN :activeStatuses " +
+            "AND lr.startDate <= :endDate AND lr.endDate >= :startDate")
+    boolean hasOverlappingLeave(
+            @Param("employeeId") Long employeeId,
+            @Param("startDate") LocalDate startDate,
+            @Param("endDate") LocalDate endDate,
+            @Param("activeStatuses") List<String> activeStatuses
+    );
 }

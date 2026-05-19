@@ -47,6 +47,17 @@ public class LeaveRequestService {
         Employee employee = employeeRepository.findById(detachedEmployee.getId())
                 .orElseThrow(() -> new IllegalArgumentException("Employee not found"));
 
+        List<String> activeStatuses = List.of(STATUS_PENDING, STATUS_APPROVED);
+        boolean hasOverlap = leaveRequestRepository.hasOverlappingLeave(
+                employee.getId(), startDate, endDate, activeStatuses
+        );
+
+        if (hasOverlap) {
+            throw new IllegalArgumentException(
+                    "Validation Failed: You already have a pending or approved leave request that overlaps with these dates."
+            );
+        }
+
         BigDecimal duration = durationEngineService.calculateNetLeaveDays(
                 startDate, endDate, employee, leaveType, false
         );
