@@ -267,58 +267,52 @@ public class ShiftAssignmentView extends VerticalLayout {
             LocalDate currentDate = startOfWeek.plusDays(i);
             String dayName = currentDate.getDayOfWeek().toString().substring(0, 3) + " (" + currentDate.getDayOfMonth() + ")";
 
-            pivotGrid.addColumn(row -> row.getShiftForDate(currentDate))
-                    .setHeader(dayName);
+            pivotGrid.addColumn(new ComponentRenderer<>(row -> {
+                ShiftAssignmentDTO assignment = row.getAssignmentForDate(currentDate);
+
+                if (assignment != null && assignment.getShiftName() != null) {
+                    String shortCode = assignment.getShiftName().length() > 4
+                            ? assignment.getShiftName().substring(0, 4)
+                            : assignment.getShiftName();
+                    Button cellBtn = new Button(shortCode);
+                    cellBtn.addThemeVariants(ButtonVariant.LUMO_TERTIARY, ButtonVariant.LUMO_SMALL);
+                    cellBtn.getStyle().set("padding", "0").set("margin", "0");
+
+                    cellBtn.addClickListener(e -> openEditDialog(assignment));
+
+                    return cellBtn;
+                } else {
+                    return new Span("Holiday");
+                }
+            })).setHeader(dayName).setAutoWidth(true);
         }
     }
 
     private void refreshPivotGrid() {
-        LocalDate startOfWeek = weekSelector.getValue()
-                .with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+        LocalDate selectedDate = weekSelector.getValue() != null
+                ? weekSelector.getValue()
+                : LocalDate.now();
+
+        LocalDate startOfWeek = selectedDate.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
         LocalDate endOfWeek = startOfWeek.plusDays(6);
 
         setupPivotColumns(startOfWeek);
 
-        List<PivotRowDTO> rows = new ArrayList<>();
-        Map<String, Map<LocalDate, String>> weeklyPivotData =
-                assignmentService.getWeeklyPivotData(startOfWeek, endOfWeek);
+        List<ShiftAssignmentDTO> flatAssignments =
+                assignmentService.fetchAssignmentsForCalendarPivot(startOfWeek, endOfWeek);
 
-        if (weeklyPivotData != null && !weeklyPivotData.isEmpty()) {
+        Map<String, PivotRowDTO> pivotData = new HashMap<>();
 
-            for (Map.Entry<String, Map<LocalDate, String>> entry : weeklyPivotData.entrySet()) {
+        for (ShiftAssignmentDTO dto : flatAssignments) {
+            PivotRowDTO row = pivotData.computeIfAbsent(
+                    dto.getEmployeeName(),
+                    k -> new PivotRowDTO(dto.getEmployeeName())
+            );
 
-                String employeeName = entry.getKey();
-                Map<LocalDate, String> shifts = entry.getValue();
-
-                PivotRowDTO row = new PivotRowDTO(employeeName);
-
-                for (Map.Entry<LocalDate, String> shiftEntry : shifts.entrySet()) {
-                    row.addShift(shiftEntry.getKey(), shiftEntry.getValue());
-                }
-
-                rows.add(row);
-            }
-
-        } else {
-            List<ShiftAssignmentDTO> flatAssignments =
-                    assignmentService.fetchAssignmentsForCalendarPivot(startOfWeek, endOfWeek);
-
-            Map<String, PivotRowDTO> pivotData = new HashMap<>();
-
-            for (ShiftAssignmentDTO dto : flatAssignments) {
-
-                PivotRowDTO row = pivotData.computeIfAbsent(
-                        dto.getEmployeeName(),
-                        k -> new PivotRowDTO(dto.getEmployeeName())
-                );
-
-                row.addShift(dto.getAssignmentDate(), dto.getShiftName());
-            }
-
-            rows = new ArrayList<>(pivotData.values());
+            row.addShift(dto.getAssignmentDate(), dto);
         }
 
-        pivotGrid.setItems(rows);
+        pivotGrid.setItems(pivotData.values());
     }
 
 
@@ -752,7 +746,6 @@ public class ShiftAssignmentView extends VerticalLayout {
             }
         });
         deleteConfirmBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY, ButtonVariant.LUMO_ERROR);
-
         confirmDialog.getFooter().add(cancelBtn, deleteConfirmBtn);
         confirmDialog.open();
     }
