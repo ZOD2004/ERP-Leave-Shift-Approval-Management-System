@@ -7,6 +7,7 @@ import com.murali.service.EmployeeService;
 import com.murali.service.ShiftAssignmentService;
 import com.murali.service.ShiftService;
 import com.vaadin.flow.component.Component;
+import com.vaadin.flow.component.Text;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.combobox.MultiSelectComboBox;
@@ -269,8 +270,24 @@ public class ShiftAssignmentView extends VerticalLayout {
             LocalDate currentDate = startOfWeek.plusDays(i);
             String dayName = currentDate.getDayOfWeek().toString().substring(0, 3) + " (" + currentDate.getDayOfMonth() + ")";
 
-            pivotGrid.addColumn(row -> row.getShiftForDate(currentDate))
-                    .setHeader(dayName);
+            pivotGrid.addColumn(new ComponentRenderer<>(row -> {
+                ShiftAssignmentDTO assignment = row.getAssignmentForDate(currentDate);
+
+                if (assignment != null && assignment.getShiftName() != null) {
+                    String shortCode = assignment.getShiftName().length() > 4
+                            ? assignment.getShiftName().substring(0, 4)
+                            : assignment.getShiftName();
+                    Button cellBtn = new Button(shortCode);
+                    cellBtn.addThemeVariants(ButtonVariant.LUMO_TERTIARY, ButtonVariant.LUMO_SMALL);
+                    cellBtn.getStyle().set("padding", "0").set("margin", "0");
+
+                    cellBtn.addClickListener(e -> openEditDialog(assignment));
+
+                    return cellBtn;
+                } else {
+                    return new Span("Holiday");
+                }
+            })).setHeader(dayName).setAutoWidth(true);
         }
     }
 
@@ -284,46 +301,21 @@ public class ShiftAssignmentView extends VerticalLayout {
 
         setupPivotColumns(startOfWeek);
 
-        List<PivotRowDTO> rows = new ArrayList<>();
-        Map<String, Map<LocalDate, String>> weeklyPivotData =
-                assignmentService.getWeeklyPivotData(startOfWeek, endOfWeek);
+        List<ShiftAssignmentDTO> flatAssignments =
+                assignmentService.fetchAssignmentsForCalendarPivot(startOfWeek, endOfWeek);
 
-        if (weeklyPivotData != null && !weeklyPivotData.isEmpty()) {
+        Map<String, PivotRowDTO> pivotData = new HashMap<>();
 
-            for (Map.Entry<String, Map<LocalDate, String>> entry : weeklyPivotData.entrySet()) {
+        for (ShiftAssignmentDTO dto : flatAssignments) {
+            PivotRowDTO row = pivotData.computeIfAbsent(
+                    dto.getEmployeeName(),
+                    k -> new PivotRowDTO(dto.getEmployeeName())
+            );
 
-                String employeeName = entry.getKey();
-                Map<LocalDate, String> shifts = entry.getValue();
-
-                PivotRowDTO row = new PivotRowDTO(employeeName);
-
-                for (Map.Entry<LocalDate, String> shiftEntry : shifts.entrySet()) {
-                    row.addShift(shiftEntry.getKey(), shiftEntry.getValue());
-                }
-
-                rows.add(row);
-            }
-
-        } else {
-            List<ShiftAssignmentDTO> flatAssignments =
-                    assignmentService.fetchAssignmentsForCalendarPivot(startOfWeek, endOfWeek);
-
-            Map<String, PivotRowDTO> pivotData = new HashMap<>();
-
-            for (ShiftAssignmentDTO dto : flatAssignments) {
-
-                PivotRowDTO row = pivotData.computeIfAbsent(
-                        dto.getEmployeeName(),
-                        k -> new PivotRowDTO(dto.getEmployeeName())
-                );
-
-                row.addShift(dto.getAssignmentDate(), dto.getShiftName());
-            }
-
-            rows = new ArrayList<>(pivotData.values());
+            row.addShift(dto.getAssignmentDate(), dto);
         }
 
-        pivotGrid.setItems(rows);
+        pivotGrid.setItems(pivotData.values());
     }
 
 
@@ -485,10 +477,26 @@ public class ShiftAssignmentView extends VerticalLayout {
         int daysInMonth = currentMonth.lengthOfMonth();
         for (int i = 1; i <= daysInMonth; i++) {
             final int day = i;
-            monthlyGrid.addColumn(row -> row.getShiftForDay(day))
-                    .setHeader(String.valueOf(day))
-                    .setAutoWidth(true);
-//                    .setFlexGrow(0);
+
+            monthlyGrid.addColumn(new ComponentRenderer<>(row -> {
+                ShiftAssignmentDTO assignment = row.getAssignmentForDay(day);
+
+                if (assignment != null && assignment.getShiftName() != null) {
+                    String shortCode = assignment.getShiftName().length() > 4
+                            ? assignment.getShiftName().substring(0, 4)
+                            : assignment.getShiftName();
+
+                    Button cellBtn = new Button(shortCode);
+                    cellBtn.addThemeVariants(ButtonVariant.LUMO_TERTIARY, ButtonVariant.LUMO_SMALL);
+                    cellBtn.getStyle().set("padding", "0").set("margin", "0");
+
+                    cellBtn.addClickListener(e -> openEditDialog(assignment));
+
+                    return cellBtn;
+                } else {
+                    return new Span("H");
+                }
+            })).setHeader(String.valueOf(day)).setAutoWidth(true);
         }
     }
 
@@ -509,7 +517,7 @@ public class ShiftAssignmentView extends VerticalLayout {
             );
 
             int dayOfMonth = dto.getAssignmentDate().getDayOfMonth();
-            row.addShift(dayOfMonth, dto.getShiftName());
+            row.addShift(dayOfMonth, dto);
         }
         monthlyGrid.setItems(pivotData.values());
     }
@@ -648,18 +656,14 @@ public class ShiftAssignmentView extends VerticalLayout {
         Dialog editDialog = new Dialog();
         editDialog.setHeaderTitle("Edit Shift for " + assignment.getEmployeeName());
 
-        // Shift Selection
         ComboBox<Shift> shiftCombo = new ComboBox<>("Shift");
         shiftCombo.setItems(shiftService.getShifts());
         shiftCombo.setItemLabelGenerator(Shift::getName);
-        // Pre-select current shift (Requires your shiftService to have a findById method)
         shiftService.getShiftById(assignment.getShiftId()).ifPresent(shiftCombo::setValue);
 
-        // Date Selection
         DatePicker datePicker = new DatePicker("Assignment Date");
         datePicker.setValue(assignment.getAssignmentDate());
 
-        // Overrides (Useful if they are resolving a half-day conflict)
         TimePicker overrideStart = new TimePicker("Override Start Time");
         overrideStart.setValue(assignment.getOverrideStartTime());
         overrideStart.setClearButtonVisible(true);
@@ -675,15 +679,12 @@ public class ShiftAssignmentView extends VerticalLayout {
                 return;
             }
 
-            // Update the DTO with new values
             assignment.setShiftId(shiftCombo.getValue().getId());
             assignment.setAssignmentDate(datePicker.getValue());
             assignment.setOverrideStartTime(overrideStart.getValue());
             assignment.setOverrideEndTime(overrideEnd.getValue());
 
             try {
-                // Call your service layer.
-                // IMPORTANT: This method must throw an Exception if there is a conflict!
                 assignmentService.updateSingleAssignment(assignment);
 
                 Notification.show("Assignment Updated", 3000, Notification.Position.TOP_CENTER)
@@ -692,7 +693,6 @@ public class ShiftAssignmentView extends VerticalLayout {
                 refreshListGrid();
 
             } catch (Exception ex) {
-                // Conflict detected! The dialog stays open so the user can resolve it.
                 Notification.show("Conflict: " + ex.getMessage(), 5000, Notification.Position.MIDDLE)
                         .addThemeVariants(NotificationVariant.LUMO_ERROR);
             }
@@ -701,24 +701,55 @@ public class ShiftAssignmentView extends VerticalLayout {
 
         Button cancelBtn = new Button("Cancel", e -> editDialog.close());
 
+        Button deleteBtn = new Button("Delete", new Icon(VaadinIcon.TRASH));
+        deleteBtn.addThemeVariants(ButtonVariant.LUMO_ERROR);
+        deleteBtn.addClickListener(e -> {
+            confirmDelete(assignment);
+            editDialog.close();
+        });
+
         FormLayout form = new FormLayout(shiftCombo, datePicker, overrideStart, overrideEnd);
         editDialog.add(form);
-        editDialog.getFooter().add(cancelBtn, saveBtn);
+        HorizontalLayout footerLayout = new HorizontalLayout(deleteBtn, cancelBtn, saveBtn);
+        footerLayout.setWidthFull();
+        footerLayout.setJustifyContentMode(FlexComponent.JustifyContentMode.BETWEEN);
+
+        editDialog.getFooter().add(footerLayout);
 
         editDialog.open();
     }
     private void confirmDelete(ShiftAssignmentDTO assignment) {
-        try {
-            // Call your service layer to delete
-            assignmentService.deleteAssignment(assignment.getId());
+        Dialog confirmDialog = new Dialog();
+        confirmDialog.setHeaderTitle("Confirm Deletion");
+        String message = String.format("Are you sure you want to remove the shift for %s on %s?",
+                assignment.getEmployeeName(),
+                assignment.getAssignmentDate());
 
-            Notification.show("Assignment Removed", 3000, Notification.Position.TOP_CENTER)
-                    .addThemeVariants(NotificationVariant.LUMO_SUCCESS);
-            refreshListGrid();
+        confirmDialog.add(new Text(message));
 
-        } catch (Exception ex) {
-            Notification.show("Error deleting assignment: " + ex.getMessage(), 4000, Notification.Position.TOP_CENTER)
-                    .addThemeVariants(NotificationVariant.LUMO_ERROR);
-        }
+        Button cancelBtn = new Button("Cancel", e -> confirmDialog.close());
+        cancelBtn.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
+
+        Button deleteConfirmBtn = new Button("Delete", e -> {
+            try {
+                assignmentService.deleteAssignment(assignment.getId());
+
+                Notification.show("Assignment Removed", 3000, Notification.Position.TOP_CENTER)
+                        .addThemeVariants(NotificationVariant.LUMO_SUCCESS);
+
+                refreshListGrid();
+                refreshMonthlyGrid();
+                refreshPivotGrid();
+
+            } catch (Exception ex) {
+                Notification.show("Error deleting assignment: " + ex.getMessage(), 4000, Notification.Position.TOP_CENTER)
+                        .addThemeVariants(NotificationVariant.LUMO_ERROR);
+            } finally {
+                confirmDialog.close();
+            }
+        });
+        deleteConfirmBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY, ButtonVariant.LUMO_ERROR);
+        confirmDialog.getFooter().add(cancelBtn, deleteConfirmBtn);
+        confirmDialog.open();
     }
 }
