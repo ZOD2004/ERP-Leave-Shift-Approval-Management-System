@@ -10,6 +10,7 @@ import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.checkbox.Checkbox;
 import com.vaadin.flow.component.combobox.ComboBox;
+import com.vaadin.flow.component.confirmdialog.ConfirmDialog;
 import com.vaadin.flow.component.dialog.Dialog;
 import com.vaadin.flow.component.formlayout.FormLayout;
 import com.vaadin.flow.component.grid.Grid;
@@ -95,7 +96,7 @@ public class UserView extends VerticalLayout {
 
             Button deleteBtn = new Button(new Icon(VaadinIcon.TRASH));
             deleteBtn.addThemeVariants(ButtonVariant.LUMO_TERTIARY, ButtonVariant.LUMO_ERROR);
-            deleteBtn.addClickListener(e -> deleteUser(user));
+            deleteBtn.addClickListener(e -> confirmAndDelete(user));
 
             return new HorizontalLayout(editBtn, deleteBtn);
         }).setHeader("Actions").setAutoWidth(true);
@@ -127,7 +128,6 @@ public class UserView extends VerticalLayout {
 
     private void openForm(User user) {
         this.currentUser = user;
-        // Logic to hide password field on edit if you don't want password resets here
         password.setVisible(user.getId() == null);
 
         binder.readBean(currentUser);
@@ -146,6 +146,22 @@ public class UserView extends VerticalLayout {
         } catch (Exception e) {
             showNotification("Error: Username/Email already exists", NotificationVariant.LUMO_ERROR);
         }
+    }
+
+    private void confirmAndDelete(User user) {
+        ConfirmDialog dialog = new ConfirmDialog();
+        dialog.setHeader("Delete User?");
+        dialog.setText("Are you sure you want to permanently delete the user '" + user.getUsername() + "'?");
+
+        dialog.setCancelable(true);
+        dialog.setCancelText("Cancel");
+
+        dialog.setConfirmText("Delete");
+        dialog.setConfirmButtonTheme("error primary");
+
+        dialog.addConfirmListener(event -> deleteUser(user));
+
+        dialog.open();
     }
 
     private void deleteUser(User user) {

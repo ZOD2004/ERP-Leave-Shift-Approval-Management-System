@@ -4,6 +4,7 @@ import com.murali.entity.Role;
 import com.murali.service.RoleService;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
+import com.vaadin.flow.component.confirmdialog.ConfirmDialog;
 import com.vaadin.flow.component.dialog.Dialog;
 import com.vaadin.flow.component.formlayout.FormLayout;
 import com.vaadin.flow.component.grid.Grid;
@@ -77,7 +78,7 @@ public class RoleView extends VerticalLayout {
 
             Button deleteBtn = new Button(new Icon(VaadinIcon.TRASH));
             deleteBtn.addThemeVariants(ButtonVariant.LUMO_TERTIARY, ButtonVariant.LUMO_ERROR);
-            deleteBtn.addClickListener(e -> deleteRole(role));
+            deleteBtn.addClickListener(e -> confirmAndDelete(role));
 
             return new HorizontalLayout(editBtn, deleteBtn);
         }).setHeader("Actions").setAutoWidth(true).setFlexGrow(0);
@@ -127,6 +128,21 @@ public class RoleView extends VerticalLayout {
         } catch (Exception e) {
             showNotification("Error saving role: " + e.getMessage(), NotificationVariant.LUMO_ERROR);
         }
+    }
+
+    private void confirmAndDelete(Role role) {
+        ConfirmDialog dialog = new ConfirmDialog();
+        dialog.setHeader("Delete Role?");
+        dialog.setText("Are you sure you want to permanently delete the role '" + role.getName() + "'?");
+
+        dialog.setCancelable(true);
+        dialog.setCancelText("Cancel");
+
+        dialog.setConfirmText("Delete");
+        dialog.setConfirmButtonTheme("error primary");
+        dialog.addConfirmListener(event -> deleteRole(role));
+
+        dialog.open();
     }
 
     private void deleteRole(Role role) {

@@ -5,6 +5,7 @@ import com.murali.service.LeaveTypeService;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.checkbox.Checkbox;
+import com.vaadin.flow.component.confirmdialog.ConfirmDialog;
 import com.vaadin.flow.component.dialog.Dialog;
 import com.vaadin.flow.component.formlayout.FormLayout;
 import com.vaadin.flow.component.grid.Grid;
@@ -86,7 +87,7 @@ public class LeaveTypeView extends VerticalLayout {
 
             Button deleteBtn = new Button(new Icon(VaadinIcon.TRASH));
             deleteBtn.addThemeVariants(ButtonVariant.LUMO_TERTIARY, ButtonVariant.LUMO_ERROR);
-            deleteBtn.addClickListener(e -> deleteLeaveType(leaveType));
+            deleteBtn.addClickListener(e -> confirmAndDelete(leaveType));
 
             return new HorizontalLayout(editBtn, deleteBtn);
         }).setHeader("Actions");
@@ -164,6 +165,22 @@ public class LeaveTypeView extends VerticalLayout {
         } catch (Exception e) {
             showNotification("Cannot delete this type as it is already in use.", NotificationVariant.LUMO_ERROR);
         }
+    }
+    private void confirmAndDelete(LeaveType leaveType) {
+        ConfirmDialog dialog = new ConfirmDialog();
+        dialog.setHeader("Delete Leave Type?");
+        dialog.setText("Are you sure you want to permanently delete the leave type '" + leaveType.getName() + "'?");
+
+        dialog.setCancelable(true);
+        dialog.setCancelText("Cancel");
+
+        dialog.setConfirmText("Delete");
+        dialog.setConfirmButtonTheme("error primary");
+
+        // Only execute deletion if confirmed
+        dialog.addConfirmListener(event -> deleteLeaveType(leaveType));
+
+        dialog.open();
     }
 
     private void updateList() {

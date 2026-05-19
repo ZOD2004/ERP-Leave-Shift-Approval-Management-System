@@ -11,6 +11,7 @@ import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.combobox.ComboBox;
+import com.vaadin.flow.component.confirmdialog.ConfirmDialog;
 import com.vaadin.flow.component.datepicker.DatePicker;
 import com.vaadin.flow.component.dialog.Dialog;
 import com.vaadin.flow.component.formlayout.FormLayout;
@@ -132,8 +133,7 @@ public class AdminConfigurationView extends VerticalLayout {
         holidayGrid.addColumn(Holiday::getName).setHeader("Holiday Name").setSortable(true).setFlexGrow(1);
         holidayGrid.addColumn(new LocalDateRenderer<>(Holiday::getHolidayDate, "dd MMM yyyy")).setHeader("Date").setAutoWidth(true).setSortable(true);
 
-        // Actions Column
-        holidayGrid.addComponentColumn(holiday -> createDeleteButton(() -> {
+        holidayGrid.addComponentColumn(holiday -> createDeleteButton("holiday '" + holiday.getName() + "'", () -> {
             holidayService.deleteHoliday(holiday.getId());
             refreshHolidays();
         })).setHeader("Actions").setAutoWidth(true).setFlexGrow(0);
@@ -233,7 +233,7 @@ public class AdminConfigurationView extends VerticalLayout {
                 .setHeader("Required Role")
                 .setAutoWidth(true);
 
-        ruleGrid.addComponentColumn(rule -> createDeleteButton(() -> {
+        ruleGrid.addComponentColumn(rule -> createDeleteButton("approval rule for '" + rule.getLeaveType().getName() + "'", () -> {
             ruleService.deleteRule(rule.getId());
             refreshRules();
         })).setHeader("Actions").setAutoWidth(true).setFlexGrow(0);
@@ -314,13 +314,27 @@ public class AdminConfigurationView extends VerticalLayout {
     // UTILITIES
     // ========================================================================
 
-    private Button createDeleteButton(Runnable deleteAction) {
+    private Button createDeleteButton(String itemName, Runnable deleteAction) {
         Button deleteBtn = new Button(VaadinIcon.TRASH.create());
         deleteBtn.addThemeVariants(ButtonVariant.LUMO_ICON, ButtonVariant.LUMO_ERROR, ButtonVariant.LUMO_TERTIARY);
+
         deleteBtn.addClickListener(e -> {
-            // Optional: Wrap in a ConfirmDialog for production to prevent accidental deletes
-            deleteAction.run();
+            ConfirmDialog dialog = new ConfirmDialog();
+            dialog.setHeader("Confirm Delete");
+            dialog.setText("Are you sure you want to permanently delete the " + itemName + "?");
+
+            dialog.setCancelable(true);
+            dialog.setCancelText("Cancel");
+
+            dialog.setConfirmText("Delete");
+            dialog.setConfirmButtonTheme("error primary");
+
+            // Execute the action only when confirmed
+            dialog.addConfirmListener(event -> deleteAction.run());
+
+            dialog.open();
         });
+
         return deleteBtn;
     }
 

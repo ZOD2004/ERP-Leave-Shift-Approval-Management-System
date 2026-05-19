@@ -7,11 +7,11 @@ import com.murali.service.EmployeeService;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.combobox.ComboBox;
+import com.vaadin.flow.component.confirmdialog.ConfirmDialog; // Added import
 import com.vaadin.flow.component.dialog.Dialog;
 import com.vaadin.flow.component.formlayout.FormLayout;
 import com.vaadin.flow.component.grid.Grid;
 import com.vaadin.flow.component.html.H1;
-import com.vaadin.flow.component.html.H2;
 import com.vaadin.flow.component.icon.Icon;
 import com.vaadin.flow.component.icon.VaadinIcon;
 import com.vaadin.flow.component.notification.Notification;
@@ -26,7 +26,7 @@ import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
 import jakarta.annotation.security.RolesAllowed;
 
-@Route(value = "add-departments",layout = MainLayout.class)
+@Route(value = "add-departments", layout = MainLayout.class)
 @PageTitle("Manage Departments")
 @RolesAllowed({"ROLE_SUPER_ADMIN", "ROLE_HR_ADMIN"})
 public class DepartmentView extends VerticalLayout {
@@ -58,7 +58,7 @@ public class DepartmentView extends VerticalLayout {
         addBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
         addBtn.addClickListener(e -> openForm(new Department()));
 
-        HorizontalLayout toolbar = new HorizontalLayout(new H1("Department Configuration"),addBtn);
+        HorizontalLayout toolbar = new HorizontalLayout(new H1("Department Configuration"), addBtn);
         toolbar.setWidthFull();
 
         add(toolbar, grid);
@@ -82,7 +82,9 @@ public class DepartmentView extends VerticalLayout {
 
             Button deleteBtn = new Button(new Icon(VaadinIcon.TRASH));
             deleteBtn.addThemeVariants(ButtonVariant.LUMO_TERTIARY, ButtonVariant.LUMO_ERROR);
-            deleteBtn.addClickListener(e -> deleteDepartment(department));
+
+            // Replaced direct deletion with the confirmation dialog trigger
+            deleteBtn.addClickListener(e -> confirmAndDelete(department));
 
             return new HorizontalLayout(editBtn, deleteBtn);
         }).setHeader("Actions");
@@ -141,6 +143,22 @@ public class DepartmentView extends VerticalLayout {
         } catch (Exception e) {
             showNotification("Failed to save. Duplicate name or database error.", NotificationVariant.LUMO_ERROR);
         }
+    }
+
+    private void confirmAndDelete(Department department) {
+        ConfirmDialog dialog = new ConfirmDialog();
+        dialog.setHeader("Delete Department?");
+        dialog.setText("Are you sure you want to permanently delete the department '" + department.getName() + "'?");
+
+        dialog.setCancelable(true);
+        dialog.setCancelText("Cancel");
+
+        dialog.setConfirmText("Delete");
+        dialog.setConfirmButtonTheme("error primary");
+
+        dialog.addConfirmListener(event -> deleteDepartment(department));
+
+        dialog.open();
     }
 
     private void deleteDepartment(Department department) {

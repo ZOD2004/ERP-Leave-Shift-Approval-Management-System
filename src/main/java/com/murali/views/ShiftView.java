@@ -5,6 +5,7 @@ import com.murali.service.ShiftService;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.combobox.ComboBox;
+import com.vaadin.flow.component.confirmdialog.ConfirmDialog;
 import com.vaadin.flow.component.dialog.Dialog;
 import com.vaadin.flow.component.formlayout.FormLayout;
 import com.vaadin.flow.component.grid.Grid;
@@ -89,7 +90,7 @@ public class ShiftView extends VerticalLayout {
 
             Button deleteBtn = new Button(new Icon(VaadinIcon.TRASH));
             deleteBtn.addThemeVariants(ButtonVariant.LUMO_TERTIARY, ButtonVariant.LUMO_ERROR);
-            deleteBtn.addClickListener(e -> deleteShift(shift));
+            deleteBtn.addClickListener(e -> confirmAndDelete(shift));
 
             return new HorizontalLayout(editBtn, deleteBtn);
         }).setHeader("Actions");
@@ -160,6 +161,23 @@ public class ShiftView extends VerticalLayout {
         } catch (Exception e) {
             showNotification("Failed to save. Duplicate name or database error.", NotificationVariant.LUMO_ERROR);
         }
+    }
+
+    private void confirmAndDelete(Shift shift) {
+        ConfirmDialog dialog = new ConfirmDialog();
+        dialog.setHeader("Delete Shift?");
+        dialog.setText("Are you sure you want to permanently delete the shift '" + shift.getName() + "'?");
+
+        dialog.setCancelable(true);
+        dialog.setCancelText("Cancel");
+
+        dialog.setConfirmText("Delete");
+        dialog.setConfirmButtonTheme("error primary");
+
+        // Only execute deletion if confirmed
+        dialog.addConfirmListener(event -> deleteShift(shift));
+
+        dialog.open();
     }
 
     private void deleteShift(Shift shift) {
