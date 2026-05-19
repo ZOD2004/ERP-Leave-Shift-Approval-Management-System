@@ -20,6 +20,7 @@ public class LeaveRequestService {
     private final LeaveBalanceService leaveBalanceService;
     private final LeaveApprovalRuleService ruleService;
     private final EmployeeRepository employeeRepository;
+    private final AttendanceSyncService attendanceSyncService;
 
     private final ApprovalRoutingService approvalRoutingService;
 
@@ -30,12 +31,13 @@ public class LeaveRequestService {
 
     private static final List<String> BACKDATED_ALLOWED_CODES = List.of("EMG-001", "SL-001");
 
-    public LeaveRequestService(LeaveRequestRepository leaveRequestRepository, DurationEngineService durationEngineService, LeaveBalanceService leaveBalanceService, LeaveApprovalRuleService ruleService, EmployeeRepository employeeRepository, ApprovalRoutingService approvalRoutingService) {
+    public LeaveRequestService(LeaveRequestRepository leaveRequestRepository, DurationEngineService durationEngineService, LeaveBalanceService leaveBalanceService, LeaveApprovalRuleService ruleService, EmployeeRepository employeeRepository, AttendanceSyncService attendanceSyncService, ApprovalRoutingService approvalRoutingService) {
         this.leaveRequestRepository = leaveRequestRepository;
         this.durationEngineService = durationEngineService;
         this.leaveBalanceService = leaveBalanceService;
         this.ruleService = ruleService;
         this.employeeRepository = employeeRepository;
+        this.attendanceSyncService = attendanceSyncService;
         this.approvalRoutingService = approvalRoutingService;
     }
 
@@ -160,5 +162,45 @@ public class LeaveRequestService {
     @Transactional(readOnly = true)
     public long getActiveLeavesCountForDate(LocalDate date) {
         return leaveRequestRepository.countActiveLeavesForDate(date);
+    }
+
+    @Transactional
+    public void cancelLeaveRequest(Long leaveRequestId, Long requestingEmployeeId, Integer currentYear) {
+        LeaveRequest request = leaveRequestRepository.findById(leaveRequestId)
+                .orElseThrow(() -> new IllegalArgumentException("Leave request not found"));
+
+        // Security check
+        if (!request.getEmployee().getId().equals(requestingEmployeeId)) {
+            throw new SecurityException("You do not have permission to cancel this leave.");
+        }
+
+        String currentStatus = request.getStatus();
+
+        if (currentStatus.equals(STATUS_REJECTED) || currentStatus.equals(STATUS_CANCELLED)) {
+            throw new IllegalStateException("This request is already " + currentStatus);
+        }
+
+        if (currentStatus.equals("PENDING")) {
+            // 1. Mark request as cancelled
+            request.setStatus("CANCELLED");
+            // 2. Release the pending days back to the balance
+            leaveBalanceService.releasePendingHold(
+                    request.getEmployee(), request.getLeaveType(), request.getDurationDays(), currentYear, request.getId()
+            );
+            // 3. Mark the Manager/HR inbox items as cancelled
+            approvalRoutingService.cancelPendingApprovals(request.getId());
+        }
+        else if (currentStatus.equals("APPROVED")) {
+            // 1. Mark request as cancelled
+            request.setStatus("CANCELLED");
+            // 2. Refund the actually deducted days
+            leaveBalanceService.rollbackDeduction(
+                    request.getEmployee(), request.getLeaveType(), request.getDurationDays(), request.getId(), currentYear
+            );
+            // 3. Trigger Attendance Reversal
+            attendanceSyncService.revertLeaveFromAttendance(request);
+        }
+
+        leaveRequestRepository.save(request);
     }
 }

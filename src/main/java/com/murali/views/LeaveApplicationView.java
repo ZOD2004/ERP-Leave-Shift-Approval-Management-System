@@ -16,6 +16,7 @@ import com.vaadin.flow.component.grid.Grid;
 import com.vaadin.flow.component.grid.GridVariant;
 import com.vaadin.flow.component.html.H2;
 import com.vaadin.flow.component.html.H3;
+import com.vaadin.flow.component.html.Hr;
 import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.icon.Icon;
 import com.vaadin.flow.component.icon.VaadinIcon;
@@ -69,7 +70,8 @@ public class LeaveApplicationView extends VerticalLayout {
                                 LeaveTypeService leaveTypeService,
                                 EmployeeService employeeService,
                                 DurationEngineService durationEngineService,
-                                SecurityService securityService, LeaveBalanceService leaveBalanceService) {
+                                SecurityService securityService,
+                                LeaveBalanceService leaveBalanceService) {
 
         this.leaveRequestService = leaveRequestService;
         this.attendanceSyncService = attendanceSyncService;
@@ -77,9 +79,9 @@ public class LeaveApplicationView extends VerticalLayout {
         this.employeeService = employeeService;
         this.durationEngineService = durationEngineService;
         this.securityService = securityService;
+        this.leaveBalanceService = leaveBalanceService;
 
         this.currentEmployee = securityService.getCurrentEmployee();
-        this.leaveBalanceService = leaveBalanceService;
 
         buildMainView();
         setupBinder();
@@ -135,13 +137,24 @@ public class LeaveApplicationView extends VerticalLayout {
         historyGrid.addComponentColumn(req -> {
             Span badge = new Span(req.getStatus());
             badge.getElement().getThemeList().add("badge pill");
-            if ("APPROVED".equalsIgnoreCase(req.getStatus())) {
+            String status = req.getStatus() != null ? req.getStatus().toUpperCase() : "";
+            if ("APPROVED".equals(status)) {
                 badge.getElement().getThemeList().add("success");
-            } else if ("REJECTED".equalsIgnoreCase(req.getStatus())) {
+            } else if ("REJECTED".equals(status)) {
                 badge.getElement().getThemeList().add("error");
+            } else if ("PENDING".equals(status)) {
+                badge.getElement().getThemeList().add("warning");
+            } else if ("CANCELLED".equals(status)) {
+                badge.getElement().getThemeList().add("contrast");
             }
             return badge;
         }).setHeader("Status").setAutoWidth(true);
+
+        // New Actions Column with the dynamic Cancel button
+        historyGrid.addComponentColumn(this::createActionColumn)
+                .setHeader("Actions")
+                .setAutoWidth(true)
+                .setFlexGrow(0);
 
         historyGrid.addThemeVariants(GridVariant.LUMO_NO_BORDER, GridVariant.LUMO_ROW_STRIPES);
         historyGrid.setSizeFull();
@@ -152,6 +165,60 @@ public class LeaveApplicationView extends VerticalLayout {
 
         expand(wrapper);
         return wrapper;
+    }
+
+    private Component createActionColumn(LeaveRequest request) {
+        String status = request.getStatus() != null ? request.getStatus().toUpperCase() : "";
+
+        // Disable cancel action if it's already rejected or cancelled
+        if ("REJECTED".equals(status) || "CANCELLED".equals(status)) {
+            Button disabledBtn = new Button("Cancel");
+            disabledBtn.setEnabled(false);
+            disabledBtn.addThemeVariants(ButtonVariant.LUMO_SMALL, ButtonVariant.LUMO_TERTIARY);
+            return disabledBtn;
+        }
+
+        Button cancelBtn = new Button("Cancel");
+        cancelBtn.addThemeVariants(ButtonVariant.LUMO_SMALL, ButtonVariant.LUMO_TERTIARY, ButtonVariant.LUMO_ERROR);
+        cancelBtn.addClickListener(e -> openConfirmationDialog(request));
+        return cancelBtn;
+    }
+
+    private void openConfirmationDialog(LeaveRequest request) {
+        Dialog confirmDialog = new Dialog();
+        confirmDialog.setHeaderTitle("Cancel Leave Request");
+
+        Span warningMessage = new Span(String.format(
+                "Are you sure you want to cancel your %s leave request from %s to %s?",
+                request.getLeaveType().getName(), request.getStartDate(), request.getEndDate()
+        ));
+        confirmDialog.add(new VerticalLayout(warningMessage));
+
+        Button confirmBtn = new Button("Yes, Cancel It", e -> {
+            try {
+                int currentYear = LocalDate.now().getYear();
+
+                // Calling your verified backend service method
+                leaveRequestService.cancelLeaveRequest(request.getId(), currentEmployee.getId(), currentYear);
+
+                Notification.show("Leave request cancelled successfully.", 3000, Notification.Position.TOP_END)
+                        .addThemeVariants(NotificationVariant.LUMO_SUCCESS);
+
+                confirmDialog.close();
+                refreshBalanceAndHistory(); // Reactive layout refresh
+
+            } catch (Exception ex) {
+                Notification.show("Cancellation failed: " + ex.getMessage(), 5000, Notification.Position.MIDDLE)
+                        .addThemeVariants(NotificationVariant.LUMO_ERROR);
+            }
+        });
+        confirmBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY, ButtonVariant.LUMO_ERROR);
+
+        Button dismissBtn = new Button("No, Keep It", e -> confirmDialog.close());
+        dismissBtn.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
+
+        confirmDialog.getFooter().add(dismissBtn, confirmBtn);
+        confirmDialog.open();
     }
 
     private Component createMiniCard(String title, String value, String stats, VaadinIcon icon) {

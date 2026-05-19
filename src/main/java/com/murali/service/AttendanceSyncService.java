@@ -52,9 +52,10 @@ public class AttendanceSyncService {
 
         List<Attendance> recordsToSave = new ArrayList<>();
         LocalDate currentDate = startDate;
+        List<LocalDate> holidays = holidayRepository.findHolidayDatesBetween(startDate,endDate);
 
         while (!currentDate.isAfter(endDate)) {
-            List<LocalDate> holidays = holidayRepository.findHolidayDatesBetween(startDate,endDate);
+
             if(holidays.contains(currentDate) || currentDate.getDayOfWeek() == DayOfWeek.SATURDAY || currentDate.getDayOfWeek() == DayOfWeek.SUNDAY){
                 currentDate = currentDate.plusDays(1);
             }
@@ -111,5 +112,50 @@ public class AttendanceSyncService {
         attendance.setStatus(STATUS_PRESENT);
 
         return attendanceRepository.save(attendance);
+    }
+
+    /**
+     * 3. Auto Attendance Reversals: Reverts the attendance calendar when an approved leave is cancelled.
+     * Called by LeaveRequestService during the cancellation workflow.
+     */
+    @Transactional
+    public void revertLeaveFromAttendance(LeaveRequest request) {
+        Long employeeId = request.getEmployee().getId();
+        LocalDate startDate = request.getStartDate();
+        LocalDate endDate = request.getEndDate();
+
+        // Fetch all attendance records for this employee within the cancelled date range
+        List<Attendance> existingRecords = attendanceRepository
+                .findByEmployeeIdAndAttendanceDateBetween(employeeId, startDate, endDate);
+
+        List<Attendance> recordsToDelete = new ArrayList<>();
+        List<Attendance> recordsToUpdate = new ArrayList<>();
+
+        for (Attendance attendance : existingRecords) {
+            String currentStatus = attendance.getStatus();
+
+            // Only modify records that were explicitly marked as leave
+            if (STATUS_ON_LEAVE.equals(currentStatus) || "HALF_DAY_LEAVE".equals(currentStatus)) {
+
+                // If there is no check-in/check-out data, this record was purely a placeholder. Safe to delete.
+                if (attendance.getCheckIn() == null && attendance.getCheckOut() == null) {
+                    recordsToDelete.add(attendance);
+                } else {
+                    // If there IS a check-in time, revert the status back to PRESENT
+                    // so the employee's actual worked hours are preserved.
+                    attendance.setStatus(STATUS_PRESENT);
+                    recordsToUpdate.add(attendance);
+                }
+            }
+        }
+
+        // Execute batch database operations
+        if (!recordsToDelete.isEmpty()) {
+            attendanceRepository.deleteAll(recordsToDelete);
+        }
+
+        if (!recordsToUpdate.isEmpty()) {
+            attendanceRepository.saveAll(recordsToUpdate);
+        }
     }
 }
