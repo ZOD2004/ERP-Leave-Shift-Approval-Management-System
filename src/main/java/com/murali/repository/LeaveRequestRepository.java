@@ -49,12 +49,13 @@ public interface LeaveRequestRepository extends JpaRepository<LeaveRequest, Long
 
     @Query("SELECT l FROM LeaveRequest l WHERE l.employee.id IN :employeeIds " +
             "AND l.status = :status " +
-            "AND l.startDate <= :endDate AND l.endDate >= :startDate")
+            "AND (l.startDate <= :endDate AND l.endDate >= :startDate)")
     List<LeaveRequest> findApprovedLeavesForEmployeesInRange(
             @Param("employeeIds") List<Long> employeeIds,
             @Param("status") String status,
             @Param("startDate") LocalDate startDate,
-            @Param("endDate") LocalDate endDate);
+            @Param("endDate") LocalDate endDate
+    );
 
 
     @Query("SELECT r FROM LeaveRequest r WHERE r.status = :status ORDER BY r.startDate ASC")

@@ -42,7 +42,7 @@ public class LeaveRequestService {
     }
 
     @Transactional
-    public LeaveRequest submitLeaveRequest(Employee detachedEmployee, LeaveType leaveType,
+    public void submitLeaveRequest(Employee detachedEmployee, LeaveType leaveType,
                                            LocalDate startDate, LocalDate endDate,
                                            String reason, Integer currentYear) {
 
@@ -128,7 +128,6 @@ public class LeaveRequestService {
 
         approvalRoutingService.generateApprovalWorkflow(savedRequest, applicableRules, isNegativeBalance);
 
-        return savedRequest;
     }
 
     /**
@@ -180,9 +179,9 @@ public class LeaveRequestService {
             throw new IllegalStateException("This request is already " + currentStatus);
         }
 
-        if (currentStatus.equals("PENDING")) {
+        if (currentStatus.equals(STATUS_PENDING)) {
             // 1. Mark request as cancelled
-            request.setStatus("CANCELLED");
+            request.setStatus(STATUS_CANCELLED);
             // 2. Release the pending days back to the balance
             leaveBalanceService.releasePendingHold(
                     request.getEmployee(), request.getLeaveType(), request.getDurationDays(), currentYear, request.getId()
@@ -190,9 +189,9 @@ public class LeaveRequestService {
             // 3. Mark the Manager/HR inbox items as cancelled
             approvalRoutingService.cancelPendingApprovals(request.getId());
         }
-        else if (currentStatus.equals("APPROVED")) {
+        else if (currentStatus.equals(STATUS_APPROVED)) {
             // 1. Mark request as cancelled
-            request.setStatus("CANCELLED");
+            request.setStatus(STATUS_CANCELLED);
             // 2. Refund the actually deducted days
             leaveBalanceService.rollbackDeduction(
                     request.getEmployee(), request.getLeaveType(), request.getDurationDays(), request.getId(), currentYear

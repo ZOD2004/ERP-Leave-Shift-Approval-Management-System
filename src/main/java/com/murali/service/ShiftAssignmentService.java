@@ -54,82 +54,11 @@ public class ShiftAssignmentService {
         }
 
         boolean isOnLeave = leaveRequestRepository.isEmployeeOnApprovedLeave(
-                employeeId, "FULLY_APPROVED", assignmentDate
+                employeeId, "APPROVED", assignmentDate
         );
         if (isOnLeave) {
             throw new ShiftConflictException("Employee is on approved leave on " + assignmentDate);
         }
-    }
-
-    public ShiftAssignmentDTO assignSingleShift(ShiftAssignmentDTO assignmentDTO) {
-
-        validateShiftConflict(assignmentDTO.getEmployeeId(),assignmentDTO.getAssignmentDate(),null);
-
-        Employee employee = employeeRepository.findById(assignmentDTO.getEmployeeId()).orElseThrow(() ->
-                new EmployeeNotFoundException("Employee not found with ID: "+ assignmentDTO.getEmployeeId()));
-
-        Shift shift = shiftRepository.findById(assignmentDTO.getShiftId())
-                .orElseThrow(()->new ShiftNotFoundException("Shift not found with ID: "+ assignmentDTO.getShiftId()));
-
-        ShiftAssignment assignment = new ShiftAssignment();
-
-        assignment.setEmployee(employee);
-        assignment.setShift(shift);
-        assignment.setAssignmentDate(assignmentDTO.getAssignmentDate());
-
-        ShiftAssignment savedAssignment = shiftAssignmentRepository.save(assignment);
-        return mapToDTO(savedAssignment);
-    }
-
-
-    @Transactional
-    public List<ShiftAssignmentDTO> assignShiftsBulk(Long employeeId, Long shiftId,
-                                                     LocalDate startDate, LocalDate endDate){
-
-        Employee employee = employeeRepository.findById(employeeId)
-                .orElseThrow(() -> new EmployeeNotFoundException("Employee not found with id: "+employeeId));
-
-
-        Shift shift = shiftRepository.findById(shiftId)
-                .orElseThrow(() -> new ShiftNotFoundException("Shift not found with id: "+shiftId));
-
-        List<LocalDate> holidayDates = holidayRepository.findHolidayDatesBetween(startDate, endDate);
-
-        List<LocalDate> approvedLeaveDates = leaveRequestRepository.
-                findApprovedLeaveDatesForEmployee(employeeId, "FULLY_APPROVED", startDate, endDate);
-
-        List<ShiftAssignment> assignmentsToSave = new ArrayList<>();
-        List<ShiftAssignmentDTO> result = new ArrayList<>();
-        LocalDate currentDate = startDate;
-
-        while (!currentDate.isAfter(endDate)) {
-
-            boolean isWeekend = (currentDate.getDayOfWeek().getValue() >= 6); // 6 = Saturday, 7 = Sunday
-            boolean isHoliday = holidayDates.contains(currentDate);
-            boolean isOnLeave = approvedLeaveDates.contains(currentDate);
-
-            // Check if they already have a shift scheduled that day
-            boolean hasExistingShift = shiftAssignmentRepository.existsByEmployeeIdAndAssignmentDate(employeeId, currentDate);
-
-            if (!isWeekend && !isHoliday && !isOnLeave && !hasExistingShift) {
-
-                ShiftAssignment assignment = new ShiftAssignment();
-                assignment.setEmployee(employee);
-                assignment.setShift(shift);
-                assignment.setAssignmentDate(currentDate);
-
-                assignmentsToSave.add(assignment);
-            }
-
-            currentDate = currentDate.plusDays(1);
-        }
-        List<ShiftAssignment> savedAssignments = shiftAssignmentRepository.saveAll(assignmentsToSave);
-
-        for (ShiftAssignment saved : savedAssignments) {
-            result.add(mapToDTO(saved));
-        }
-        return result;
-
     }
 
     private List<ShiftAssignmentDTO> mapToDTOList(List<ShiftAssignment> shiftAssignments) {
@@ -222,10 +151,11 @@ public class ShiftAssignmentService {
                 .collect(Collectors.toMap(Employee::getId, emp -> emp));
 
         // 3. Pre-fetch blockouts and existing assignments (Bulk Fetching)
-        List<LocalDate> holidayDates = holidayRepository.findHolidayDatesBetween(startDate, endDate);
+        Set<LocalDate> holidayDates =
+                new HashSet<>(holidayRepository.findHolidayDatesBetween(startDate, endDate));
 
         List<LeaveRequest> leaves = leaveRequestRepository.findApprovedLeavesForEmployeesInRange(
-                employeeIds, "FULLY_APPROVED", startDate, endDate);
+                employeeIds, "APPROVED", startDate, endDate);
 
         // Group leaves by Employee ID for fast lookup
         Map<Long, List<LeaveRequest>> leavesByEmployee = leaves.stream()
@@ -237,6 +167,8 @@ public class ShiftAssignmentService {
         // Map assignments using a composite key: EmployeeId_Date
         Map<String, ShiftAssignment> assignmentsMap = existingAssignments.stream()
                 .collect(Collectors.toMap(a -> a.getEmployee().getId() + "_" + a.getAssignmentDate(), a -> a));
+
+        boolean isSingleDay = startDate.isEqual(endDate);
 
         // 4. The Validation Loop
         LocalDate currentDate = startDate;
@@ -284,9 +216,8 @@ public class ShiftAssignmentService {
 
                     response.getPartialConflicts().add(conflict);
 
-                } else if (!isWeekend) {
+                } else if (!isWeekend || isSingleDay) {
 
-                    // --- READY TO SAVE ---
                     ShiftAssignmentDTO dto = new ShiftAssignmentDTO();
                     dto.setEmployeeId(empId);
                     dto.setEmployeeName(employee.getFirstName());
@@ -300,6 +231,9 @@ public class ShiftAssignmentService {
             }
             currentDate = currentDate.plusDays(1);
         }
+        System.out.println("START: " + startDate);
+        System.out.println("END: " + endDate);
+        System.out.println("HOLIDAYS: " + holidayDates);
         return response;
     }
 
