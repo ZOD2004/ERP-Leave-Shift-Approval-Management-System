@@ -482,7 +482,6 @@ public class ShiftAssignmentView extends VerticalLayout {
             monthlyGrid.addColumn(row -> row.getShiftForDay(day))
                     .setHeader(String.valueOf(day))
                     .setAutoWidth(true);
-//                    .setFlexGrow(0);
         }
     }
 
