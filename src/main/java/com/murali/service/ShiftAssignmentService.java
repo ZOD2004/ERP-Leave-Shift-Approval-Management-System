@@ -426,4 +426,23 @@ public class ShiftAssignmentService {
             return activeLeave == null || !isFullDayLeave(activeLeave);
         }).toList();
     }
+
+    @Transactional(readOnly = true)
+    public List<ShiftAssignmentDTO> getTeamUpcomingShifts(Long managerId, LocalDate startDate, LocalDate endDate) {
+        // 1. Get reporting employees
+        List<Employee> reportingEmployees = employeeRepository.findReportingEmployees(managerId);
+        if (reportingEmployees.isEmpty()) {
+            return List.of();
+        }
+
+        List<Long> teamIds = reportingEmployees.stream().map(Employee::getId).toList();
+
+        // 2. Fetch assignments for the team in the date range
+        List<ShiftAssignment> teamAssignments = shiftAssignmentRepository
+                .findByEmployeeIdInAndAssignmentDateBetween(teamIds, startDate, endDate);
+
+        // 3. Filter out full-day leaves and map to DTO
+        teamAssignments = filterOutApprovedFullDayLeaves(teamAssignments);
+        return mapToDTOList(teamAssignments);
+    }
 }

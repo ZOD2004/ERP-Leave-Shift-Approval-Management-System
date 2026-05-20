@@ -14,4 +14,6 @@ public interface UserRepository extends JpaRepository<User,Long> {
     public User findByUsername(String username);
 
     List<User> findFirstByRoleName(String roleHr);
+
+    long countByActiveTrue();
 }

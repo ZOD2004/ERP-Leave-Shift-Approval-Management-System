@@ -15,6 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Slf4j
 @Service
@@ -106,5 +107,14 @@ public class AttendanceCorrectionService {
         return userRepository.findFirstByRoleName("ROLE_HR_ADMIN")
                 .stream().findFirst()
                 .orElseThrow(() -> new IllegalStateException("No Manager or HR Admin available to route anomaly."));
+    }
+    @Transactional(readOnly = true)
+    public List<AttendanceCorrection> getAllPendingCorrectionsGlobally() {
+        return correctionRepository.findAllPendingCorrectionsGlobally();
+    }
+
+    @Transactional(readOnly = true)
+    public long getGlobalPendingCorrectionsCount() {
+        return correctionRepository.countByStatus("PENDING");
     }
 }

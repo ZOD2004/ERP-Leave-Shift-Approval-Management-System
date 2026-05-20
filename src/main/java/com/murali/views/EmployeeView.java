@@ -143,7 +143,8 @@ public class EmployeeView extends VerticalLayout {
             }
         });
 
-        username.setValueChangeMode(ValueChangeMode.LAZY);
+        username.setValueChangeMode(ValueChangeMode.TIMEOUT);
+        username.setValueChangeTimeout(2500);
         username.addValueChangeListener(event -> {
             String inputUsername = event.getValue();
             if (inputUsername != null && !inputUsername.isEmpty()) {
@@ -197,7 +198,7 @@ public class EmployeeView extends VerticalLayout {
     private void toggleUserFields(boolean enabled) {
         password.setEnabled(enabled);
         email.setEnabled(enabled);
-        role.setEnabled(enabled);
+        role.setEnabled(true);
         if (enabled && !isExistingUserLinked) {
             password.clear();
             email.clear();

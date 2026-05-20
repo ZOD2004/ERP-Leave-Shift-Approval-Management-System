@@ -17,7 +17,7 @@ public class DurationEngineService {
 
     private final HolidayRepository holidayRepository;
 
-    public static final String HALF_DAY_CODE = "HALF_DAY";
+    public static final String HALF_DAY_CODE = "HDL-001";
 
     public DurationEngineService(HolidayRepository holidayRepository) {
         this.holidayRepository = holidayRepository;
@@ -48,7 +48,7 @@ public class DurationEngineService {
 
         while (!currentDate.isAfter(endDate)) {
             boolean isHoliday = holidays.contains(currentDate);
-            boolean isOffDay = isOffDay(currentDate, employee);
+            boolean isOffDay = isOffDay(currentDate);
 
             if (!isHoliday && !isOffDay) {
                 duration = duration.add(BigDecimal.ONE);
@@ -60,11 +60,10 @@ public class DurationEngineService {
         return duration;
     }
 
-    private boolean isOffDay(LocalDate date, Employee employee) {
-
-         //TODO: Integrate your specific ShiftAssignment logic here dont have days included.
+    private boolean isOffDay(LocalDate date) {
 
         DayOfWeek day = date.getDayOfWeek();
         return day == DayOfWeek.SATURDAY || day == DayOfWeek.SUNDAY;
+
     }
 }

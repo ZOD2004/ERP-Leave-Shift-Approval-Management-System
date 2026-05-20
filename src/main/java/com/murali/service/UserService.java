@@ -109,4 +109,7 @@ public class UserService {
             // leaveBalanceService.initializeBalancesForNewEmployee(savedEmployee);
         }
     }
+    public long getActiveUsersCount() {
+        return userRepository.countByActiveTrue();
+    }
 }

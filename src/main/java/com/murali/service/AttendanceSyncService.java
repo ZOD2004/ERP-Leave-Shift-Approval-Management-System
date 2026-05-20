@@ -33,6 +33,10 @@ public class AttendanceSyncService {
 
     private static final int GRACE_PERIOD_MINUTES = 15;
 
+    // Default states when the application starts
+    private String syncStatus = "PENDING";
+    private java.time.LocalDateTime lastSyncTime = null;
+
     /**
      * 1. Record Creation: Syncs approved leave to the attendance calendar.
      */
@@ -138,5 +142,17 @@ public class AttendanceSyncService {
         if (!recordsToUpdate.isEmpty()) {
             attendanceRepository.saveAll(recordsToUpdate);
         }
+    }
+
+    public String getSyncStatus() {
+        return this.syncStatus;
+    }
+
+    public java.time.LocalDateTime getLastSyncTime() {
+        return this.lastSyncTime;
+    }
+    private void updateSyncStatus(String status) {
+        this.syncStatus = status;
+        this.lastSyncTime = java.time.LocalDateTime.now();
     }
 }

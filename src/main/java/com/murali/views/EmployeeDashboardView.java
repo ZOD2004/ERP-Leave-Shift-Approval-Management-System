@@ -41,7 +41,7 @@ import java.util.Optional;
 
 @PermitAll
 @PageTitle("My Dashboard")
-@Route(value = "dashboard", layout = MainLayout.class)
+@Route(value = "dashboard1", layout = MainLayout.class)
 public class EmployeeDashboardView extends VerticalLayout {
 
     private final LeaveBalanceService leaveBalanceService;
