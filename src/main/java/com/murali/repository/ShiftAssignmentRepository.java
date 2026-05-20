@@ -114,4 +114,21 @@ public interface ShiftAssignmentRepository extends JpaRepository<ShiftAssignment
 
     @Query("SELECT sa FROM ShiftAssignment sa JOIN FETCH sa.shift WHERE sa.employee.id = :employeeId AND sa.assignmentDate = :date")
     Optional<ShiftAssignment> findByEmployeeIdAndAssignmentDate(@Param("employeeId") Long employeeId, @Param("date") LocalDate date);
+
+    @Query("SELECT sa FROM ShiftAssignment sa JOIN FETCH sa.shift WHERE sa.assignmentDate = :date")
+    List<ShiftAssignment> findAllByAssignmentDate(@Param("date") LocalDate date);
+
+    @Query("""
+        SELECT sa
+        FROM ShiftAssignment sa
+        LEFT JOIN FETCH sa.employee e
+        LEFT JOIN FETCH e.user
+        LEFT JOIN FETCH sa.shift
+        WHERE sa.employee.id IN :employeeIds
+        AND sa.assignmentDate = :assignmentDate
+    """)
+    List<ShiftAssignment> findTodayAssignmentsForEmployees(
+            @Param("employeeIds") List<Long> employeeIds,
+            @Param("assignmentDate") LocalDate assignmentDate
+    );
 }

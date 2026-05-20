@@ -1,42 +1,40 @@
 package com.murali.service;
 
 import com.murali.entity.Attendance;
-import com.murali.entity.Employee;
-import com.murali.entity.Holiday;
 import com.murali.entity.LeaveRequest;
+import com.murali.entity.ShiftAssignment;
 import com.murali.repository.AttendanceRepository;
-import com.murali.repository.HolidayRepository;
+import com.murali.repository.ShiftAssignmentRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.time.DayOfWeek;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
+@RequiredArgsConstructor
 public class AttendanceSyncService {
 
     private final AttendanceRepository attendanceRepository;
-    private final HolidayRepository holidayRepository;
+    private final ShiftAssignmentRepository shiftAssignmentRepository;
 
-    // Status Constants
     public static final String STATUS_ON_LEAVE = "ON_LEAVE";
+    public static final String STATUS_HALF_DAY_LEAVE = "HALF_DAY_LEAVE";
     public static final String STATUS_PRESENT = "PRESENT";
+    public static final String STATUS_LATE = "LATE";
 
-    public AttendanceSyncService(AttendanceRepository attendanceRepository, HolidayRepository holidayRepository) {
-        this.attendanceRepository = attendanceRepository;
-        this.holidayRepository = holidayRepository;
-    }
+    private static final int GRACE_PERIOD_MINUTES = 15;
 
     /**
      * 1. Record Creation: Syncs approved leave to the attendance calendar.
-     * Called by ApprovalRoutingService upon final approval.
      */
     @Transactional
     public void syncLeaveRecords(LeaveRequest request) {
@@ -44,19 +42,26 @@ public class AttendanceSyncService {
         LocalDate endDate = request.getEndDate();
         Long employeeId = request.getEmployee().getId();
 
-        List<Attendance> existingRecords = attendanceRepository
-                .findByEmployeeIdAndAttendanceDateBetween(employeeId, startDate, endDate);
-
-        Map<LocalDate, Attendance> attendanceMap = existingRecords.stream()
+        // Fetch existing attendance records
+        Map<LocalDate, Attendance> attendanceMap = attendanceRepository
+                .findByEmployeeIdAndAttendanceDateBetween(employeeId, startDate, endDate)
+                .stream()
                 .collect(Collectors.toMap(Attendance::getAttendanceDate, a -> a));
+
+        // Fetch existing shift assignments to identify true working days
+        List<ShiftAssignment> assignments = shiftAssignmentRepository
+                .findByEmployeeIdInAndAssignmentDateBetween(List.of(employeeId), startDate, endDate);
+
+        Map<LocalDate, ShiftAssignment> assignmentMap = assignments.stream()
+                .collect(Collectors.toMap(ShiftAssignment::getAssignmentDate, a -> a));
 
         List<Attendance> recordsToSave = new ArrayList<>();
         LocalDate currentDate = startDate;
-        List<LocalDate> holidays = holidayRepository.findHolidayDatesBetween(startDate,endDate);
 
         while (!currentDate.isAfter(endDate)) {
-
-            if(holidays.contains(currentDate) || currentDate.getDayOfWeek() == DayOfWeek.SATURDAY || currentDate.getDayOfWeek() == DayOfWeek.SUNDAY){
+            // FIX: If there is no shift assigned for this date, it is a scheduled day off.
+            // We do not mark it as ON_LEAVE.
+            if (!assignmentMap.containsKey(currentDate)) {
                 currentDate = currentDate.plusDays(1);
                 continue;
             }
@@ -65,13 +70,14 @@ public class AttendanceSyncService {
 
             if (attendance.getId() == null) {
                 attendance.setEmployee(request.getEmployee());
+                attendance.setShiftAssignment(assignmentMap.get(currentDate));
                 attendance.setAttendanceDate(currentDate);
             }
 
             if (request.getDurationDays().compareTo(new BigDecimal("0.5")) == 0) {
-                attendance.setStatus("HALF_DAY_LEAVE");
+                attendance.setStatus(STATUS_HALF_DAY_LEAVE);
             } else {
-                attendance.setStatus("ON_LEAVE");
+                attendance.setStatus(STATUS_ON_LEAVE);
             }
 
             recordsToSave.add(attendance);
@@ -84,40 +90,7 @@ public class AttendanceSyncService {
     }
 
     /**
-     * 2. Conflict Checking: Prevents checking in if the employee is on leave.
-     * This would be called by your Biometric/Punch-in API endpoint.
-     */
-
-    // TODO: implement view for it
-    @Transactional
-    public Attendance processCheckIn(Employee employee, LocalDateTime punchTime) {
-        LocalDate today = punchTime.toLocalDate();
-
-        Attendance attendance = attendanceRepository
-                .findByEmployeeIdAndAttendanceDate(employee.getId(), today)
-                .orElseGet(() -> {
-                    Attendance newAttendance = new Attendance();
-                    newAttendance.setEmployee(employee);
-                    newAttendance.setAttendanceDate(today);
-                    return newAttendance;
-                });
-
-        if (STATUS_ON_LEAVE.equalsIgnoreCase(attendance.getStatus())) {
-            throw new IllegalStateException(
-                    "Check-in denied: You are marked as ON LEAVE for today. " +
-                            "If this is a mistake, please cancel your leave request first."
-            );
-        }
-
-        attendance.setCheckIn(punchTime);
-        attendance.setStatus(STATUS_PRESENT);
-
-        return attendanceRepository.save(attendance);
-    }
-
-    /**
-     * 3. Auto Attendance Reversals: Reverts the attendance calendar when an approved leave is cancelled.
-     * Called by LeaveRequestService during the cancellation workflow.
+     * 2. Auto Attendance Reversals: Reverts the attendance calendar when an approved leave is cancelled.
      */
     @Transactional
     public void revertLeaveFromAttendance(LeaveRequest request) {
@@ -125,7 +98,6 @@ public class AttendanceSyncService {
         LocalDate startDate = request.getStartDate();
         LocalDate endDate = request.getEndDate();
 
-        // Fetch all attendance records for this employee within the cancelled date range
         List<Attendance> existingRecords = attendanceRepository
                 .findByEmployeeIdAndAttendanceDateBetween(employeeId, startDate, endDate);
 
@@ -135,22 +107,30 @@ public class AttendanceSyncService {
         for (Attendance attendance : existingRecords) {
             String currentStatus = attendance.getStatus();
 
-            // Only modify records that were explicitly marked as leave
-            if (STATUS_ON_LEAVE.equals(currentStatus) || "HALF_DAY_LEAVE".equals(currentStatus)) {
+            if (STATUS_ON_LEAVE.equals(currentStatus) || STATUS_HALF_DAY_LEAVE.equals(currentStatus)) {
 
-                // If there is no check-in/check-out data, this record was purely a placeholder. Safe to delete.
                 if (attendance.getCheckIn() == null && attendance.getCheckOut() == null) {
+                    // Pure placeholder, safe to delete
                     recordsToDelete.add(attendance);
                 } else {
-                    // If there IS a check-in time, revert the status back to PRESENT
-                    // so the employee's actual worked hours are preserved.
-                    attendance.setStatus(STATUS_PRESENT);
+                    // FIX: Recalculate true status to prevent lateness exploit
+                    if (attendance.getShiftAssignment() != null && attendance.getCheckIn() != null) {
+                        LocalTime effectiveStart = attendance.getShiftAssignment().getEffectiveStartTime();
+                        LocalTime actualStart = attendance.getCheckIn().toLocalTime();
+
+                        boolean isLate = actualStart.isAfter(effectiveStart.plusMinutes(GRACE_PERIOD_MINUTES));
+
+                        attendance.setIsLate(isLate);
+                        attendance.setStatus(isLate ? STATUS_LATE : STATUS_PRESENT);
+                    } else {
+                        // Fallback if data is missing
+                        attendance.setStatus(STATUS_PRESENT);
+                    }
                     recordsToUpdate.add(attendance);
                 }
             }
         }
 
-        // Execute batch database operations
         if (!recordsToDelete.isEmpty()) {
             attendanceRepository.deleteAll(recordsToDelete);
         }

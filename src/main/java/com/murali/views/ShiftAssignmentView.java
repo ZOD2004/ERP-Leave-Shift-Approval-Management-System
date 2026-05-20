@@ -569,21 +569,19 @@ public class ShiftAssignmentView extends VerticalLayout {
             hardConflictGrid.addColumn(ShiftConflictDTO::getConflictDate).setHeader("Date");
             hardConflictGrid.addColumn(ShiftConflictDTO::getConflictType).setHeader("Reason");
 
-            // "Skip" Action just visually removes it from the grid
+            // "Skip" Action just visually removes it from the grid and DOES NOT schedule it
             hardConflictGrid.addComponentColumn(conflict -> {
                 Button skipBtn = new Button("Skip", new Icon(VaadinIcon.CLOSE));
                 skipBtn.addThemeVariants(ButtonVariant.LUMO_ERROR, ButtonVariant.LUMO_TERTIARY);
                 skipBtn.addClickListener(e -> {
+
+                    // 1. Remove it from the conflict list
                     currentBatchPreview.getHardConflicts().remove(conflict);
 
-                    ShiftAssignmentDTO dto = new ShiftAssignmentDTO();
-                    dto.setEmployeeId(conflict.getEmployeeId());
-                    dto.setShiftId(conflict.getShiftId());
-                    dto.setAssignmentDate(conflict.getConflictDate());
-
-                    currentBatchPreview.getReadyToSave().add(dto);
-
+                    // 2. Refresh the UI
                     hardConflictGrid.getDataProvider().refreshAll();
+
+                    // NOTE: We absolutely DO NOT add it to currentBatchPreview.getReadyToSave() here!
                 });
                 return skipBtn;
             }).setHeader("Action");
@@ -716,6 +714,7 @@ public class ShiftAssignmentView extends VerticalLayout {
 
         editDialog.open();
     }
+
     private void confirmDelete(ShiftAssignmentDTO assignment) {
         try {
             // Call your service layer to delete

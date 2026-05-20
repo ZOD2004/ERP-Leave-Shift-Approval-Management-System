@@ -174,8 +174,11 @@ public class ShiftAssignmentService {
         LocalDate currentDate = startDate;
         while (!currentDate.isAfter(endDate)) {
 
-            boolean isWeekend = (currentDate.getDayOfWeek().getValue() >= 6); // 6=Saturday, 7=Sunday
             boolean isHoliday = holidayDates.contains(currentDate);
+
+            String currentDayName = currentDate.getDayOfWeek().name();
+            boolean isShiftWorkingDay = shift.getWorkingDays().stream()
+                    .anyMatch(wd -> wd.name().equals(currentDayName));
 
             for (Long empId : employeeIds) {
                 Employee employee = employeeMap.get(empId);
@@ -187,13 +190,16 @@ public class ShiftAssignmentService {
                 List<LeaveRequest> empLeaves = leavesByEmployee.getOrDefault(empId, Collections.emptyList());
                 LeaveRequest activeLeave = getActiveLeaveForDate(empLeaves, currentDate);
 
-                if (hasExistingShift || isHoliday || (activeLeave != null && isFullDayLeave(activeLeave))) {
+                boolean isInvalidDay = !isShiftWorkingDay && !isSingleDay;
+
+                if (hasExistingShift || isHoliday || isInvalidDay || (activeLeave != null && isFullDayLeave(activeLeave))){
 
                     // --- HARD CONFLICT ---
                     ShiftConflictDTO conflict = createConflictBase(employee, shift, currentDate);
 
                     if (hasExistingShift) conflict.setConflictType("Overlap");
                     else if (isHoliday) conflict.setConflictType("Holiday");
+                    else if (isInvalidDay) conflict.setConflictType("Non-Working Day");
                     else conflict.setConflictType("Full Leave");
 
                     response.getHardConflicts().add(conflict);
@@ -216,7 +222,7 @@ public class ShiftAssignmentService {
 
                     response.getPartialConflicts().add(conflict);
 
-                } else if (!isWeekend || isSingleDay) {
+                } else{
 
                     ShiftAssignmentDTO dto = new ShiftAssignmentDTO();
                     dto.setEmployeeId(empId);
