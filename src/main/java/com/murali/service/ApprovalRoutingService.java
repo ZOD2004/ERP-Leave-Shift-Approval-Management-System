@@ -166,9 +166,9 @@ public class ApprovalRoutingService {
     }
     @Transactional
     public void cancelPendingApprovals(Long leaveRequestId) {
-        // Fetch all approval rows for this request that are still waiting for action
+
         List<LeaveApproval> pendingApprovals = leaveApprovalRepository
-                .findActivePendingApprovalsForUser(leaveRequestId);
+                .findByLeaveRequestIdAndAction(leaveRequestId, ACTION_PENDING);
 
         for (LeaveApproval approval : pendingApprovals) {
             approval.setAction("CANCELLED");

@@ -64,8 +64,7 @@ public class ManagerApprovalView extends VerticalLayout {
         title.addClassNames(LumoUtility.Margin.NONE);
 
         HorizontalLayout statsHeader = new HorizontalLayout(
-                createStatsCard("Pending", String.valueOf(grid.getListDataView().getItemCount()), VaadinIcon.CLOCK, "var(--lumo-primary-color)"),
-                createStatsCard("Urgent (Starts < 48h)", "2", VaadinIcon.WARNING, "var(--lumo-error-color)")
+                createStatsCard("Pending", String.valueOf(grid.getListDataView().getItemCount()), VaadinIcon.CLOCK, "var(--lumo-primary-color)")
         );
         statsHeader.setWidthFull();
 

@@ -11,6 +11,8 @@ import java.util.List;
 @Repository
 public interface LeaveApprovalRepository extends JpaRepository<LeaveApproval, Long> {
 
+    List<LeaveApproval> findByLeaveRequestIdAndAction(Long leaveRequestId, String action);
+
     @Query("SELECT a FROM LeaveApproval a " +
             "JOIN FETCH a.leaveRequest r " +
             "JOIN FETCH r.leaveType " +

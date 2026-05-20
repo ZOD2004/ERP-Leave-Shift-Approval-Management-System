@@ -51,6 +51,7 @@ public class LeaveApplicationView extends VerticalLayout {
     private final DurationEngineService durationEngineService;
     private final SecurityService securityService;
     private final LeaveBalanceService leaveBalanceService;
+    private final ApprovalRoutingService approvalRoutingService;
 
     private final Employee currentEmployee;
     private final LeaveRequest currentRequest = new LeaveRequest();
@@ -71,7 +72,7 @@ public class LeaveApplicationView extends VerticalLayout {
                                 EmployeeService employeeService,
                                 DurationEngineService durationEngineService,
                                 SecurityService securityService,
-                                LeaveBalanceService leaveBalanceService) {
+                                LeaveBalanceService leaveBalanceService, ApprovalRoutingService approvalRoutingService) {
 
         this.leaveRequestService = leaveRequestService;
         this.attendanceSyncService = attendanceSyncService;
@@ -82,6 +83,7 @@ public class LeaveApplicationView extends VerticalLayout {
         this.leaveBalanceService = leaveBalanceService;
 
         this.currentEmployee = securityService.getCurrentEmployee();
+        this.approvalRoutingService = approvalRoutingService;
 
         buildMainView();
         setupBinder();
@@ -200,6 +202,7 @@ public class LeaveApplicationView extends VerticalLayout {
 
                 // Calling your verified backend service method
                 leaveRequestService.cancelLeaveRequest(request.getId(), currentEmployee.getId(), currentYear);
+
 
                 Notification.show("Leave request cancelled successfully.", 3000, Notification.Position.TOP_END)
                         .addThemeVariants(NotificationVariant.LUMO_SUCCESS);

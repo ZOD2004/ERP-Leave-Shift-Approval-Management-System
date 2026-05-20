@@ -30,6 +30,10 @@ public class SecurityConfig {
         http.with(VaadinSecurityConfigurer.vaadin(), config -> {
                     config.loginView(LoginView.class,"/login");
                 })
+                .formLogin(form -> form
+                        .loginPage("/login")
+                        .defaultSuccessUrl("/dashboard", true)
+                )
                 .logout(logout -> logout
                         .logoutUrl("/logout")
                         .logoutSuccessUrl("/login")
