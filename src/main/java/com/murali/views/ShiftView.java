@@ -1,11 +1,13 @@
 package com.murali.views;
 
 import com.murali.entity.Shift;
+import com.murali.entity.WorkingDay;
 import com.murali.service.ShiftService;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.combobox.ComboBox;
 import com.vaadin.flow.component.confirmdialog.ConfirmDialog;
+import com.vaadin.flow.component.combobox.MultiSelectComboBox;
 import com.vaadin.flow.component.dialog.Dialog;
 import com.vaadin.flow.component.formlayout.FormLayout;
 import com.vaadin.flow.component.grid.Grid;
@@ -44,6 +46,7 @@ public class ShiftView extends VerticalLayout {
     private final ComboBox<String> shiftTypeField = new ComboBox<>("Shift Type");
     private final TimePicker startTimeField = new TimePicker("Start Time");
     private final TimePicker endTimeField = new TimePicker("End Time");
+    private final MultiSelectComboBox<WorkingDay> workingDaysField = new MultiSelectComboBox<>("Working Days");
 
     private final Button saveBtn = new Button("Save");
     private final Button cancelBtn = new Button("Cancel");
@@ -80,6 +83,13 @@ public class ShiftView extends VerticalLayout {
         grid.setSizeFull();
         grid.addColumn(Shift::getName).setHeader("Name").setSortable(true);
         grid.addColumn(Shift::getShiftType).setHeader("Type").setSortable(true);
+        grid.addColumn(shift ->
+                        shift.getWorkingDays()
+                                .stream()
+                                .map(day -> day.name().substring(0,3))
+                                .toList()
+                )
+                .setHeader("Working Days");
         grid.addColumn(Shift::getStartTime).setHeader("Start Time");
         grid.addColumn(Shift::getEndTime).setHeader("End Time");
 
@@ -101,12 +111,19 @@ public class ShiftView extends VerticalLayout {
 
         shiftTypeField.setItems("Morning Shift", "Evening Shift", "Night Shift", "Rotational Shift");
         shiftTypeField.setAllowCustomValue(false);
+        workingDaysField.setItems(WorkingDay.values());
 
         startTimeField.setStep(Duration.ofMinutes(30));
         endTimeField.setStep(Duration.ofMinutes(30));
 
         FormLayout formLayout = new FormLayout();
-        formLayout.add(nameField, shiftTypeField, startTimeField, endTimeField);
+        formLayout.add(
+                nameField,
+                shiftTypeField,
+                workingDaysField,
+                startTimeField,
+                endTimeField
+        );
         formLayout.setResponsiveSteps(
                 new FormLayout.ResponsiveStep("0", 1),
                 new FormLayout.ResponsiveStep("500px", 2)
@@ -128,6 +145,10 @@ public class ShiftView extends VerticalLayout {
                 .asRequired("End Time is required")
                 .bind(Shift::getEndTime, Shift::setEndTime);
 
+        binder.forField(workingDaysField)
+                .asRequired("Select at least one working day")
+                .bind(Shift::getWorkingDays, Shift::setWorkingDays);
+
         saveBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
         saveBtn.addClickListener(e -> saveShift());
 
@@ -148,6 +169,7 @@ public class ShiftView extends VerticalLayout {
             if(startTimeField.getValue().isAfter(endTimeField.getValue())){
                 Notification.show("The start time comes after end time in case of wrong edit it")
                         .addThemeVariants(NotificationVariant.INFO);
+                return;
             }
             binder.writeBean(currentShift);
             shiftService.addShift(currentShift);

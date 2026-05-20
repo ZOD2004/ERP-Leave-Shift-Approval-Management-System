@@ -2,10 +2,12 @@ package com.murali.service;
 
 import com.murali.entity.Attendance;
 import com.murali.entity.LeaveType;
+import com.murali.entity.ShiftAssignment;
 import com.murali.repository.AttendanceRepository;
 import com.murali.repository.EmployeeRepository;
 import com.murali.repository.HolidayRepository;
 import com.murali.repository.LeaveTypeRepository;
+import com.murali.repository.ShiftAssignmentRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -13,7 +15,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.time.DayOfWeek;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -31,23 +32,33 @@ public class AttendanceCronJobService {
     private final EmployeeRepository employeeRepository;
     private final LeaveBalanceService leaveBalanceService;
     private final LeaveTypeRepository leaveTypeRepository;
+    private final ShiftAssignmentRepository shiftAssignmentRepository;
+    private final AttendanceCorrectionService attendanceCorrectionService;
 
     private static final int MINIMUM_HOURS_FOR_FULL_DAY = 4;
 
-    @Scheduled(cron = "0 59 23 * * ?")
+    // FIX: Changed cron to run daily at 1:00 AM to process the previous day's metrics safely
+    @Scheduled(cron = "0 0 1 * * ?")
     @Transactional
     public void reconcileDailyAttendance() {
-        LocalDate today = LocalDate.now();
-        log.info("Starting Daily Attendance Reconciliation for: {}", today);
+        // FIX: Look back at yesterday to ensure the entire workday/shift cycle has concluded
+        LocalDate targetDate = LocalDate.now().minusDays(1);
+        log.info("Starting Daily Attendance Reconciliation for target date: {}", targetDate);
 
-        if (isWeekend(today) || holidayRepository.existsByHolidayDate(today)) {
-            log.info("Today is a weekend or holiday. Halting automated absence penalties.");
+        // FIX: Holiday check now evaluates the targetDate (yesterday), not today
+        if (holidayRepository.existsByHolidayDate(targetDate)) {
+            log.info("Target date {} was a system-wide holiday. Halting automated absence penalties.", targetDate);
             return;
         }
 
         List<Long> activeEmployeeIds = employeeRepository.findAllActiveEmployeeIds();
 
-        Map<Long, Attendance> todayAttendanceMap = attendanceRepository.findAllByAttendanceDate(today)
+        // FIX: Adjusted queries to target targetDate
+        Map<Long, ShiftAssignment> targetDateAssignmentsMap = shiftAssignmentRepository.findAllByAssignmentDate(targetDate)
+                .stream()
+                .collect(Collectors.toMap(sa -> sa.getEmployee().getId(), sa -> sa));
+
+        Map<Long, Attendance> targetDateAttendanceMap = attendanceRepository.findAllByAttendanceDate(targetDate)
                 .stream()
                 .collect(Collectors.toMap(a -> a.getEmployee().getId(), a -> a));
 
@@ -60,13 +71,24 @@ public class AttendanceCronJobService {
         LeaveType casualLeave = casualLeaves.getFirst();
 
         for (Long employeeId : activeEmployeeIds) {
-            Attendance attendance = todayAttendanceMap.getOrDefault(employeeId, initializeEmptyAttendance(employeeId, today));
+
+            // --- THE ROTATIONAL SHIFT BYPASS ---
+            if (!targetDateAssignmentsMap.containsKey(employeeId)) {
+                continue;
+            }
+
+            Attendance attendance = targetDateAttendanceMap.getOrDefault(
+                    employeeId,
+                    initializeEmptyAttendance(employeeId, targetDate, targetDateAssignmentsMap.get(employeeId))
+            );
 
             String currentStatus = attendance.getStatus();
 
             if ("ON_LEAVE".equals(currentStatus) || "FULL_LEAVE".equals(currentStatus)) {
                 continue;
             }
+
+            // Rule A: No Check-In -> Mark Absent and Deduct
             if (attendance.getCheckIn() == null) {
                 if (!"HALF_DAY_LEAVE".equals(currentStatus)) {
                     attendance.setStatus("ABSENT");
@@ -76,59 +98,68 @@ public class AttendanceCronJobService {
                             casualLeave,
                             BigDecimal.valueOf(1.0),
                             null,
-                            today.getYear()
+                            targetDate.getYear() // FIX: Use targetDate year
                     );
-                    log.info("Employee {} marked ABSENT. 1 day deducted.", employeeId);
+                    log.info("Employee {} marked ABSENT for {}. 1 day deducted.", employeeId, targetDate);
                 } else {
-                    attendance.setStatus("HALF_DAY");
-                    leaveBalanceService.deduct(
-                            attendance.getEmployee(),
-                            casualLeave,
-                            BigDecimal.valueOf(0.5),
-                            null,
-                            today.getYear()
-                    );
-                    log.info("Employee {} on Half-Day Leave missed shift. 0.5 days deducted.", employeeId);
-                }
-            }
-            else {
-                long hoursWorked = calculateHoursWorked(attendance);
-
-                if (hoursWorked < MINIMUM_HOURS_FOR_FULL_DAY) {
                     attendance.setStatus("HALF_DAY_ABSENT");
                     leaveBalanceService.deduct(
                             attendance.getEmployee(),
                             casualLeave,
                             BigDecimal.valueOf(0.5),
                             null,
-                            today.getYear()
+                            targetDate.getYear() // FIX: Use targetDate year
                     );
-                    log.info("Employee {} worked < 4 hours ({} hrs). Marked HALF_DAY_ABSENT. 0.5 days deducted.", employeeId, hoursWorked);
+                    log.info("Employee {} on Half-Day Leave missed shift on {}. 0.5 days deducted.", employeeId, targetDate);
                 }
             }
+            // Rule B: Checked In -> Validate Hours Worked
+            else {
+                if (attendance.getCheckOut() == null) {
+                    attendance.setStatus("MISSING_CHECKOUT");
+
+                    leaveBalanceService.deduct(
+                            attendance.getEmployee(),
+                            casualLeave,
+                            BigDecimal.valueOf(0.5),
+                            null,
+                            targetDate.getYear() // FIX: Use targetDate year
+                    );
+                    attendance = attendanceRepository.save(attendance);
+
+                    // AUTO-TRIGGER THE MANAGER WORKFLOW
+                    attendanceCorrectionService.autoCreateCorrection(attendance);
+                    log.info("Employee {} forgot to check out on {}. Marked MISSING_CHECKOUT. 0.5 days deducted.", employeeId, targetDate);
+                } else {
+                    long hoursWorked = Duration.between(attendance.getCheckIn(), attendance.getCheckOut()).toHours();
+
+                    if (hoursWorked < MINIMUM_HOURS_FOR_FULL_DAY) {
+                        attendance.setStatus("HALF_DAY_ABSENT");
+
+                        leaveBalanceService.deduct(
+                                attendance.getEmployee(),
+                                casualLeave,
+                                BigDecimal.valueOf(0.5),
+                                null,
+                                targetDate.getYear() // FIX: Use targetDate year
+                        );
+                        log.info("Employee {} worked < 4 hours ({} hrs) on {}. Marked HALF_DAY_ABSENT. 0.5 days deducted.", employeeId, hoursWorked, targetDate);
+                    }
+                }
+            }
+
             attendanceRepository.save(attendance);
         }
 
-        log.info("Daily Attendance Reconciliation completed successfully.");
+        log.info("Daily Attendance Reconciliation for {} completed successfully.", targetDate);
     }
 
-    private boolean isWeekend(LocalDate date) {
-        DayOfWeek day = date.getDayOfWeek();
-        return day == DayOfWeek.SATURDAY || day == DayOfWeek.SUNDAY;
-    }
-
-    private Attendance initializeEmptyAttendance(Long employeeId, LocalDate date) {
+    private Attendance initializeEmptyAttendance(Long employeeId, LocalDate date, ShiftAssignment assignment) {
         Attendance attendance = new Attendance();
         attendance.setEmployee(employeeRepository.getReferenceById(employeeId));
+        attendance.setShiftAssignment(assignment);
         attendance.setAttendanceDate(date);
         attendance.setStatus("PENDING");
         return attendance;
-    }
-
-    private long calculateHoursWorked(Attendance attendance) {
-        if (attendance.getCheckIn() == null) return 0;
-        var endTime = (attendance.getCheckOut() != null) ? attendance.getCheckOut() : LocalDateTime.now();
-
-        return Duration.between(attendance.getCheckIn(), endTime).toHours();
     }
 }

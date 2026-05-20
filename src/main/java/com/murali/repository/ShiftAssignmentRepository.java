@@ -36,8 +36,14 @@ public interface ShiftAssignmentRepository extends JpaRepository<ShiftAssignment
         FROM ShiftAssignment sa
         WHERE sa.assignmentDate >= CURRENT_DATE
           AND sa.assignmentDate = :filterDate
-          AND LOWER(sa.employee.firstName)
-                LIKE LOWER(CONCAT('%', :employeeName, '%'))
+          AND LOWER(sa.employee.firstName) LIKE LOWER(CONCAT('%', :employeeName, '%'))
+          AND NOT EXISTS (
+              SELECT 1 FROM LeaveRequest lr
+              WHERE lr.employee.id = sa.employee.id
+                AND lr.status = 'APPROVED'
+                AND lr.durationDays > 0.5
+                AND sa.assignmentDate BETWEEN lr.startDate AND lr.endDate
+          )
         """)
     Page<ShiftAssignment> findFilteredAssignments(
             @Param("filterDate") LocalDate filterDate,
@@ -47,11 +53,18 @@ public interface ShiftAssignmentRepository extends JpaRepository<ShiftAssignment
 
     @EntityGraph(attributePaths = {"employee", "shift"})
     @Query("""
-    SELECT sa
-    FROM ShiftAssignment sa
-    WHERE sa.assignmentDate >= CURRENT_DATE
-      AND sa.assignmentDate = :filterDate
-    """)
+        SELECT sa
+        FROM ShiftAssignment sa
+        WHERE sa.assignmentDate >= CURRENT_DATE
+          AND sa.assignmentDate = :filterDate
+          AND NOT EXISTS (
+              SELECT 1 FROM LeaveRequest lr
+              WHERE lr.employee.id = sa.employee.id
+                AND lr.status = 'APPROVED'
+                AND lr.durationDays > 0.5
+                AND sa.assignmentDate BETWEEN lr.startDate AND lr.endDate
+          )
+        """)
     Page<ShiftAssignment> findByDate(
             @Param("filterDate") LocalDate filterDate,
             Pageable pageable
@@ -68,12 +81,18 @@ public interface ShiftAssignmentRepository extends JpaRepository<ShiftAssignment
 
     @EntityGraph(attributePaths = {"employee", "shift"})
     @Query("""
-    SELECT sa
-    FROM ShiftAssignment sa
-    WHERE sa.assignmentDate >= CURRENT_DATE
-      AND LOWER(sa.employee.firstName)
-            LIKE LOWER(CONCAT('%', :employeeName, '%'))
-    """)
+        SELECT sa
+        FROM ShiftAssignment sa
+        WHERE sa.assignmentDate >= CURRENT_DATE
+          AND LOWER(sa.employee.firstName) LIKE LOWER(CONCAT('%', :employeeName, '%'))
+          AND NOT EXISTS (
+              SELECT 1 FROM LeaveRequest lr
+              WHERE lr.employee.id = sa.employee.id
+                AND lr.status = 'APPROVED'
+                AND lr.durationDays > 0.5
+                AND sa.assignmentDate BETWEEN lr.startDate AND lr.endDate
+          )
+        """)
     Page<ShiftAssignment> findByEmployeeName(
             @Param("employeeName") String employeeName,
             Pageable pageable
@@ -89,10 +108,17 @@ public interface ShiftAssignmentRepository extends JpaRepository<ShiftAssignment
 
     @EntityGraph(attributePaths = {"employee", "shift"})
     @Query("""
-    SELECT sa
-    FROM ShiftAssignment sa
-    WHERE sa.assignmentDate >= CURRENT_DATE
-    """)
+        SELECT sa
+        FROM ShiftAssignment sa
+        WHERE sa.assignmentDate >= CURRENT_DATE
+          AND NOT EXISTS (
+              SELECT 1 FROM LeaveRequest lr
+              WHERE lr.employee.id = sa.employee.id
+                AND lr.status = 'APPROVED'
+                AND lr.durationDays > 0.5
+                AND sa.assignmentDate BETWEEN lr.startDate AND lr.endDate
+          )
+        """)
     Page<ShiftAssignment> findAllAssignments(Pageable pageable);
 
     @Query("SELECT sa FROM ShiftAssignment sa WHERE sa.employee.id IN :employeeIds " +
@@ -114,4 +140,21 @@ public interface ShiftAssignmentRepository extends JpaRepository<ShiftAssignment
 
     @Query("SELECT sa FROM ShiftAssignment sa JOIN FETCH sa.shift WHERE sa.employee.id = :employeeId AND sa.assignmentDate = :date")
     Optional<ShiftAssignment> findByEmployeeIdAndAssignmentDate(@Param("employeeId") Long employeeId, @Param("date") LocalDate date);
+
+    @Query("SELECT sa FROM ShiftAssignment sa JOIN FETCH sa.shift WHERE sa.assignmentDate = :date")
+    List<ShiftAssignment> findAllByAssignmentDate(@Param("date") LocalDate date);
+
+    @Query("""
+        SELECT sa
+        FROM ShiftAssignment sa
+        LEFT JOIN FETCH sa.employee e
+        LEFT JOIN FETCH e.user
+        LEFT JOIN FETCH sa.shift
+        WHERE sa.employee.id IN :employeeIds
+        AND sa.assignmentDate = :assignmentDate
+    """)
+    List<ShiftAssignment> findTodayAssignmentsForEmployees(
+            @Param("employeeIds") List<Long> employeeIds,
+            @Param("assignmentDate") LocalDate assignmentDate
+    );
 }

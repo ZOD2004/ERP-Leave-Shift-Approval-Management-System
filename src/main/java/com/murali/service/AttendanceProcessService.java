@@ -1,6 +1,9 @@
 package com.murali.service;
 
+import com.murali.dto.AttendanceStatus;
+import com.murali.dto.TeamAttendanceSummaryDTO;
 import com.murali.entity.Attendance;
+import com.murali.entity.Employee;
 import com.murali.entity.ShiftAssignment;
 import com.murali.repository.AttendanceRepository;
 import com.murali.repository.EmployeeRepository;
@@ -42,22 +45,39 @@ public class AttendanceProcessService {
                     newRecord.setEmployee(employeeRepository.getReferenceById(employeeId));
                     newRecord.setShiftAssignment(assignment);
                     newRecord.setAttendanceDate(today);
+                    newRecord.setIsLate(false);
                     return newRecord;
                 });
 
+        // Hard Block: Cannot check in if on a Full Day Leave
+        if (isCheckIn && "ON_LEAVE".equals(attendance.getStatus())) {
+            throw new IllegalStateException("Check-in denied: You are marked as ON LEAVE for today. If this is a mistake, please cancel your leave request first.");
+        }
+
         if (isCheckIn) {
+            if (attendance.getCheckIn() != null) {
+                log.warn("Duplicate check-in attempt by Employee {} ignored.", employeeId);
+                return attendance; // Abort early, keep original check-in
+            }
             attendance.setCheckIn(punchTime);
 
             LocalTime effectiveStart = assignment.getEffectiveStartTime();
             LocalTime actualStart = punchTime.toLocalTime();
 
-            if (actualStart.isAfter(effectiveStart.plusMinutes(GRACE_PERIOD_MINUTES))) {
-                attendance.setStatus("LATE");
+            boolean isLate = actualStart.isAfter(effectiveStart.plusMinutes(GRACE_PERIOD_MINUTES));
+            attendance.setIsLate(isLate);
+
+            if (isLate) {
                 log.info("Employee {} checked in late at {} against effective start {}", employeeId, actualStart, effectiveStart);
-            } else {
-                attendance.setStatus("PRESENT");
             }
+
+            // Only overwrite the status string if they aren't on a Half-Day Leave
+            if (!"HALF_DAY_LEAVE".equals(attendance.getStatus())) {
+                attendance.setStatus(isLate ? "LATE" : "PRESENT");
+            }
+
         } else {
+            // Check-out logic
             if (attendance.getCheckIn() == null) {
                 log.warn("Clock-out anomaly: Employee {} attempted to check out without a prior check-in.", employeeId);
             }
@@ -66,10 +86,77 @@ public class AttendanceProcessService {
 
         return attendanceRepository.save(attendance);
     }
+
     public Optional<Attendance> getTodayAttendance(Long employeeId) {
         return attendanceRepository.findByEmployee_IdAndAttendanceDate(employeeId, LocalDate.now());
     }
+
     public List<Attendance> getEmployeeAttendanceHistory(Long employeeId, LocalDate startDate, LocalDate endDate) {
         return attendanceRepository.findAttendanceHistoryByEmployee(employeeId, startDate, endDate);
+    }
+
+    public TeamAttendanceSummaryDTO getTodayTeamAttendanceSummary(Long managerEmployeeId) {
+        LocalDate today = LocalDate.now();
+
+        // STEP 1: Fetch reporting employees
+        List<Employee> reportingEmployees = employeeRepository.findReportingEmployees(managerEmployeeId);
+
+        if (reportingEmployees.isEmpty()) {
+            return new TeamAttendanceSummaryDTO(0, 0, 0);
+        }
+
+        List<Long> teamIds = reportingEmployees.stream().map(Employee::getId).toList();
+
+        // STEP 2: Fetch today's shift assignments to know who is EXPECTED today
+        List<ShiftAssignment> todayShifts = shiftAssignmentRepository.findTodayAssignmentsForEmployees(teamIds, today);
+        List<Long> expectedEmployeeIds = todayShifts.stream()
+                .map(sa -> sa.getEmployee().getId())
+                .toList();
+
+        // STEP 3: Fetch today's actual attendance records
+        List<Attendance> todayAttendances = attendanceRepository.findByEmployeeIdsAndAttendanceDate(teamIds, today);
+        List<Long> attendedEmployeeIds = todayAttendances.stream()
+                .map(a -> a.getEmployee().getId())
+                .toList();
+
+        // STEP 4: Build counts
+        int presentCount = 0;
+        int lateCount = 0;
+        int absentCount = 0;
+
+        // Tally up the statuses of those who DID punch
+        for (Attendance attendance : todayAttendances) {
+            String status = attendance.getStatus();
+            if (AttendanceStatus.PRESENT.equals(status)) {
+                presentCount++;
+            } else if (AttendanceStatus.LATE.equals(status)) {
+                lateCount++;
+            } else if (AttendanceStatus.ABSENT.equals(status)) {
+                absentCount++;
+            }
+        }
+
+        // Add employees who HAD a shift but DID NOT punch in to the Absent count
+        for (Long expectedId : expectedEmployeeIds) {
+            if (!attendedEmployeeIds.contains(expectedId)) {
+                absentCount++;
+            }
+        }
+
+        return new TeamAttendanceSummaryDTO(presentCount, lateCount, absentCount);
+    }
+
+    public List<Attendance> getTodayTeamAttendanceDetails(Long managerEmployeeId) {
+        LocalDate today = LocalDate.now();
+
+        List<Employee> reportingEmployees = employeeRepository.findReportingEmployees(managerEmployeeId);
+
+        if (reportingEmployees.isEmpty()) {
+            return List.of();
+        }
+
+        List<Long> teamIds = reportingEmployees.stream().map(Employee::getId).toList();
+
+        return attendanceRepository.findByEmployeeIdsAndAttendanceDate(teamIds, today);
     }
 }

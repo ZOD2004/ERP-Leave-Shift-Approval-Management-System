@@ -164,6 +164,21 @@ public class ApprovalRoutingService {
 
         // TODO: Trigger Email/Notification Service to Employee: "Your leave was rejected"
     }
+    @Transactional
+    public void cancelPendingApprovals(Long leaveRequestId) {
+        // Fetch all approval rows for this request that are still waiting for action
+        List<LeaveApproval> pendingApprovals = leaveApprovalRepository
+                .findActivePendingApprovalsForUser(leaveRequestId);
+
+        for (LeaveApproval approval : pendingApprovals) {
+            approval.setAction("CANCELLED");
+            approval.setComments("System: Request cancelled by employee.");
+            approval.setActedAt(LocalDateTime.now());
+        }
+
+        leaveApprovalRepository.saveAll(pendingApprovals);
+    }
+
     /**
      * Fetches all pending leave approvals assigned to a specific user (Manager, HR, or Dept Head).
      * Use Case: Populating the "Approval Inbox" grid in the UI.

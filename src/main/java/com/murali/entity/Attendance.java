@@ -42,5 +42,8 @@ public class Attendance {
 
     @Column(length = 20)
     private String status;
+
+    @Column(name = "is_late")
+    private Boolean isLate = false;
 }
 

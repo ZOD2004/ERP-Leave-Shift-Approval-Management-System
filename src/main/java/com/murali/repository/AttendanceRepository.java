@@ -30,6 +30,27 @@ public interface AttendanceRepository extends JpaRepository<Attendance, Long> {
             @Param("employeeId") Long employeeId,
             @Param("startDate") LocalDate startDate,
             @Param("endDate") LocalDate endDate);
+
+    @Query("""
+        SELECT a
+        FROM Attendance a
+        LEFT JOIN FETCH a.employee e
+        LEFT JOIN FETCH e.user
+        LEFT JOIN FETCH a.shiftAssignment sa
+        LEFT JOIN FETCH sa.shift
+        WHERE a.employee.id IN :employeeIds
+        AND a.attendanceDate = :attendanceDate
+    """)
+    List<Attendance> findByEmployeeIdsAndAttendanceDate(
+            @Param("employeeIds") List<Long> employeeIds,
+            @Param("attendanceDate") LocalDate attendanceDate
+    );
+
+    long countByEmployee_IdInAndAttendanceDateAndStatus(
+            List<Long> employeeIds,
+            LocalDate attendanceDate,
+            String status
+    );
 }
 
 

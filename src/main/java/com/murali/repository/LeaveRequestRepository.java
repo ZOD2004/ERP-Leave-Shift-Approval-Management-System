@@ -49,12 +49,13 @@ public interface LeaveRequestRepository extends JpaRepository<LeaveRequest, Long
 
     @Query("SELECT l FROM LeaveRequest l WHERE l.employee.id IN :employeeIds " +
             "AND l.status = :status " +
-            "AND l.startDate <= :endDate AND l.endDate >= :startDate")
+            "AND (l.startDate <= :endDate AND l.endDate >= :startDate)")
     List<LeaveRequest> findApprovedLeavesForEmployeesInRange(
             @Param("employeeIds") List<Long> employeeIds,
             @Param("status") String status,
             @Param("startDate") LocalDate startDate,
-            @Param("endDate") LocalDate endDate);
+            @Param("endDate") LocalDate endDate
+    );
 
 
     @Query("SELECT r FROM LeaveRequest r WHERE r.status = :status ORDER BY r.startDate ASC")
@@ -67,4 +68,21 @@ public interface LeaveRequestRepository extends JpaRepository<LeaveRequest, Long
 
     @EntityGraph(attributePaths = {"leaveType"})
     List<LeaveRequest> findByEmployeeIdOrderByStartDateDesc(Long employeeId);
+
+    boolean existsByEmployeeIdAndStatusInAndStartDateLessThanEqualAndEndDateGreaterThanEqual(
+            Long employeeId,
+            List<String> statuses,
+            LocalDate newEndDate,
+            LocalDate newStartDate
+    );
+    @Query("SELECT CASE WHEN COUNT(lr) > 0 THEN true ELSE false END FROM LeaveRequest lr " +
+            "WHERE lr.employee.id = :employeeId " +
+            "AND lr.status IN :activeStatuses " +
+            "AND lr.startDate <= :endDate AND lr.endDate >= :startDate")
+    boolean hasOverlappingLeave(
+            @Param("employeeId") Long employeeId,
+            @Param("startDate") LocalDate startDate,
+            @Param("endDate") LocalDate endDate,
+            @Param("activeStatuses") List<String> activeStatuses
+    );
 }

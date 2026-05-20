@@ -346,19 +346,6 @@ public class ShiftAssignmentView extends VerticalLayout {
             }
         });
 
-        singleDatePicker.addValueChangeListener(event -> {
-            if (event.getValue() != null && employeeCombo.getValue() != null) {
-                try {
-                    assignmentService.validateShiftConflict(employeeCombo.getValue().getId(), event.getValue(),null);
-                    singleDatePicker.setErrorMessage(null);
-                    singleDatePicker.setInvalid(false);
-                } catch (Exception ex) {
-                    singleDatePicker.setErrorMessage("Conflict: " + ex.getMessage());
-                    singleDatePicker.setInvalid(true);
-                }
-            }
-        });
-
         FormLayout commonFields = new FormLayout(employeeCombo, shiftCombo);
 
         Button saveBtn = new Button("Assign", e -> saveAssignment());
@@ -376,50 +363,54 @@ public class ShiftAssignmentView extends VerticalLayout {
         }
 
         try {
+            LocalDate startDate;
+            LocalDate endDate;
+
+            // 1. Determine dates based on the active tab
             if (dialogTabs.getSelectedTab().equals(singleTab)) {
                 if (singleDatePicker.getValue() == null) {
                     showNotification("Please select a Date", NotificationVariant.LUMO_ERROR);
                     return;
                 }
-
-                ShiftAssignmentDTO dto = new ShiftAssignmentDTO();
-                dto.setEmployeeId(employeeCombo.getValue().getId());
-                dto.setShiftId(shiftCombo.getValue().getId());
-                dto.setAssignmentDate(singleDatePicker.getValue());
-
-                assignmentService.assignSingleShift(dto);
-                showNotification("Single Shift Assigned", NotificationVariant.LUMO_SUCCESS);
-
+                // SINGLE TAB: Start and End are the exact same day
+                startDate = singleDatePicker.getValue();
+                endDate = singleDatePicker.getValue();
             } else {
                 if (startDatePicker.getValue() == null || endDatePicker.getValue() == null) {
                     showNotification("Please select Start and End Dates", NotificationVariant.LUMO_ERROR);
                     return;
                 }
-
-                if(startDatePicker.getValue().isAfter(endDatePicker.getValue()) || startDatePicker.getValue().isEqual(endDatePicker.getValue())){
-                    showNotification("Please select End Date greater than start date", NotificationVariant.LUMO_ERROR);
+                if (startDatePicker.getValue().isAfter(endDatePicker.getValue())) {
+                    showNotification("End Date must be greater than or equal to Start Date", NotificationVariant.LUMO_ERROR);
                     return;
                 }
-
-                currentBatchPreview = assignmentService.previewBatchAssignments(
-                        List.of(employeeCombo.getValue().getId()),
-                        shiftCombo.getValue().getId(),
-                        startDatePicker.getValue(),
-                        endDatePicker.getValue()
-                );
-
-                assignmentDialog.close();
-
-                if (currentBatchPreview.getHardConflicts().isEmpty() && currentBatchPreview.getPartialConflicts().isEmpty()) {
-                    executeFinalSave();
-                } else {
-                    buildAndOpenConflictDialog();
-                }
+                startDate = startDatePicker.getValue();
+                endDate = endDatePicker.getValue();
             }
 
+            // 2. CRITICAL FIX: Use ArrayList instead of List.of() to prevent Hibernate silent failures in the IN clause
+            List<Long> employeeIds = new ArrayList<>();
+            employeeIds.add(employeeCombo.getValue().getId());
+
+            // 3. Route BOTH Single and Bulk through the exact same preview engine!
+            currentBatchPreview = assignmentService.previewBatchAssignments(
+                    employeeIds,
+                    shiftCombo.getValue().getId(),
+                    startDate,
+                    endDate
+            );
+
+            // Close the setup dialog
             assignmentDialog.close();
-            refreshListGrid();
-            refreshPivotGrid();
+
+            // 4. Evaluate Results
+            if (currentBatchPreview.getHardConflicts().isEmpty() && currentBatchPreview.getPartialConflicts().isEmpty()) {
+                // No conflicts! Save cleanly.
+                executeFinalSave();
+            } else {
+                // Conflicts detected (like an approved leave)! Open the dialog to stop them.
+                buildAndOpenConflictDialog();
+            }
 
         } catch (Exception ex) {
             showNotification(ex.getMessage(), NotificationVariant.LUMO_ERROR);
@@ -586,13 +577,19 @@ public class ShiftAssignmentView extends VerticalLayout {
             hardConflictGrid.addColumn(ShiftConflictDTO::getConflictDate).setHeader("Date");
             hardConflictGrid.addColumn(ShiftConflictDTO::getConflictType).setHeader("Reason");
 
-            // "Skip" Action just visually removes it from the grid
+            // "Skip" Action just visually removes it from the grid and DOES NOT schedule it
             hardConflictGrid.addComponentColumn(conflict -> {
                 Button skipBtn = new Button("Skip", new Icon(VaadinIcon.CLOSE));
                 skipBtn.addThemeVariants(ButtonVariant.LUMO_ERROR, ButtonVariant.LUMO_TERTIARY);
                 skipBtn.addClickListener(e -> {
+
+                    // 1. Remove it from the conflict list
                     currentBatchPreview.getHardConflicts().remove(conflict);
+
+                    // 2. Refresh the UI
                     hardConflictGrid.getDataProvider().refreshAll();
+
+                    // NOTE: We absolutely DO NOT add it to currentBatchPreview.getReadyToSave() here!
                 });
                 return skipBtn;
             }).setHeader("Action");
@@ -620,6 +617,7 @@ public class ShiftAssignmentView extends VerticalLayout {
         Button proceedBtn = new Button("Proceed with Valid Assignments", e -> executeFinalSave());
         proceedBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
 
+        conflictDialog.getFooter().removeAll();
         conflictDialog.add(layout);
         conflictDialog.getFooter().add(new Button("Cancel", e -> conflictDialog.close()), proceedBtn);
         conflictDialog.open();
@@ -639,6 +637,15 @@ public class ShiftAssignmentView extends VerticalLayout {
             dto.setOverrideEndTime(partial.getSuggestedOverrideEnd());
 
             finalToSave.add(dto);
+        }
+
+        if (finalToSave.isEmpty()) {
+            showNotification(
+                    "No valid assignments available. All selected dates are conflicts/holidays.",
+                    NotificationVariant.LUMO_ERROR
+            );
+            conflictDialog.close();
+            return;
         }
 
         try {
@@ -718,6 +725,7 @@ public class ShiftAssignmentView extends VerticalLayout {
 
         editDialog.open();
     }
+
     private void confirmDelete(ShiftAssignmentDTO assignment) {
         Dialog confirmDialog = new Dialog();
         confirmDialog.setHeaderTitle("Confirm Deletion");
