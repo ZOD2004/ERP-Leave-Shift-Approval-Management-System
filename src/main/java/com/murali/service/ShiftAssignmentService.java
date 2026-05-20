@@ -98,6 +98,7 @@ public class ShiftAssignmentService {
         List<ShiftAssignment> assignments = shiftAssignmentRepository
                 .findByAssignmentDateBetween(viewStartDate, viewEndDate);
 
+        assignments = filterOutApprovedFullDayLeaves(assignments);
         return mapToDTOList(assignments);
     }
 
@@ -119,6 +120,8 @@ public class ShiftAssignmentService {
 
         List<ShiftAssignment> weeklyAssignments =
                 shiftAssignmentRepository.findByAssignmentDateBetween(startOfWeek,endOfWeek);
+
+        weeklyAssignments = filterOutApprovedFullDayLeaves(weeklyAssignments);
 
         Map<String, Map<LocalDate, String>> pivotData = new HashMap<>();
         for (ShiftAssignment assignment : weeklyAssignments) {
@@ -398,5 +401,29 @@ public class ShiftAssignmentService {
         dto.setOverrideEndTime(assignment.getOverrideEndTime());
 
         return dto;
+    }
+    private List<ShiftAssignment> filterOutApprovedFullDayLeaves(List<ShiftAssignment> assignments) {
+        if (assignments == null || assignments.isEmpty()) return assignments;
+
+        LocalDate minDate = assignments.stream().map(ShiftAssignment::getAssignmentDate).min(LocalDate::compareTo).orElse(LocalDate.now());
+        LocalDate maxDate = assignments.stream().map(ShiftAssignment::getAssignmentDate).max(LocalDate::compareTo).orElse(LocalDate.now());
+        List<Long> empIds = assignments.stream().map(a -> a.getEmployee().getId()).distinct().toList();
+
+        // Fetch all approved leaves for these employees in this date range
+        List<LeaveRequest> leaves = leaveRequestRepository.findApprovedLeavesForEmployeesInRange(
+                empIds, "APPROVED", minDate, maxDate);
+
+        // Group by employee for fast lookup
+        Map<Long, List<LeaveRequest>> leavesByEmployee = leaves.stream()
+                .collect(Collectors.groupingBy(l -> l.getEmployee().getId()));
+
+        return assignments.stream().filter(assignment -> {
+            List<LeaveRequest> empLeaves = leavesByEmployee.getOrDefault(assignment.getEmployee().getId(), Collections.emptyList());
+            LeaveRequest activeLeave = getActiveLeaveForDate(empLeaves, assignment.getAssignmentDate());
+
+            // Hide the shift ONLY if they have an active leave AND it's a Full Day.
+            // Half-days will return true and remain visible.
+            return activeLeave == null || !isFullDayLeave(activeLeave);
+        }).toList();
     }
 }
