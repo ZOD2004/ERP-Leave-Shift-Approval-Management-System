@@ -33,13 +33,7 @@ public class AttendanceSyncService {
 
     private static final int GRACE_PERIOD_MINUTES = 15;
 
-    // Default states when the application starts
-    private String syncStatus = "PENDING";
-    private java.time.LocalDateTime lastSyncTime = null;
 
-    /**
-     * 1. Record Creation: Syncs approved leave to the attendance calendar.
-     */
     @Transactional
     public void syncLeaveRecords(LeaveRequest request) {
         LocalDate startDate = request.getStartDate();
@@ -63,10 +57,9 @@ public class AttendanceSyncService {
         LocalDate currentDate = startDate;
 
         while (!currentDate.isAfter(endDate)) {
-            // FIX: If there is no shift assigned for this date, it is a scheduled day off.
-            // We do not mark it as ON_LEAVE.
             if (!assignmentMap.containsKey(currentDate)) {
                 currentDate = currentDate.plusDays(1);
+                //skip no assignment found
                 continue;
             }
 
@@ -93,9 +86,6 @@ public class AttendanceSyncService {
         }
     }
 
-    /**
-     * 2. Auto Attendance Reversals: Reverts the attendance calendar when an approved leave is cancelled.
-     */
     @Transactional
     public void revertLeaveFromAttendance(LeaveRequest request) {
         Long employeeId = request.getEmployee().getId();
@@ -114,10 +104,8 @@ public class AttendanceSyncService {
             if (STATUS_ON_LEAVE.equals(currentStatus) || STATUS_HALF_DAY_LEAVE.equals(currentStatus)) {
 
                 if (attendance.getCheckIn() == null && attendance.getCheckOut() == null) {
-                    // Pure placeholder, safe to delete
                     recordsToDelete.add(attendance);
                 } else {
-                    // FIX: Recalculate true status to prevent lateness exploit
                     if (attendance.getShiftAssignment() != null && attendance.getCheckIn() != null) {
                         LocalTime effectiveStart = attendance.getShiftAssignment().getEffectiveStartTime();
                         LocalTime actualStart = attendance.getCheckIn().toLocalTime();
@@ -127,7 +115,6 @@ public class AttendanceSyncService {
                         attendance.setIsLate(isLate);
                         attendance.setStatus(isLate ? STATUS_LATE : STATUS_PRESENT);
                     } else {
-                        // Fallback if data is missing
                         attendance.setStatus(STATUS_PRESENT);
                     }
                     recordsToUpdate.add(attendance);
@@ -142,17 +129,5 @@ public class AttendanceSyncService {
         if (!recordsToUpdate.isEmpty()) {
             attendanceRepository.saveAll(recordsToUpdate);
         }
-    }
-
-    public String getSyncStatus() {
-        return this.syncStatus;
-    }
-
-    public java.time.LocalDateTime getLastSyncTime() {
-        return this.lastSyncTime;
-    }
-    private void updateSyncStatus(String status) {
-        this.syncStatus = status;
-        this.lastSyncTime = java.time.LocalDateTime.now();
     }
 }

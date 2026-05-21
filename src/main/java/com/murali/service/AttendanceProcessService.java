@@ -77,7 +77,6 @@ public class AttendanceProcessService {
             }
 
         } else {
-            // Check-out logic
             if (attendance.getCheckIn() == null) {
                 log.warn("Clock-out anomaly: Employee {} attempted to check out without a prior check-in.", employeeId);
             }
@@ -119,12 +118,10 @@ public class AttendanceProcessService {
                 .map(a -> a.getEmployee().getId())
                 .toList();
 
-        // STEP 4: Build counts
         int presentCount = 0;
         int lateCount = 0;
         int absentCount = 0;
 
-        // Tally up the statuses of those who DID punch
         for (Attendance attendance : todayAttendances) {
             String status = attendance.getStatus();
             if (AttendanceStatus.PRESENT.equals(status)) {

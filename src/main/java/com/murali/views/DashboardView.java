@@ -98,6 +98,10 @@ public class DashboardView extends VerticalLayout {
             add(new H2("No employee record linked to your user account."));
             return;
         }
+        add(new Hr());
+        add(createHeaderWidget(employeeId));
+        add(new Hr());
+        add(createLeaveBalanceWidget(employeeId));
 
         if (securityService.hasRole("ROLE_MANAGER") || securityService.hasRole("ROLE_DEPT_HEAD")) {
             add(new Hr());
@@ -107,9 +111,9 @@ public class DashboardView extends VerticalLayout {
             add(managerTitle);
 
             // Add the Manager Widgets
-            add(createManagerApprovalsWidget(securityService.getCurrentUserId()));
-            add(new Hr());
             add(createTeamAttendanceWidget(employeeId));
+            add(new Hr());
+            add(createManagerApprovalsWidget(securityService.getCurrentUserId()));
             add(new Hr());
             add(createTeamShiftsWidget(employeeId));
         }
@@ -117,10 +121,7 @@ public class DashboardView extends VerticalLayout {
         // --- View A: Base Employee Widgets ---
         if (securityService.hasRole("ROLE_MANAGER") || securityService.hasRole("ROLE_DEPT_HEAD")
         || securityService.hasRole("ROLE_EMPLOYEE")){
-            add(new Hr());
-            add(createHeaderWidget(employeeId));
-            add(new Hr());
-            add(createLeaveBalanceWidget(employeeId));
+
             add(new Hr());
             add(createUpcomingShiftsWidget(employeeId));
             add(new Hr());

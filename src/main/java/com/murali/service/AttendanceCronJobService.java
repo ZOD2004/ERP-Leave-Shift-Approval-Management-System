@@ -37,11 +37,9 @@ public class AttendanceCronJobService {
 
     private static final int MINIMUM_HOURS_FOR_FULL_DAY = 4;
 
-    // FIX: Changed cron to run daily at 1:00 AM to process the previous day's metrics safely
     @Scheduled(cron = "0 0 1 * * ?")
     @Transactional
     public void reconcileDailyAttendance() {
-        // FIX: Look back at yesterday to ensure the entire workday/shift cycle has concluded
         LocalDate targetDate = LocalDate.now().minusDays(1);
         log.info("Starting Daily Attendance Reconciliation for target date: {}", targetDate);
 
@@ -53,7 +51,6 @@ public class AttendanceCronJobService {
 
         List<Long> activeEmployeeIds = employeeRepository.findAllActiveEmployeeIds();
 
-        // FIX: Adjusted queries to target targetDate
         Map<Long, ShiftAssignment> targetDateAssignmentsMap = shiftAssignmentRepository.findAllByAssignmentDate(targetDate)
                 .stream()
                 .collect(Collectors.toMap(sa -> sa.getEmployee().getId(), sa -> sa));
@@ -62,17 +59,16 @@ public class AttendanceCronJobService {
                 .stream()
                 .collect(Collectors.toMap(a -> a.getEmployee().getId(), a -> a));
 
-        List<LeaveType> casualLeaves = leaveTypeRepository.findByNameContainingIgnoreCaseOrCodeContainingIgnoreCase("Casual Leave","CL-001");
+        List<LeaveType> sickLeave = leaveTypeRepository.findByNameContainingIgnoreCaseOrCodeContainingIgnoreCase("Sick Leave","SL-001");
 
-        if (casualLeaves.isEmpty()) {
+        if (sickLeave.isEmpty()) {
             log.error("Casual Leave type not found! Halting attendance reconciliation to prevent data corruption.");
             return;
         }
-        LeaveType casualLeave = casualLeaves.getFirst();
+        LeaveType casualLeave = sickLeave.getFirst();
 
         for (Long employeeId : activeEmployeeIds) {
 
-            // --- THE ROTATIONAL SHIFT BYPASS ---
             if (!targetDateAssignmentsMap.containsKey(employeeId)) {
                 continue;
             }
@@ -98,7 +94,7 @@ public class AttendanceCronJobService {
                             casualLeave,
                             BigDecimal.valueOf(1.0),
                             null,
-                            targetDate.getYear() // FIX: Use targetDate year
+                            targetDate.getYear()
                     );
                     log.info("Employee {} marked ABSENT for {}. 1 day deducted.", employeeId, targetDate);
                 } else {
@@ -108,7 +104,7 @@ public class AttendanceCronJobService {
                             casualLeave,
                             BigDecimal.valueOf(0.5),
                             null,
-                            targetDate.getYear() // FIX: Use targetDate year
+                            targetDate.getYear()
                     );
                     log.info("Employee {} on Half-Day Leave missed shift on {}. 0.5 days deducted.", employeeId, targetDate);
                 }
@@ -123,7 +119,7 @@ public class AttendanceCronJobService {
                             casualLeave,
                             BigDecimal.valueOf(0.5),
                             null,
-                            targetDate.getYear() // FIX: Use targetDate year
+                            targetDate.getYear()
                     );
                     attendance = attendanceRepository.save(attendance);
 
@@ -141,7 +137,7 @@ public class AttendanceCronJobService {
                                 casualLeave,
                                 BigDecimal.valueOf(0.5),
                                 null,
-                                targetDate.getYear() // FIX: Use targetDate year
+                                targetDate.getYear()
                         );
                         log.info("Employee {} worked < 4 hours ({} hrs) on {}. Marked HALF_DAY_ABSENT. 0.5 days deducted.", employeeId, hoursWorked, targetDate);
                     }
