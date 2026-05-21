@@ -11,6 +11,7 @@ import com.murali.repository.EmployeeRepository;
 import com.murali.repository.RoleRepository;
 import com.murali.repository.UserRepository;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -37,7 +38,7 @@ public class UserService {
                        RoleRepository roleRepository,
                        EmployeeRepository employeeRepository,
                        AuditLogRepository auditLogRepository,
-                       SecurityService securityService) {
+                       @Lazy SecurityService securityService) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.departmentRepository = departmentRepository;

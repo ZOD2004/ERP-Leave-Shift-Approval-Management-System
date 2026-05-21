@@ -819,7 +819,7 @@ public class DashboardView extends VerticalLayout {
         grid.addThemeVariants(GridVariant.LUMO_ROW_STRIPES, GridVariant.LUMO_COMPACT);
         grid.setHeight("350px");
 
-        grid.addColumn(log -> log.getTimestamp() != null ? log.getTimestamp().toLocalTime() : "").setHeader("Time").setAutoWidth(true);
+        grid.addColumn(log -> log.getActionTime() != null ? log.getActionTime().toLocalTime() : "").setHeader("Time").setAutoWidth(true);
         grid.addColumn(com.murali.entity.AuditLog::getUsername).setHeader("User").setAutoWidth(true);
         grid.addColumn(com.murali.entity.AuditLog::getAction).setHeader("Action").setAutoWidth(true);
         grid.addColumn(com.murali.entity.AuditLog::getDetails).setHeader("Details").setAutoWidth(true).setFlexGrow(1);

@@ -5,6 +5,7 @@ import com.murali.repository.AuditLogRepository;
 import com.murali.repository.EmployeeRepository;
 import com.murali.repository.LeaveTypeRepository;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -30,7 +31,7 @@ public class EmployeeService {
                            LeaveBalanceService leaveBalanceService,
                            LeaveTypeRepository leaveTypeRepository,
                            AuditLogRepository auditLogRepository,
-                           SecurityService securityService) {
+                           @Lazy SecurityService securityService) {
         this.userService = userService;
         this.employeeRepository = employeeRepository;
         this.leaveBalanceService = leaveBalanceService;

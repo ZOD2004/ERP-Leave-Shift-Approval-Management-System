@@ -11,6 +11,7 @@ import com.murali.repository.LeaveBalanceTransactionRepository;
 import com.murali.repository.LeaveTypeRepository;
 import com.murali.repository.AuditLogRepository;
 import com.murali.service.SecurityService;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -37,7 +38,7 @@ public class LeaveBalanceService {
                                LeaveBalanceTransactionRepository transactionRepository,
                                LeaveTypeRepository leaveTypeRepository,
                                AuditLogRepository auditLogRepository,
-                               SecurityService securityService) {
+                               @Lazy SecurityService securityService) {
         this.leaveBalanceRepository = leaveBalanceRepository;
         this.transactionRepository = transactionRepository;
         this.leaveTypeRepository = leaveTypeRepository;
