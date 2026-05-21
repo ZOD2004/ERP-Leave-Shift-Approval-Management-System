@@ -23,6 +23,9 @@ import java.util.List;
 public class AttendanceCorrectionService {
 
     private final AttendanceCorrectionRepository correctionRepository;
+    private final AttendanceRepository attendanceRepository;
+    private final LeaveBalanceService leaveBalanceService;
+    private final LeaveTypeRepository leaveTypeRepository;
     private final UserRepository userRepository;
 
 
@@ -40,13 +43,69 @@ public class AttendanceCorrectionService {
                 attendance.getEmployee().getId(), approver.getUsername());
     }
 
+    /**
+     * 2. Manager Resolution (Called by the Vaadin UI)
+     */
+    @Transactional
+    public void resolveCorrection(Long correctionId, String action, LocalDateTime manualCheckOutTime, String comments, Long actingUserId) {
+        AttendanceCorrection correction = correctionRepository.findById(correctionId)
+                .orElseThrow(() -> new IllegalArgumentException("Correction record not found"));
+
+        if (!correction.getApprover().getId().equals(actingUserId)) {
+            throw new SecurityException("You are not authorized to resolve this anomaly.");
+        }
+
+        Attendance attendance = correction.getAttendance();
+
+        if ("APPROVED".equalsIgnoreCase(action)) {
+            if (manualCheckOutTime == null) {
+                throw new IllegalArgumentException("A manual check-out time must be provided for approval.");
+            }
+
+            // 1. Update Attendance Status and Time
+            attendance.setCheckOut(manualCheckOutTime);
+            attendance.setStatus("PRESENT");
+
+            // Note: The 0.5 penalty remains in the LeaveBalance ledger as per strict company policy.
+
+            correction.setResolvedCheckOutTime(manualCheckOutTime);
+            correction.setStatus("APPROVED");
+
+        } else if ("REJECTED".equalsIgnoreCase(action)) {
+            attendance.setStatus("ABSENT");
+
+            LeaveType halfDayLeave = leaveTypeRepository.findByNameContainingIgnoreCaseOrCodeContainingIgnoreCase("Half Day Leave", "HDL-001").getFirst();
+            leaveBalanceService.deductPenalty(
+                    attendance.getEmployee(),
+                    halfDayLeave,
+                    BigDecimal.valueOf(0.5),
+                    attendance.getAttendanceDate().getYear(),
+                    "Missing Check-out Rejected by Manager"
+            );
+
+            correction.setStatus("REJECTED");
+        } else {
+            throw new IllegalArgumentException("Invalid action.");
+        }
+
+        correction.setManagerComments(comments);
+
+        attendanceRepository.save(attendance);
+        correctionRepository.save(correction);
+    }
+
     private User resolveManagerForEmployee(com.murali.entity.Employee employee) {
         if (employee.getManager() != null && employee.getManager().getUser() != null) {
             return employee.getManager().getUser();
         }
+        // Fallback to HR Admin if no manager exists
         return userRepository.findFirstByRoleName("ROLE_HR_ADMIN")
                 .stream().findFirst()
                 .orElseThrow(() -> new IllegalStateException("No Manager or HR Admin available to route anomaly."));
+    }
+    @Transactional(readOnly = true)
+    public List<AttendanceCorrection> getPendingCorrectionsForApprover(Long approverId) {
+        return correctionRepository.findPendingCorrectionsForManager(approverId);
     }
     @Transactional(readOnly = true)
     public List<AttendanceCorrection> getAllPendingCorrectionsGlobally() {
