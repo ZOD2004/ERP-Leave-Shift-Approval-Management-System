@@ -91,7 +91,7 @@ public class LeaveRequestService {
         boolean isNegativeBalance = duration.compareTo(effectiveBalance) > 0;
 
         if (isNegativeBalance) {
-            String code = leaveType.getCode().toUpperCase();
+            String code = leaveType.getCode();
             if (!code.equals("SL-001") && !code.equals("EMG-001")) {
                 throw new IllegalArgumentException(
                         "Insufficient balance. You only have " + effectiveBalance + " days available. " +
@@ -130,9 +130,6 @@ public class LeaveRequestService {
 
     }
 
-    /**
-     * Requirement: Fetch Leave History for an Employee
-     */
     @Transactional(readOnly = true)
     public List<LeaveRequest> getLeaveHistoryForEmployee(Long employeeId) {
         return leaveRequestRepository.findByEmployeeIdOrderByStartDateDesc(employeeId);
@@ -140,24 +137,14 @@ public class LeaveRequestService {
 
     @Transactional(readOnly = true)
     public List<LeaveRequest> getPendingRequestsOrderByDate(int limit) {
-        // PageRequest.of(pageNumber, pageSize) acts as our dynamic LIMIT clause.
-        // We want the 0th page, and 'limit' amount of items.
         return leaveRequestRepository.findPendingRequests(STATUS_PENDING, PageRequest.of(0, limit));
     }
 
-    /**
-     * Dashboard KPI: Get the total number of requests currently awaiting approval across the company.
-     */
     @Transactional(readOnly = true)
     public long countPendingRequests() {
         return leaveRequestRepository.countByStatus(STATUS_PENDING);
     }
 
-    /**
-     * Dashboard KPI: See how many people are officially off-work today.
-     *
-     * @param date The date to check (usually LocalDate.now())
-     */
     @Transactional(readOnly = true)
     public long getActiveLeavesCountForDate(LocalDate date) {
         return leaveRequestRepository.countActiveLeavesForDate(date);

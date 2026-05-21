@@ -1,9 +1,6 @@
 package com.murali.views;
 
-import com.murali.entity.Employee;
-import com.murali.entity.LeaveBalance;
-import com.murali.entity.LeaveRequest;
-import com.murali.entity.LeaveType;
+import com.murali.entity.*;
 import com.murali.service.*;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.button.Button;
@@ -14,10 +11,7 @@ import com.vaadin.flow.component.dialog.Dialog;
 import com.vaadin.flow.component.formlayout.FormLayout;
 import com.vaadin.flow.component.grid.Grid;
 import com.vaadin.flow.component.grid.GridVariant;
-import com.vaadin.flow.component.html.H2;
-import com.vaadin.flow.component.html.H3;
-import com.vaadin.flow.component.html.Hr;
-import com.vaadin.flow.component.html.Span;
+import com.vaadin.flow.component.html.*;
 import com.vaadin.flow.component.icon.Icon;
 import com.vaadin.flow.component.icon.VaadinIcon;
 import com.vaadin.flow.component.notification.Notification;
@@ -51,6 +45,7 @@ public class LeaveApplicationView extends VerticalLayout {
     private final DurationEngineService durationEngineService;
     private final SecurityService securityService;
     private final LeaveBalanceService leaveBalanceService;
+    private final ApprovalRoutingService approvalRoutingService;
 
     private final Employee currentEmployee;
     private final LeaveRequest currentRequest = new LeaveRequest();
@@ -71,7 +66,7 @@ public class LeaveApplicationView extends VerticalLayout {
                                 EmployeeService employeeService,
                                 DurationEngineService durationEngineService,
                                 SecurityService securityService,
-                                LeaveBalanceService leaveBalanceService) {
+                                LeaveBalanceService leaveBalanceService, ApprovalRoutingService approvalRoutingService) {
 
         this.leaveRequestService = leaveRequestService;
         this.attendanceSyncService = attendanceSyncService;
@@ -80,8 +75,8 @@ public class LeaveApplicationView extends VerticalLayout {
         this.durationEngineService = durationEngineService;
         this.securityService = securityService;
         this.leaveBalanceService = leaveBalanceService;
-
         this.currentEmployee = securityService.getCurrentEmployee();
+        this.approvalRoutingService = approvalRoutingService;
 
         buildMainView();
         setupBinder();
@@ -142,13 +137,20 @@ public class LeaveApplicationView extends VerticalLayout {
                 badge.getElement().getThemeList().add("success");
             } else if ("REJECTED".equals(status)) {
                 badge.getElement().getThemeList().add("error");
-            } else if ("PENDING".equals(status)) {
+            } else if (status.startsWith("PENDING")) {
                 badge.getElement().getThemeList().add("warning");
             } else if ("CANCELLED".equals(status)) {
                 badge.getElement().getThemeList().add("contrast");
             }
             return badge;
         }).setHeader("Status").setAutoWidth(true);
+
+        historyGrid.addComponentColumn(req -> {
+            Button viewCommentsBtn = new Button("View Comments");
+            viewCommentsBtn.addThemeVariants(ButtonVariant.LUMO_TERTIARY, ButtonVariant.LUMO_SMALL);
+            viewCommentsBtn.addClickListener(e -> showCommentsDialog(req));
+            return viewCommentsBtn;
+        }).setHeader("Comments").setAutoWidth(true);
 
         // New Actions Column with the dynamic Cancel button
         historyGrid.addComponentColumn(this::createActionColumn)
@@ -416,5 +418,55 @@ public class LeaveApplicationView extends VerticalLayout {
         }
 
         historyGrid.setItems(leaveRequestService.getLeaveHistoryForEmployee(currentEmployee.getId()));
+    }
+    // Add these methods to your View class
+
+    private void showCommentsDialog(LeaveRequest request) {
+        Dialog dialog = new Dialog();
+        dialog.setHeaderTitle("Approval Workflow Comments");
+
+        List<LeaveApproval> approvals = approvalRoutingService.getApprovalsForRequest(request.getId());
+
+        VerticalLayout layout = new VerticalLayout();
+        layout.setPadding(false);
+        layout.setSpacing(true);
+
+        if (approvals == null || approvals.isEmpty()) {
+            layout.add(new Span("No approval records found for this request yet."));
+        } else {
+            for (LeaveApproval approval : approvals) {
+                String roleName = getRoleName(approval.getApprovalLevel());
+                String actionText = approval.getAction() != null ? approval.getAction() : "PENDING";
+                String commentText = (approval.getComments() != null && !approval.getComments().isBlank())
+                        ? approval.getComments()
+                        : "No comment provided.";
+
+                Span headerSpan = new Span(roleName + " (" + actionText + "): ");
+                headerSpan.getStyle().set("font-weight", "bold");
+
+                Span bodySpan = new Span(commentText);
+
+                Div entry = new Div(headerSpan, bodySpan);
+                entry.getStyle().set("margin-bottom", "10px");
+                layout.add(entry);
+            }
+        }
+
+        dialog.add(layout);
+
+        Button closeButton = new Button("Close", e -> dialog.close());
+        dialog.getFooter().add(closeButton);
+
+        dialog.open();
+    }
+
+    private String getRoleName(Integer level) {
+        if (level == null) return "Approver";
+        switch (level) {
+            case 1: return "Manager";
+            case 2: return "HR";
+            case 3: return "Head of Department (HOD)";
+            default: return "Approver Level " + level;
+        }
     }
 }

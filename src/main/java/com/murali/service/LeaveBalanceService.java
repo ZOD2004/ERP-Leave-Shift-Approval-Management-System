@@ -7,16 +7,9 @@ import com.murali.entity.LeaveType;
 import com.murali.repository.LeaveBalanceRepository;
 import com.murali.repository.LeaveBalanceTransactionRepository;
 import com.murali.repository.LeaveTypeRepository;
-import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.math.BigDecimal;
-import java.time.LocalDate;
-import java.util.List;
-
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.util.List;
 
@@ -27,11 +20,11 @@ public class LeaveBalanceService {
     private final LeaveBalanceTransactionRepository transactionRepository;
     private final LeaveTypeRepository leaveTypeRepository;
 
-    public static final String TX_ALLOCATION = "ALLOCATION";
-    public static final String TX_PENDING_HOLD = "PENDING_HOLD";
-    public static final String TX_HOLD_RELEASE = "HOLD_RELEASE";
-    public static final String TX_LEAVE_DEDUCT = "LEAVE_DEDUCT";
-    public static final String TX_LEAVE_REFUND = "LEAVE_REFUND";
+    public static final String ALLOCATION = "ALLOCATION";
+    public static final String PENDING_HOLD = "PENDING_HOLD";
+    public static final String HOLD_RELEASE = "HOLD_RELEASE";
+    public static final String LEAVE_DEDUCT = "LEAVE_DEDUCT";
+    public static final String LEAVE_REFUND = "LEAVE_REFUND";
 
     public LeaveBalanceService(LeaveBalanceRepository leaveBalanceRepository,
                                LeaveBalanceTransactionRepository transactionRepository,
@@ -85,7 +78,7 @@ public class LeaveBalanceService {
                 recordTransaction(
                         employee,
                         leaveType,
-                        TX_ALLOCATION,
+                        ALLOCATION,
                         balance.getTotalEntitled(),
                         null,
                         "Initial balance allocated for year " + year
@@ -102,7 +95,7 @@ public class LeaveBalanceService {
 
         leaveBalanceRepository.save(balance);
 
-        recordTransaction(employee, leaveType, TX_PENDING_HOLD, duration, referenceId, "Pending hold placed for new leave request");
+        recordTransaction(employee, leaveType, PENDING_HOLD, duration, referenceId, "Pending hold placed for new leave request");
     }
 
     /**
@@ -126,7 +119,7 @@ public class LeaveBalanceService {
 
         leaveBalanceRepository.save(balance);
 
-        recordTransaction(employee, leaveType, TX_LEAVE_DEDUCT, duration, leaveRequestId, "Leave approved and deducted from balance");
+        recordTransaction(employee, leaveType, LEAVE_DEDUCT, duration, leaveRequestId, "Leave approved and deducted from balance");
     }
 
     /**
@@ -149,7 +142,7 @@ public class LeaveBalanceService {
         recordTransaction(
                 employee,
                 leaveType,
-                TX_LEAVE_REFUND,
+                LEAVE_REFUND,
                 duration,
                 originalLeaveRequestId,
                 "Leave cancelled and days refunded to available balance"
@@ -176,7 +169,7 @@ public class LeaveBalanceService {
         recordTransaction(
                 employee,
                 leaveType,
-                TX_HOLD_RELEASE,
+                HOLD_RELEASE,
                 duration,
                 referenceId,
                 "Pending hold released due to rejection or pre-approval cancellation"
@@ -222,6 +215,6 @@ public class LeaveBalanceService {
 
         leaveBalanceRepository.save(balance);
 
-        recordTransaction(employee, leaveType, TX_LEAVE_DEDUCT, duration, null, description);
+        recordTransaction(employee, leaveType, LEAVE_DEDUCT, duration, null, description);
     }
 }

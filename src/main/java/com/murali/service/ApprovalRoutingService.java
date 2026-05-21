@@ -38,10 +38,6 @@ public class ApprovalRoutingService {
         this.userRepository = userRepository;
     }
 
-
-    /**
-     * Helper to create the individual routing records.
-     */
     private void createApprovalRecord(LeaveRequest request, User approver, int level) {
         LeaveApproval approval = new LeaveApproval();
         approval.setLeaveRequest(request);
@@ -51,13 +47,9 @@ public class ApprovalRoutingService {
         leaveApprovalRepository.save(approval);
     }
 
-    /**
-     * 2. Workflow Advancement: Called when a user clicks "Approve" or "Reject" in the UI.
-     */
     @Transactional
     public void processApprovalAction(Long leaveApprovalId, String action, String comments, User actor) {
 
-        // 1. Null Check & Input Validation
         if (action == null || action.trim().isEmpty()) {
             throw new IllegalArgumentException("Action cannot be null or empty");
         }
@@ -67,7 +59,6 @@ public class ApprovalRoutingService {
             throw new IllegalArgumentException("Invalid action: " + action);
         }
 
-        // 2. Fetch the Approval Record
         LeaveApproval approval = leaveApprovalRepository.findById(leaveApprovalId)
                 .orElseThrow(() -> new IllegalArgumentException("Approval record not found"));
 
@@ -94,7 +85,7 @@ public class ApprovalRoutingService {
 
         if (ACTION_REJECTED.equals(normalizedAction)) {
             handleRejection(request);
-        } else if (ACTION_APPROVED.equals(normalizedAction)) {
+        } else {
             handleAdvancement(request);
         }
     }
@@ -112,6 +103,7 @@ public class ApprovalRoutingService {
 
         if (nextLevel != null) {
             request.setCurrentLevel(nextLevel);
+            request.setStatus("PENDING LVL"+nextLevel);
             leaveRequestRepository.save(request);
             // TODO: Trigger Email/Notification Service for the Next Level Approver
         } else {
@@ -264,5 +256,8 @@ public class ApprovalRoutingService {
             );
         }
         return users.getFirst();
-       }
+    }
+    public List<LeaveApproval> getApprovalsForRequest(Long leaveRequestId) {
+        return leaveApprovalRepository.findByLeaveRequestIdOrderByApprovalLevelAsc(leaveRequestId);
+    }
 }
