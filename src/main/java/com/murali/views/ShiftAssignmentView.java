@@ -63,7 +63,7 @@ public class ShiftAssignmentView extends VerticalLayout {
     private final DatePicker filterDate = new DatePicker("Filter by Date");
     private final TextField searchEmployee = new TextField("Search Employee");
 
-    private final Grid<PivotRowDTO> pivotGrid = new Grid<>(PivotRowDTO.class, false);
+    private final Grid<RowDTO> pivotGrid = new Grid<>(RowDTO.class, false);
     private final DatePicker weekSelector = new DatePicker("Select Week");
 
     private final Dialog assignmentDialog = new Dialog();
@@ -78,7 +78,7 @@ public class ShiftAssignmentView extends VerticalLayout {
     private final VerticalLayout dialogContentArea = new VerticalLayout();
     private final DatePicker singleDatePicker = new DatePicker("Assignment Date");
 
-    private final Grid<MonthlyPivotRowDTO> monthlyGrid = new Grid<>(MonthlyPivotRowDTO.class, false);
+    private final Grid<MonthlyRowDTO> monthlyGrid = new Grid<>(MonthlyRowDTO.class, false);
     private LocalDate currentMonth = LocalDate.now().withDayOfMonth(1);
     private final Span monthLabel = new Span();
 
@@ -262,7 +262,7 @@ public class ShiftAssignmentView extends VerticalLayout {
 
     private void setupPivotColumns(LocalDate selectedDate) {
         pivotGrid.removeAllColumns();
-        pivotGrid.addColumn(PivotRowDTO::getEmployeeName).setHeader("Employee").setFrozen(true);
+        pivotGrid.addColumn(RowDTO::getEmployeeName).setHeader("Employee").setFrozen(true);
 
         LocalDate startOfWeek = selectedDate.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
 
@@ -304,12 +304,12 @@ public class ShiftAssignmentView extends VerticalLayout {
         List<ShiftAssignmentDTO> flatAssignments =
                 assignmentService.fetchAssignmentsForCalendarPivot(startOfWeek, endOfWeek);
 
-        Map<String, PivotRowDTO> pivotData = new HashMap<>();
+        Map<String,RowDTO> pivotData = new HashMap<>();
 
         for (ShiftAssignmentDTO dto : flatAssignments) {
-            PivotRowDTO row = pivotData.computeIfAbsent(
+            RowDTO row = pivotData.computeIfAbsent(
                     dto.getEmployeeName(),
-                    k -> new PivotRowDTO(dto.getEmployeeName())
+                    k -> new RowDTO(dto.getEmployeeName())
             );
 
             row.addShift(dto.getAssignmentDate(), dto);
@@ -459,7 +459,7 @@ public class ShiftAssignmentView extends VerticalLayout {
     private void setupMonthlyColumns() {
         monthlyGrid.removeAllColumns();
 
-        monthlyGrid.addColumn(MonthlyPivotRowDTO::getEmployeeName)
+        monthlyGrid.addColumn(MonthlyRowDTO::getEmployeeName)
                 .setHeader("Employee")
                 .setFrozen(true)
                 .setWidth("180px")
@@ -499,12 +499,12 @@ public class ShiftAssignmentView extends VerticalLayout {
 
         List<ShiftAssignmentDTO> flatAssignments = assignmentService.fetchAssignmentsForCalendarPivot(startOfMonth, endOfMonth);
 
-        java.util.Map<String, MonthlyPivotRowDTO> pivotData = new java.util.HashMap<>();
+        java.util.Map<String, MonthlyRowDTO> pivotData = new java.util.HashMap<>();
 
         for (ShiftAssignmentDTO dto : flatAssignments) {
-            MonthlyPivotRowDTO row = pivotData.computeIfAbsent(
+            MonthlyRowDTO row = pivotData.computeIfAbsent(
                     dto.getEmployeeName(),
-                    k -> new MonthlyPivotRowDTO(dto.getEmployeeName())
+                    k -> new MonthlyRowDTO(dto.getEmployeeName())
             );
 
             int dayOfMonth = dto.getAssignmentDate().getDayOfMonth();

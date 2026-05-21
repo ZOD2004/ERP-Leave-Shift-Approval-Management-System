@@ -8,11 +8,11 @@ import java.time.LocalDate;
 @AllArgsConstructor
 @NoArgsConstructor
 @Data
-public class PivotRowDTO {
+public class RowDTO {
     private String employeeName;
     private java.util.Map<LocalDate, ShiftAssignmentDTO> schedule = new java.util.HashMap<>();
 
-    public PivotRowDTO(String employeeName) {
+    public RowDTO(String employeeName) {
         this.employeeName = employeeName;
     }
 

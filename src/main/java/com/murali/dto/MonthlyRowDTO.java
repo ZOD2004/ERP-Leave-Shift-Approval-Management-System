@@ -7,11 +7,11 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 @NoArgsConstructor
 @Data
-public class MonthlyPivotRowDTO {
+public class MonthlyRowDTO {
     private String employeeName;
     private java.util.Map<Integer, ShiftAssignmentDTO> schedule = new java.util.HashMap<>();
 
-    public MonthlyPivotRowDTO(String employeeName) {
+    public MonthlyRowDTO(String employeeName) {
         this.employeeName = employeeName;
     }
 

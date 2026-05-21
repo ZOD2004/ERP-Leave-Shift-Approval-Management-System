@@ -110,7 +110,6 @@ public class DashboardView extends VerticalLayout {
             managerTitle.addClassNames(LumoUtility.Margin.Top.XLARGE, LumoUtility.Margin.Bottom.MEDIUM, LumoUtility.TextColor.PRIMARY);
             add(managerTitle);
 
-            // Add the Manager Widgets
             add(createTeamAttendanceWidget(employeeId));
             add(new Hr());
             add(createManagerApprovalsWidget(securityService.getCurrentUserId()));
@@ -118,7 +117,6 @@ public class DashboardView extends VerticalLayout {
             add(createTeamShiftsWidget(employeeId));
         }
 
-        // --- View A: Base Employee Widgets ---
         if (securityService.hasRole("ROLE_MANAGER") || securityService.hasRole("ROLE_DEPT_HEAD")
         || securityService.hasRole("ROLE_EMPLOYEE")){
 
@@ -127,9 +125,6 @@ public class DashboardView extends VerticalLayout {
             add(new Hr());
             add(createMyHistoryWidget(employeeId));
         }
-
-
-        // --- View B: Add Manager Workspace if applicable ---
 
         if (securityService.hasRole("ROLE_HR_ADMIN") || securityService.hasRole("ROLE_SUPER_ADMIN")) {
             add(new Hr());
@@ -148,9 +143,6 @@ public class DashboardView extends VerticalLayout {
         }
     }
 
-    // =========================================================================
-    // WIDGET 1: Header (Welcome, Clock In/Out, New Leave)
-    // =========================================================================
     private Component createHeaderWidget(Long employeeId) {
         String username = securityService.getAuthenticatedUser().getUsername();
         H2 welcomeText = new H2("Welcome back, " + username + "!");
@@ -213,9 +205,6 @@ public class DashboardView extends VerticalLayout {
         }
     }
 
-    // =========================================================================
-    // WIDGET 2: Leave Balances
-    // =========================================================================
     private Component createLeaveBalanceWidget(Long employeeId) {
         VerticalLayout section = new VerticalLayout();
         section.setPadding(false);
@@ -278,9 +267,6 @@ public class DashboardView extends VerticalLayout {
         return card;
     }
 
-    // =========================================================================
-    // WIDGET 3: Upcoming Shifts
-    // =========================================================================
     private Component createUpcomingShiftsWidget(Long employeeId) {
         VerticalLayout section = new VerticalLayout();
         section.setPadding(false);
@@ -316,9 +302,6 @@ public class DashboardView extends VerticalLayout {
         return section;
     }
 
-    // =========================================================================
-    // WIDGET 4: My History (Tabs)
-    // =========================================================================
     private Component createMyHistoryWidget(Long employeeId) {
         VerticalLayout layout = new VerticalLayout();
         layout.setPadding(false);
@@ -409,9 +392,6 @@ public class DashboardView extends VerticalLayout {
         layout.add(toolbar, grid);
         return layout;
     }
-    // =========================================================================
-    // MANAGER WIDGET 1: Pending Approvals Inbox
-    // =========================================================================
     private Component createManagerApprovalsWidget(Long userId) {
         VerticalLayout section = new VerticalLayout();
         section.setPadding(false);
@@ -535,9 +515,6 @@ public class DashboardView extends VerticalLayout {
         }
     }
 
-    // =========================================================================
-    // MANAGER WIDGET 2: Today's Team Attendance Summary
-    // =========================================================================
     private Component createTeamAttendanceWidget(Long managerId) {
         VerticalLayout section = new VerticalLayout();
         section.setPadding(false);
@@ -597,9 +574,6 @@ public class DashboardView extends VerticalLayout {
         return card;
     }
 
-    // =========================================================================
-    // MANAGER WIDGET 3: Team Shifts
-    // =========================================================================
     private Component createTeamShiftsWidget(Long managerId) {
         VerticalLayout section = new VerticalLayout();
         section.setPadding(false);
@@ -622,9 +596,6 @@ public class DashboardView extends VerticalLayout {
         section.add(title, grid);
         return section;
     }
-    // =========================================================================
-    // HR WIDGET 1: Global KPIs
-    // =========================================================================
     private Component createHrKpiWidget() {
         HorizontalLayout layout = new HorizontalLayout();
         layout.setWidthFull();
@@ -641,9 +612,6 @@ public class DashboardView extends VerticalLayout {
         return layout;
     }
 
-    // =========================================================================
-    // HR WIDGET 2: Global Leave Utilization
-    // =========================================================================
     private Component createHrUtilizationWidget() {
         VerticalLayout layout = new VerticalLayout();
         layout.setPadding(false);
@@ -681,9 +649,6 @@ public class DashboardView extends VerticalLayout {
         return layout;
     }
 
-    // =========================================================================
-    // HR WIDGET 3: Attendance Anomalies (Corrections) Grid
-    // =========================================================================
     private Component createHrAnomaliesWidget() {
         VerticalLayout section = new VerticalLayout();
         section.setPadding(false);
@@ -710,10 +675,6 @@ public class DashboardView extends VerticalLayout {
         section.add(title, grid);
         return section;
     }
-
-    // =========================================================================
-    // HR WIDGET 4: Monthly Shift Pivot
-    // =========================================================================
     private Component createHrMonthlyPivotWidget() {
         VerticalLayout section = new VerticalLayout();
         section.setPadding(false);
@@ -722,11 +683,11 @@ public class DashboardView extends VerticalLayout {
         H3 title = new H3("Monthly Shift Overview (" + today.getMonth().name() + ")");
         title.addClassNames(LumoUtility.Margin.Top.NONE, LumoUtility.Margin.Bottom.SMALL);
 
-        Grid<com.murali.dto.MonthlyPivotRowDTO> monthlyGrid = new Grid<>(com.murali.dto.MonthlyPivotRowDTO.class, false);
+        Grid<com.murali.dto.MonthlyRowDTO> monthlyGrid = new Grid<>(com.murali.dto.MonthlyRowDTO.class, false);
         monthlyGrid.addThemeVariants(GridVariant.LUMO_COMPACT, GridVariant.LUMO_ROW_STRIPES);
         monthlyGrid.setHeight("400px");
 
-        monthlyGrid.addColumn(com.murali.dto.MonthlyPivotRowDTO::getEmployeeName)
+        monthlyGrid.addColumn(com.murali.dto.MonthlyRowDTO::getEmployeeName)
                 .setHeader("Employee")
                 .setFrozen(true)
                 .setWidth("180px")
@@ -753,12 +714,12 @@ public class DashboardView extends VerticalLayout {
         LocalDate endOfMonth = today.withDayOfMonth(daysInMonth);
 
         List<com.murali.dto.ShiftAssignmentDTO> flatAssignments = shiftAssignmentService.fetchAssignmentsForCalendarPivot(startOfMonth, endOfMonth);
-        java.util.Map<String, com.murali.dto.MonthlyPivotRowDTO> pivotData = new java.util.HashMap<>();
+        java.util.Map<String, com.murali.dto.MonthlyRowDTO> pivotData = new java.util.HashMap<>();
 
         for (com.murali.dto.ShiftAssignmentDTO dto : flatAssignments) {
-            com.murali.dto.MonthlyPivotRowDTO row = pivotData.computeIfAbsent(
+            com.murali.dto.MonthlyRowDTO row = pivotData.computeIfAbsent(
                     dto.getEmployeeName(),
-                    k -> new com.murali.dto.MonthlyPivotRowDTO(dto.getEmployeeName())
+                    k -> new com.murali.dto.MonthlyRowDTO(dto.getEmployeeName())
             );
             row.addShift(dto.getAssignmentDate().getDayOfMonth(), dto);
         }
@@ -767,9 +728,6 @@ public class DashboardView extends VerticalLayout {
         section.add(title, monthlyGrid);
         return section;
     }
-    // =========================================================================
-    // SUPER ADMIN ORCHESTRATOR
-    // =========================================================================
     private void buildSuperAdminUI() {
         HorizontalLayout header = new HorizontalLayout(
                 new H2("System Administrator Console")
@@ -783,7 +741,6 @@ public class DashboardView extends VerticalLayout {
         add(createSystemStatusWidget());
         add(new Hr());
 
-        // Use a HorizontalLayout to put Audit Logs and Quick Links side-by-side
         HorizontalLayout bottomRow = new HorizontalLayout();
         bottomRow.setWidthFull();
 
@@ -796,10 +753,6 @@ public class DashboardView extends VerticalLayout {
 
         add(bottomRow);
     }
-
-    // =========================================================================
-    // SUPER ADMIN WIDGET 1: System KPIs
-    // =========================================================================
     private Component createSuperAdminKpis() {
         HorizontalLayout layout = new HorizontalLayout();
         layout.setWidthFull();
@@ -816,9 +769,6 @@ public class DashboardView extends VerticalLayout {
         return layout;
     }
 
-    // =========================================================================
-    // SUPER ADMIN WIDGET 2: System Status (Cron & Sync)
-    // =========================================================================
     private Component createSystemStatusWidget() {
         VerticalLayout layout = new VerticalLayout();
         layout.setPadding(false);
@@ -830,7 +780,6 @@ public class DashboardView extends VerticalLayout {
         HorizontalLayout monitors = new HorizontalLayout();
         monitors.setWidthFull();
 
-        // Monitor 1: Cron Job
         VerticalLayout cronMonitor = new VerticalLayout(
                 new Span(VaadinIcon.AUTOMATION.create(), new Span(" Attendance Cron Engine")),
                 new Span("Status: " + attendanceCronJobService.getLastRunStatus()),
@@ -838,13 +787,6 @@ public class DashboardView extends VerticalLayout {
         );
         styleMonitorCard(cronMonitor, attendanceCronJobService.getLastRunStatus());
 
-        // Monitor 2: Sync Service (Assuming it's injected or passed through DashboardService)
-//        VerticalLayout syncMonitor = new VerticalLayout(
-//                new Span(VaadinIcon.DATABASE.create(), new Span(" Database Sync Layer")),
-//                new Span("Status: " + dashboardService.getSyncStatus()), // ADD THIS TO DashboardService
-//                new Span("Last Sync: " + (dashboardService.getLastSyncTime() != null ? dashboardService.getLastSyncTime().toString() : "N/A")) // ADD THIS TO DashboardService
-//        );
-//        styleMonitorCard(syncMonitor, dashboardService.getSyncStatus());
 
         monitors.add(cronMonitor);
         layout.add(title, monitors);
@@ -866,10 +808,6 @@ public class DashboardView extends VerticalLayout {
             card.getStyle().set("border-left", "4px solid var(--lumo-error-color)");
         }
     }
-
-    // =========================================================================
-    // SUPER ADMIN WIDGET 3: Audit Logs
-    // =========================================================================
     private Component createAuditLogWidget() {
         VerticalLayout section = new VerticalLayout();
         section.setPadding(false);
@@ -886,15 +824,12 @@ public class DashboardView extends VerticalLayout {
         grid.addColumn(com.murali.entity.AuditLog::getAction).setHeader("Action").setAutoWidth(true);
         grid.addColumn(com.murali.entity.AuditLog::getDetails).setHeader("Details").setAutoWidth(true).setFlexGrow(1);
 
-        grid.setItems(auditLogService.getRecentLogs(50));
+        grid.setItems(auditLogService.getRecentLogs(40));
 
         section.add(title, grid);
         return section;
     }
 
-    // =========================================================================
-    // SUPER ADMIN WIDGET 4: Quick Navigation
-    // =========================================================================
     private Component createQuickNavWidget() {
         VerticalLayout section = new VerticalLayout();
         section.setPadding(false);

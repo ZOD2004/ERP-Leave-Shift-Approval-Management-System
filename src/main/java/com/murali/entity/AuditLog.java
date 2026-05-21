@@ -7,7 +7,7 @@ import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 import lombok.Data;
-import java.time.LocalDateTime;
+import org.hibernate.annotations.CreationTimestamp;
 
 @Data
 @AllArgsConstructor
@@ -17,6 +17,7 @@ public class AuditLog {
     @Id
     @GeneratedValue(strategy = GenerationType.AUTO)
     private Long id;
+    @CreationTimestamp
     private LocalDateTime timestamp;
     private String username;
     private String action;

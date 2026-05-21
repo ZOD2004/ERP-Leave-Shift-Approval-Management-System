@@ -94,7 +94,7 @@ public class ApprovalRoutingService {
 
         if (ACTION_REJECTED.equals(normalizedAction)) {
             handleRejection(request);
-        } else if (ACTION_APPROVED.equals(normalizedAction)) {
+        } else {
             handleAdvancement(request);
         }
     }
