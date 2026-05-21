@@ -3,6 +3,7 @@ package com.murali.service;
 import com.murali.dto.BatchPreviewResponse;
 import com.murali.dto.ShiftAssignmentDTO;
 import com.murali.dto.ShiftConflictDTO;
+import com.murali.entity.AuditLog;
 import com.murali.entity.Employee;
 import com.murali.entity.LeaveRequest;
 import com.murali.entity.Shift;
@@ -12,6 +13,7 @@ import com.murali.exception.ShiftConflictException;
 import com.murali.exception.ShiftNotFoundException;
 import com.murali.repository.*;
 import jakarta.persistence.EntityNotFoundException;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
@@ -26,6 +28,7 @@ import java.time.LocalTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 public class ShiftAssignmentService {
 
@@ -35,14 +38,25 @@ public class ShiftAssignmentService {
     private final EmployeeRepository employeeRepository;
     private final ShiftRepository shiftRepository;
 
-    public ShiftAssignmentService(ShiftAssignmentRepository shiftAssignmentRepository, HolidayRepository holidayRepository, LeaveRequestRepository leaveRequestRepository, EmployeeRepository employeeRepository, ShiftRepository shiftRepository) {
+    // --- ADDED DEPENDENCIES ---
+    private final AuditLogRepository auditLogRepository;
+    private final SecurityService securityService;
+
+    public ShiftAssignmentService(ShiftAssignmentRepository shiftAssignmentRepository,
+                                  HolidayRepository holidayRepository,
+                                  LeaveRequestRepository leaveRequestRepository,
+                                  EmployeeRepository employeeRepository,
+                                  ShiftRepository shiftRepository,
+                                  AuditLogRepository auditLogRepository,
+                                  SecurityService securityService) {
         this.shiftAssignmentRepository = shiftAssignmentRepository;
         this.holidayRepository = holidayRepository;
         this.leaveRequestRepository = leaveRequestRepository;
         this.employeeRepository = employeeRepository;
         this.shiftRepository = shiftRepository;
+        this.auditLogRepository = auditLogRepository;
+        this.securityService = securityService;
     }
-
 
     public void validateShiftConflict(Long employeeId, LocalDate assignmentDate, Long excludeAssignmentId) {
 
@@ -68,13 +82,12 @@ public class ShiftAssignmentService {
     }
 
     public Page<ShiftAssignmentDTO> fetchAssignmentsForGrid(int offset,int limit,
-            LocalDate filterDate,String employeeNameSearch){
+                                                            LocalDate filterDate,String employeeNameSearch){
         int pageNumber = offset / limit;
         Pageable pageable =
-        PageRequest.of(pageNumber, limit, Sort.by("assignmentDate").ascending());
+                PageRequest.of(pageNumber, limit, Sort.by("assignmentDate").ascending());
 
         Page<ShiftAssignment> assignmentPage;
-
 
         if (filterDate != null && employeeNameSearch != null && !employeeNameSearch.isBlank()) {
             assignmentPage = shiftAssignmentRepository.findFilteredAssignments(filterDate, employeeNameSearch, pageable);
@@ -92,7 +105,6 @@ public class ShiftAssignmentService {
 
         return assignmentPage.map(this::mapToDTO);
     }
-
 
     public List<ShiftAssignmentDTO> fetchAssignmentsForCalendarPivot(LocalDate viewStartDate,LocalDate viewEndDate){
         List<ShiftAssignment> assignments = shiftAssignmentRepository
@@ -137,14 +149,15 @@ public class ShiftAssignmentService {
         }
         return pivotData;
     }
+
     public BatchPreviewResponse previewBatchAssignments(List<Long> employeeIds, Long shiftId, LocalDate startDate, String duration) {
         LocalDate endDate = calculateEndDate(startDate, duration);
         return previewBatchAssignments(employeeIds, shiftId, startDate, endDate);
     }
+
     public BatchPreviewResponse previewBatchAssignments(List<Long> employeeIds, Long shiftId
             , LocalDate startDate, LocalDate endDate) {
         BatchPreviewResponse response = new BatchPreviewResponse();
-
 
         // 2. Fetch base entities directly (Throws exception immediately if missing to avoid Optional wrappers)
         Shift shift = shiftRepository.findById(shiftId)
@@ -246,9 +259,6 @@ public class ShiftAssignmentService {
         return response;
     }
 
-    /**
-     * 2. The Final Execution Engine
-     */
     @Transactional
     public void saveResolvedBatch(List<ShiftAssignmentDTO> finalCleanAssignments) {
         if (finalCleanAssignments == null || finalCleanAssignments.isEmpty()) {
@@ -295,6 +305,9 @@ public class ShiftAssignmentService {
         }
 
         shiftAssignmentRepository.saveAll(assignmentsToSave);
+
+        log.info("Batch of {} shift assignments saved successfully.", assignmentsToSave.size());
+        saveAuditLog(null, "BATCH_CREATED", "shift_assignments", "Created " + assignmentsToSave.size() + " shift assignments.");
     }
 
     @Transactional
@@ -332,6 +345,10 @@ public class ShiftAssignmentService {
 
         // 6. Save and Map
         ShiftAssignment savedAssignment = shiftAssignmentRepository.save(existingAssignment);
+
+        log.info("Shift assignment UPDATED successfully. ID: {}", savedAssignment.getId());
+        saveAuditLog(savedAssignment.getId(), "UPDATED", "shift_assignments", "Updated shift assignment for employee ID " + savedAssignment.getEmployee().getId() + " on " + savedAssignment.getAssignmentDate());
+
         return mapToDTO(savedAssignment);
     }
 
@@ -341,6 +358,9 @@ public class ShiftAssignmentService {
             throw new ShiftNotFoundException("Cannot delete: Shift Assignment not found with ID: " + id);
         }
         shiftAssignmentRepository.deleteById(id);
+
+        log.info("Shift assignment DELETED successfully. ID: {}", id);
+        saveAuditLog(id, "DELETED", "shift_assignments", "Deleted shift assignment ID: " + id);
     }
 
 
@@ -402,6 +422,7 @@ public class ShiftAssignmentService {
 
         return dto;
     }
+
     private List<ShiftAssignment> filterOutApprovedFullDayLeaves(List<ShiftAssignment> assignments) {
         if (assignments == null || assignments.isEmpty()) return assignments;
 
@@ -444,5 +465,32 @@ public class ShiftAssignmentService {
         // 3. Filter out full-day leaves and map to DTO
         teamAssignments = filterOutApprovedFullDayLeaves(teamAssignments);
         return mapToDTOList(teamAssignments);
+    }
+
+    // --- ADDED HELPER METHOD ---
+    private void saveAuditLog(Long recordId, String action, String tableAffected, String details) {
+        try {
+            String username = "SYSTEM";
+            String role = "SYSTEM";
+
+            if (securityService.getPrincipal() != null) {
+                username = securityService.getPrincipal().getUsername();
+                if (securityService.getAuthentication() != null && !securityService.getAuthentication().getAuthorities().isEmpty()) {
+                    role = securityService.getAuthentication().getAuthorities().iterator().next().getAuthority();
+                }
+            }
+
+            AuditLog auditLog = new AuditLog();
+            auditLog.setUsername(username);
+            auditLog.setRole(role);
+            auditLog.setRecordId(recordId);
+            auditLog.setAction(action);
+            auditLog.setTableAffected(tableAffected);
+            auditLog.setDetails(details);
+
+            auditLogRepository.save(auditLog);
+        } catch (Exception e) {
+            log.error("Failed to save audit log for shift assignment record {}: {}", recordId, e.getMessage());
+        }
     }
 }

@@ -2,8 +2,10 @@ package com.murali.service;
 
 import com.murali.entity.*;
 import com.murali.exception.PastDateException;
+import com.murali.repository.AuditLogRepository;
 import com.murali.repository.EmployeeRepository;
 import com.murali.repository.LeaveRequestRepository;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -12,6 +14,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 
+@Slf4j
 @Service
 public class LeaveRequestService {
 
@@ -21,8 +24,9 @@ public class LeaveRequestService {
     private final LeaveApprovalRuleService ruleService;
     private final EmployeeRepository employeeRepository;
     private final AttendanceSyncService attendanceSyncService;
-
     private final ApprovalRoutingService approvalRoutingService;
+    private final AuditLogRepository auditLogRepository;
+    private final SecurityService securityService;
 
     public static final String STATUS_PENDING = "PENDING";
     public static final String STATUS_APPROVED = "APPROVED";
@@ -31,7 +35,7 @@ public class LeaveRequestService {
 
     private static final List<String> BACKDATED_ALLOWED_CODES = List.of("EMG-001", "SL-001");
 
-    public LeaveRequestService(LeaveRequestRepository leaveRequestRepository, DurationEngineService durationEngineService, LeaveBalanceService leaveBalanceService, LeaveApprovalRuleService ruleService, EmployeeRepository employeeRepository, AttendanceSyncService attendanceSyncService, ApprovalRoutingService approvalRoutingService) {
+    public LeaveRequestService(LeaveRequestRepository leaveRequestRepository, DurationEngineService durationEngineService, LeaveBalanceService leaveBalanceService, LeaveApprovalRuleService ruleService, EmployeeRepository employeeRepository, AttendanceSyncService attendanceSyncService, ApprovalRoutingService approvalRoutingService, AuditLogRepository auditLogRepository, SecurityService securityService) {
         this.leaveRequestRepository = leaveRequestRepository;
         this.durationEngineService = durationEngineService;
         this.leaveBalanceService = leaveBalanceService;
@@ -39,12 +43,14 @@ public class LeaveRequestService {
         this.employeeRepository = employeeRepository;
         this.attendanceSyncService = attendanceSyncService;
         this.approvalRoutingService = approvalRoutingService;
+        this.auditLogRepository = auditLogRepository;
+        this.securityService = securityService;
     }
 
     @Transactional
     public void submitLeaveRequest(Employee detachedEmployee, LeaveType leaveType,
-                                           LocalDate startDate, LocalDate endDate,
-                                           String reason, Integer currentYear) {
+                                   LocalDate startDate, LocalDate endDate,
+                                   String reason, Integer currentYear) {
 
         Employee employee = employeeRepository.findById(detachedEmployee.getId())
                 .orElseThrow(() -> new IllegalArgumentException("Employee not found"));
@@ -123,11 +129,12 @@ public class LeaveRequestService {
 
         LeaveRequest savedRequest = leaveRequestRepository.save(request);
 
-
         leaveBalanceService.holdPendingBalance(employee, leaveType, duration, currentYear, savedRequest.getId());
 
         approvalRoutingService.generateApprovalWorkflow(savedRequest, applicableRules, isNegativeBalance);
 
+        log.info("Leave request submitted successfully. Employee ID: {}, Leave Request ID: {}", employee.getId(), savedRequest.getId());
+        saveAuditLog(savedRequest.getId(), "CREATED", "leave_requests", "Leave request submitted for " + duration + " days. Type: " + leaveType.getCode());
     }
 
     @Transactional(readOnly = true)
@@ -155,7 +162,6 @@ public class LeaveRequestService {
         LeaveRequest request = leaveRequestRepository.findById(leaveRequestId)
                 .orElseThrow(() -> new IllegalArgumentException("Leave request not found"));
 
-        // Security check
         if (!request.getEmployee().getId().equals(requestingEmployeeId)) {
             throw new SecurityException("You do not have permission to cancel this leave.");
         }
@@ -167,26 +173,49 @@ public class LeaveRequestService {
         }
 
         if (currentStatus.equals(STATUS_PENDING)) {
-            // 1. Mark request as cancelled
             request.setStatus(STATUS_CANCELLED);
-            // 2. Release the pending days back to the balance
             leaveBalanceService.releasePendingHold(
                     request.getEmployee(), request.getLeaveType(), request.getDurationDays(), currentYear, request.getId()
             );
-            // 3. Mark the Manager/HR inbox items as cancelled
             approvalRoutingService.cancelPendingApprovals(request.getId());
         }
         else if (currentStatus.equals(STATUS_APPROVED)) {
-            // 1. Mark request as cancelled
             request.setStatus(STATUS_CANCELLED);
-            // 2. Refund the actually deducted days
             leaveBalanceService.rollbackDeduction(
                     request.getEmployee(), request.getLeaveType(), request.getDurationDays(), request.getId(), currentYear
             );
-            // 3. Trigger Attendance Reversal
             attendanceSyncService.revertLeaveFromAttendance(request);
         }
 
         leaveRequestRepository.save(request);
+
+        log.info("Leave request cancelled successfully. Leave Request ID: {}, Previous Status: {}", leaveRequestId, currentStatus);
+        saveAuditLog(leaveRequestId, "CANCELLED", "leave_requests", "Leave request cancelled by employee ID " + requestingEmployeeId + ". Previous status was " + currentStatus);
+    }
+
+    private void saveAuditLog(Long recordId, String action, String tableAffected, String details) {
+        try {
+            String username = "SYSTEM";
+            String role = "SYSTEM";
+
+            if (securityService.getPrincipal() != null) {
+                username = securityService.getPrincipal().getUsername();
+                if (securityService.getAuthentication() != null && !securityService.getAuthentication().getAuthorities().isEmpty()) {
+                    role = securityService.getAuthentication().getAuthorities().iterator().next().getAuthority();
+                }
+            }
+
+            AuditLog auditLog = new AuditLog();
+            auditLog.setUsername(username);
+            auditLog.setRole(role);
+            auditLog.setRecordId(recordId);
+            auditLog.setAction(action);
+            auditLog.setTableAffected(tableAffected);
+            auditLog.setDetails(details);
+
+            auditLogRepository.save(auditLog);
+        } catch (Exception e) {
+            log.error("Failed to save audit log for leave request record {}: {}", recordId, e.getMessage());
+        }
     }
 }

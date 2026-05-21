@@ -15,7 +15,4 @@ public class AuditLogService {
         this.auditLogRepository = auditLogRepository;
     }
 
-    public List<AuditLog> getRecentLogs(int limit) {
-        return auditLogRepository.findByOrderByTimestampDesc(PageRequest.of(0, limit));
-    }
 }
