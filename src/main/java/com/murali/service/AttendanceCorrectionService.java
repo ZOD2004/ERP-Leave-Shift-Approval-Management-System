@@ -15,6 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Slf4j
 @Service
@@ -73,18 +74,15 @@ public class AttendanceCorrectionService {
             correction.setStatus("APPROVED");
 
         } else if ("REJECTED".equalsIgnoreCase(action)) {
-
-            // 1. Update Attendance Status to completely absent
             attendance.setStatus("ABSENT");
 
-            // 2. Deduct the remaining 0.5 days to make it a full 1.0 day penalty
-            LeaveType casualLeave = leaveTypeRepository.findByNameContainingIgnoreCaseOrCodeContainingIgnoreCase("Casual Leave", "CL-001").getFirst();
-            leaveBalanceService.deduct(
+            LeaveType halfDayLeave = leaveTypeRepository.findByNameContainingIgnoreCaseOrCodeContainingIgnoreCase("Half Day Leave", "HDL-001").getFirst();
+            leaveBalanceService.deductPenalty(
                     attendance.getEmployee(),
-                    casualLeave,
+                    halfDayLeave,
                     BigDecimal.valueOf(0.5),
-                    null,
-                    attendance.getAttendanceDate().getYear()
+                    attendance.getAttendanceDate().getYear(),
+                    "Missing Check-out Rejected by Manager"
             );
 
             correction.setStatus("REJECTED");
@@ -106,5 +104,9 @@ public class AttendanceCorrectionService {
         return userRepository.findFirstByRoleName("ROLE_HR_ADMIN")
                 .stream().findFirst()
                 .orElseThrow(() -> new IllegalStateException("No Manager or HR Admin available to route anomaly."));
+    }
+    @Transactional(readOnly = true)
+    public List<AttendanceCorrection> getPendingCorrectionsForApprover(Long approverId) {
+        return correctionRepository.findPendingCorrectionsForManager(approverId);
     }
 }

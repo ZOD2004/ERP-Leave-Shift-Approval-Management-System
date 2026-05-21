@@ -62,13 +62,13 @@ public class AttendanceCronJobService {
                 .stream()
                 .collect(Collectors.toMap(a -> a.getEmployee().getId(), a -> a));
 
-        List<LeaveType> casualLeaves = leaveTypeRepository.findByNameContainingIgnoreCaseOrCodeContainingIgnoreCase("Casual Leave","CL-001");
+        LeaveType emergencyLeave = leaveTypeRepository.findByNameContainingIgnoreCaseOrCodeContainingIgnoreCase("Emergency Leave", "EMG-001")
+                .stream().findFirst().orElseThrow(() -> new IllegalStateException("Emergency Leave type not found!"));
 
-        if (casualLeaves.isEmpty()) {
-            log.error("Casual Leave type not found! Halting attendance reconciliation to prevent data corruption.");
-            return;
-        }
-        LeaveType casualLeave = casualLeaves.getFirst();
+        LeaveType halfDayLeave = leaveTypeRepository.findByNameContainingIgnoreCaseOrCodeContainingIgnoreCase("Half Day Leave", "HDL-001")
+                .stream().findFirst().orElseThrow(() -> new IllegalStateException("Half Day Leave type not found!"));
+
+
 
         for (Long employeeId : activeEmployeeIds) {
 
@@ -88,62 +88,33 @@ public class AttendanceCronJobService {
                 continue;
             }
 
-            // Rule A: No Check-In -> Mark Absent and Deduct
+            // Rule A: No Check-In -> Mark Absent and Deduct EMERGENCY LEAVE
             if (attendance.getCheckIn() == null) {
                 if (!"HALF_DAY_LEAVE".equals(currentStatus)) {
                     attendance.setStatus("ABSENT");
-
-                    leaveBalanceService.deduct(
-                            attendance.getEmployee(),
-                            casualLeave,
-                            BigDecimal.valueOf(1.0),
-                            null,
-                            targetDate.getYear() // FIX: Use targetDate year
-                    );
-                    log.info("Employee {} marked ABSENT for {}. 1 day deducted.", employeeId, targetDate);
+                    leaveBalanceService.deductPenalty(attendance.getEmployee(), emergencyLeave, BigDecimal.valueOf(1.0), targetDate.getYear(), "Absent without notice");
                 } else {
                     attendance.setStatus("HALF_DAY_ABSENT");
-                    leaveBalanceService.deduct(
-                            attendance.getEmployee(),
-                            casualLeave,
-                            BigDecimal.valueOf(0.5),
-                            null,
-                            targetDate.getYear() // FIX: Use targetDate year
-                    );
-                    log.info("Employee {} on Half-Day Leave missed shift on {}. 0.5 days deducted.", employeeId, targetDate);
+                    leaveBalanceService.deductPenalty(attendance.getEmployee(), emergencyLeave, BigDecimal.valueOf(0.5), targetDate.getYear(), "Missed shift on half-day leave");
                 }
             }
             // Rule B: Checked In -> Validate Hours Worked
             else {
                 if (attendance.getCheckOut() == null) {
                     attendance.setStatus("MISSING_CHECKOUT");
-
-                    leaveBalanceService.deduct(
-                            attendance.getEmployee(),
-                            casualLeave,
-                            BigDecimal.valueOf(0.5),
-                            null,
-                            targetDate.getYear() // FIX: Use targetDate year
-                    );
                     attendance = attendanceRepository.save(attendance);
 
-                    // AUTO-TRIGGER THE MANAGER WORKFLOW
+                    // NO PENALTY DEDUCTED YET - Just trigger the workflow
                     attendanceCorrectionService.autoCreateCorrection(attendance);
-                    log.info("Employee {} forgot to check out on {}. Marked MISSING_CHECKOUT. 0.5 days deducted.", employeeId, targetDate);
+                    log.info("Employee {} missing checkout on {}. Sent to manager.", employeeId, targetDate);
                 } else {
                     long hoursWorked = Duration.between(attendance.getCheckIn(), attendance.getCheckOut()).toHours();
 
                     if (hoursWorked < MINIMUM_HOURS_FOR_FULL_DAY) {
                         attendance.setStatus("HALF_DAY_ABSENT");
-
-                        leaveBalanceService.deduct(
-                                attendance.getEmployee(),
-                                casualLeave,
-                                BigDecimal.valueOf(0.5),
-                                null,
-                                targetDate.getYear() // FIX: Use targetDate year
-                        );
-                        log.info("Employee {} worked < 4 hours ({} hrs) on {}. Marked HALF_DAY_ABSENT. 0.5 days deducted.", employeeId, hoursWorked, targetDate);
+                        String desc = "Worked less than "+MINIMUM_HOURS_FOR_FULL_DAY+" hours";
+                        leaveBalanceService.deductPenalty(attendance.getEmployee(), halfDayLeave, BigDecimal.valueOf(0.5),
+                                targetDate.getYear(), desc);
                     }
                 }
             }

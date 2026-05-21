@@ -212,4 +212,16 @@ public class LeaveBalanceService {
 
         transactionRepository.save(transaction);
     }
+
+    @Transactional
+    public void deductPenalty(Employee employee, LeaveType leaveType, BigDecimal duration, Integer year, String description) {
+        LeaveBalance balance = getOrCreateBalance(employee, leaveType, year);
+
+        BigDecimal currentUsed = balance.getUsed() != null ? balance.getUsed() : BigDecimal.ZERO;
+        balance.setUsed(currentUsed.add(duration));
+
+        leaveBalanceRepository.save(balance);
+
+        recordTransaction(employee, leaveType, TX_LEAVE_DEDUCT, duration, null, description);
+    }
 }
