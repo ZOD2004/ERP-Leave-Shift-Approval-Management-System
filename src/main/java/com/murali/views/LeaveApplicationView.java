@@ -152,7 +152,6 @@ public class LeaveApplicationView extends VerticalLayout {
             return viewCommentsBtn;
         }).setHeader("Comments").setAutoWidth(true);
 
-        // New Actions Column with the dynamic Cancel button
         historyGrid.addComponentColumn(this::createActionColumn)
                 .setHeader("Actions")
                 .setAutoWidth(true)
@@ -172,7 +171,6 @@ public class LeaveApplicationView extends VerticalLayout {
     private Component createActionColumn(LeaveRequest request) {
         String status = request.getStatus() != null ? request.getStatus().toUpperCase() : "";
 
-        // Disable cancel action if it's already rejected or cancelled
         if ("REJECTED".equals(status) || "CANCELLED".equals(status)) {
             Button disabledBtn = new Button("Cancel");
             disabledBtn.setEnabled(false);
@@ -200,14 +198,13 @@ public class LeaveApplicationView extends VerticalLayout {
             try {
                 int currentYear = LocalDate.now().getYear();
 
-                // Calling your verified backend service method
                 leaveRequestService.cancelLeaveRequest(request.getId(), currentEmployee.getId(), currentYear);
 
                 Notification.show("Leave request cancelled successfully.", 3000, Notification.Position.TOP_END)
                         .addThemeVariants(NotificationVariant.LUMO_SUCCESS);
 
                 confirmDialog.close();
-                refreshBalanceAndHistory(); // Reactive layout refresh
+                refreshBalanceAndHistory();
 
             } catch (Exception ex) {
                 Notification.show("Cancellation failed: " + ex.getMessage(), 5000, Notification.Position.MIDDLE)

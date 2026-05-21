@@ -125,7 +125,7 @@ public class LeaveBalanceService {
     /**
      * 6. Rollback Logic: Handle Cancellations (For requests that were ALREADY approved)
      */
-    //TODO: to be implemented on cancel leave
+
     @Transactional
     public void rollbackDeduction(Employee employee, LeaveType leaveType, BigDecimal duration, Long originalLeaveRequestId, Integer year) {
         LeaveBalance balance = getOrCreateBalance(employee, leaveType, year);
@@ -150,7 +150,7 @@ public class LeaveBalanceService {
     }
 
     /**
-     * 7. Transactional Update: Release pending hold (When a request is Rejected or Cancelled BEFORE final approval)
+     * 7. Transactional Update: Release pending hold (When a request is Rejected or Canceled BEFORE final approval)
      */
     @Transactional
     public void releasePendingHold(Employee employee, LeaveType leaveType, BigDecimal duration, Integer year, Long referenceId) {
