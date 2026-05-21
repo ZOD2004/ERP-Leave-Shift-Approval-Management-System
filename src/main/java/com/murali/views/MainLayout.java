@@ -85,17 +85,10 @@ public class MainLayout extends AppLayout {
     }
 
     private void addDrawerContent() {
-        Span appName = new Span("Leave & Shift Approval");
-        appName.addClassNames(
-                LumoUtility.FontSize.MEDIUM,
-                LumoUtility.FontWeight.BOLD,
-                LumoUtility.Padding.LARGE,
-                LumoUtility.TextColor.SECONDARY);
-
         SideNav nav = createNavigation();
         Scroller scroller = new Scroller(nav);
 
-        addToDrawer(appName, scroller, createFooter());
+        addToDrawer(scroller, createFooter());
     }
 
     private SideNav createNavigation() {
@@ -104,6 +97,7 @@ public class MainLayout extends AppLayout {
 
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         List<NavMenuItem> menuItems = navService.getMenuItemsForUser(auth);
+        nav.addItem(new SideNavItem("My Dashboard","dashboard",VaadinIcon.DASHBOARD.create()));
 
         for (NavMenuItem item : menuItems) {
             try {
