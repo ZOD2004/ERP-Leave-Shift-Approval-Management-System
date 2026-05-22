@@ -13,4 +13,5 @@ import java.util.List;
 public interface NavMenuItemRepository extends JpaRepository<NavMenuItem, Long> {
 
     List<NavMenuItem> findByRoleName(String roleName);
+    boolean existsByRoleNameAndPath(String roleName, String path);
 }

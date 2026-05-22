@@ -186,6 +186,9 @@ public class ApprovalRoutingService {
 
     @Transactional
     public void generateApprovalWorkflow(LeaveRequest request, List<LeaveApprovalRule> rules, boolean isNegativeBalance) {
+        if ((rules == null || rules.isEmpty()) && !isNegativeBalance) {
+            throw new IllegalArgumentException("Cannot generate workflow: No routing rules found for this leave request configuration.");
+        }
         Employee applicant = request.getEmployee();
 
         for (LeaveApprovalRule rule : rules) {

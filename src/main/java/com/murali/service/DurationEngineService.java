@@ -40,7 +40,7 @@ public class DurationEngineService {
         log.debug("Starting leave calculation for Employee ID: {} | Dates: {} to {}",
                 employee.getId(), startDate, endDate);
 
-        if (leaveType.getId() == 5 || HALF_DAY_CODE.equalsIgnoreCase(leaveType.getCode())) {
+        if (HALF_DAY_CODE.equalsIgnoreCase(leaveType.getCode())) {
             log.info("Half-day leave type detected. Returning 0.5 days.");
             return new BigDecimal("0.5");
         }

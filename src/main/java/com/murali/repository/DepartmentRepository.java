@@ -9,6 +9,9 @@ import java.util.List;
 
 @Repository
 public interface DepartmentRepository extends JpaRepository<Department,Long> {
+
     @EntityGraph(attributePaths = {"hod"})
     List<Department> findAll();
+
+    Department findByName(String name);
 }

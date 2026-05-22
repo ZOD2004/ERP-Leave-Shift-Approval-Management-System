@@ -46,7 +46,7 @@ public class DepartmentService {
     public Department findById(Long id) {
         return departmentRepository.findById(id).get();
     }
-    // --- ADD THIS HELPER METHOD ---
+
     private void saveAuditLog(Long recordId, String action, String tableAffected, String details) {
         try {
             String username = "SYSTEM";

@@ -25,13 +25,16 @@ import com.vaadin.flow.data.value.ValueChangeMode;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
 import jakarta.annotation.security.RolesAllowed;
+import java.util.Set;
 
-@Route(value = "add-leave-types",layout = MainLayout.class)
+@Route(value = "add-leave-types", layout = MainLayout.class)
 @PageTitle("Manage Leave Types")
 @RolesAllowed({"ROLE_SUPER_ADMIN", "ROLE_HR_ADMIN"})
 public class LeaveTypeView extends VerticalLayout {
 
     private final LeaveTypeService leaveTypeService;
+
+    private static final Set<String> SYSTEM_CODES = Set.of("HDL-001", "EMG-001", "SL-001");
 
     private final Grid<LeaveType> grid = new Grid<>(LeaveType.class, false);
     private final TextField searchField = new TextField();
@@ -88,6 +91,11 @@ public class LeaveTypeView extends VerticalLayout {
             Button deleteBtn = new Button(new Icon(VaadinIcon.TRASH));
             deleteBtn.addThemeVariants(ButtonVariant.LUMO_TERTIARY, ButtonVariant.LUMO_ERROR);
             deleteBtn.addClickListener(e -> confirmAndDelete(leaveType));
+            if (leaveType.getCode() != null && SYSTEM_CODES.contains(leaveType.getCode().toUpperCase())) {
+                deleteBtn.setEnabled(false);
+                deleteBtn.setTooltipText("System reserved leave type cannot be deleted.");
+                editBtn.setTooltipText("System code cannot be changed during edit.");
+            }
 
             return new HorizontalLayout(editBtn, deleteBtn);
         }).setHeader("Actions");
@@ -116,6 +124,8 @@ public class LeaveTypeView extends VerticalLayout {
 
         binder.forField(codeField)
                 .asRequired("Code is required")
+                .withValidator(code -> code == null || !SYSTEM_CODES.contains(code.toUpperCase()),
+                        "This code is reserved for system use")
                 .bind(LeaveType::getCode, LeaveType::setCode);
 
         binder.forField(maxDaysField)
@@ -138,12 +148,22 @@ public class LeaveTypeView extends VerticalLayout {
     private void openForm(LeaveType leaveType) {
         currentLeaveType = leaveType;
         binder.readBean(currentLeaveType);
+
+        boolean isSystemCode = leaveType.getCode() != null && SYSTEM_CODES.contains(leaveType.getCode().toUpperCase());
+        codeField.setReadOnly(isSystemCode);
+
         formDialog.open();
     }
 
     private void saveLeaveType() {
         try {
             binder.writeBean(currentLeaveType);
+
+            if (currentLeaveType.getCode() != null && SYSTEM_CODES.contains(currentLeaveType.getCode().toUpperCase()) && currentLeaveType.getId() == null) {
+                showNotification("Cannot create a leave type with a reserved system code.", NotificationVariant.LUMO_ERROR);
+                return;
+            }
+
             leaveTypeService.addLeaveType(currentLeaveType);
 
             showNotification("Leave Type saved successfully", NotificationVariant.LUMO_SUCCESS);
@@ -158,6 +178,11 @@ public class LeaveTypeView extends VerticalLayout {
     }
 
     private void deleteLeaveType(LeaveType leaveType) {
+        if (leaveType.getCode() != null && SYSTEM_CODES.contains(leaveType.getCode().toUpperCase())) {
+            showNotification("System reserved leave types cannot be deleted.", NotificationVariant.LUMO_ERROR);
+            return;
+        }
+
         try {
             leaveTypeService.deleteLeaveType(leaveType.getId());
             showNotification("Leave Type deleted", NotificationVariant.LUMO_SUCCESS);
@@ -166,6 +191,7 @@ public class LeaveTypeView extends VerticalLayout {
             showNotification("Cannot delete this type as it is already in use.", NotificationVariant.LUMO_ERROR);
         }
     }
+
     private void confirmAndDelete(LeaveType leaveType) {
         ConfirmDialog dialog = new ConfirmDialog();
         dialog.setHeader("Delete Leave Type?");
@@ -177,7 +203,6 @@ public class LeaveTypeView extends VerticalLayout {
         dialog.setConfirmText("Delete");
         dialog.setConfirmButtonTheme("error primary");
 
-        // Only execute deletion if confirmed
         dialog.addConfirmListener(event -> deleteLeaveType(leaveType));
 
         dialog.open();
