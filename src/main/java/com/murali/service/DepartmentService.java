@@ -64,7 +64,7 @@ public class DepartmentService {
             auditLog.setRole(role);
             auditLog.setRecordId(recordId);
             auditLog.setAction(action);
-            auditLog.setTableAffected("departments"); // Hardcoded for this service
+            auditLog.setTableAffected("departments");
             auditLog.setDetails(details);
 
             auditLogRepository.save(auditLog);

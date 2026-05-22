@@ -43,9 +43,6 @@ public class AttendanceCorrectionService {
                 attendance.getEmployee().getId(), approver.getUsername());
     }
 
-    /**
-     * 2. Manager Resolution (Called by the Vaadin UI)
-     */
     @Transactional
     public void resolveCorrection(Long correctionId, String action, LocalDateTime manualCheckOutTime, String comments, Long actingUserId) {
         AttendanceCorrection correction = correctionRepository.findById(correctionId)

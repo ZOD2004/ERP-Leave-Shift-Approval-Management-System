@@ -6,6 +6,7 @@ import com.murali.service.EmployeeService;
 import com.murali.service.UserService;
 import jakarta.annotation.security.PermitAll;
 import jdk.jfr.Percentage;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -15,6 +16,7 @@ import java.util.List;
 import java.util.Map;
 
 @RestController
+@Slf4j
 @RequestMapping("/api/user")
 public class UserController {
 
@@ -25,9 +27,11 @@ public class UserController {
     }
 
     @PutMapping("/add")
-    @PreAuthorize("hasRole('ROLE_SUPER_ADMIN') or hasRole('ROLE_HR_ADMIN')")
+//    @PreAuthorize("hasRole('ROLE_SUPER_ADMIN') or hasRole('ROLE_HR_ADMIN')")
 //    @PreAuthorize("permitAll()")
+    @PermitAll
     public ResponseEntity<User> addUser(@RequestBody User user) {
+        log.info("Came to add user");
         return new ResponseEntity<>(userService.save(user),HttpStatus.CREATED);
     }
 

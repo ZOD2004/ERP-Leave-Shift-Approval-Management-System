@@ -74,9 +74,6 @@ public class DurationEngineService {
             }
             log.info("Standard calculation applied. Net working days calculated: {}", duration);
         }
-
-        // --- DATABASE AUDIT LOG (Use with caution for calculations!) ---
-        // NOTE: recordId is null because we are not modifying a specific database record here
         saveAuditLog(null, "CALCULATE_DURATION", "none",
                 "Calculated " + duration + " days for employee ID: " + employee.getId() +
                         " (Dates: " + startDate + " to " + endDate + ")");
@@ -89,7 +86,6 @@ public class DurationEngineService {
         return day == DayOfWeek.SATURDAY || day == DayOfWeek.SUNDAY;
     }
 
-    // --- ADDED HELPER METHOD ---
     private void saveAuditLog(Long recordId, String action, String tableAffected, String details) {
         try {
             String username = "SYSTEM";

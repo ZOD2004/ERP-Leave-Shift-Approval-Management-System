@@ -3,6 +3,7 @@ package com.murali.repository;
 import com.murali.entity.Attendance;
 import com.murali.entity.Employee;
 import com.murali.entity.ShiftAssignment;
+import com.murali.entity.User;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -71,4 +72,6 @@ public interface EmployeeRepository extends JpaRepository<Employee, Long> {
         WHERE e.manager.id = :managerId
     """)
     List<Employee> findReportingEmployees(@Param("managerId") Long managerId);
+
+    Optional<Employee> findByUserId(Long userId);
 }

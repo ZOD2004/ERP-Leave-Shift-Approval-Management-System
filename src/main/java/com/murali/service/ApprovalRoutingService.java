@@ -121,9 +121,6 @@ public class ApprovalRoutingService {
         }
     }
 
-    /**
-     * 4. Finalization Trigger: The request is fully approved. Sync balances and calendars.
-     */
     private void finalizeApproval(LeaveRequest request) {
         request.setStatus(LeaveRequestService.STATUS_APPROVED);
         leaveRequestRepository.save(request);
@@ -146,9 +143,6 @@ public class ApprovalRoutingService {
         // TODO: Trigger Email/Notification Service to Employee: "Your leave is approved"
     }
 
-    /**
-     * 5. Handles Rejections.
-     */
     private void handleRejection(LeaveRequest request) {
         request.setStatus(LeaveRequestService.STATUS_REJECTED);
         leaveRequestRepository.save(request);
