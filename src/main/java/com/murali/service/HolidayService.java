@@ -7,6 +7,7 @@ import com.murali.repository.HolidayRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDate;
 import java.util.List;
 
 @Slf4j
@@ -69,5 +70,9 @@ public class HolidayService {
         } catch (Exception e) {
             log.error("Failed to save audit log for holiday record {}: {}", recordId, e.getMessage());
         }
+    }
+
+    public long countUpcomingHolidaysInMonth(LocalDate today, int monthValue, int year) {
+        return holidayRepository.countUpcomingHolidaysInMonth(today,monthValue,year);
     }
 }

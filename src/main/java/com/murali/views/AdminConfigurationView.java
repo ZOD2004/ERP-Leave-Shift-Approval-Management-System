@@ -42,6 +42,7 @@ import com.vaadin.flow.theme.lumo.LumoUtility;
 import jakarta.annotation.security.RolesAllowed;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.Objects;
 
 @RolesAllowed({"ROLE_SUPER_ADMIN","ROLE_HR_ADMIN"})
@@ -99,10 +100,14 @@ public class AdminConfigurationView extends VerticalLayout {
     private void showHolidaysView() {
         contentContainer.removeAll();
 
+        LocalDate today = LocalDate.now();
+
+        long upcomingCount = holidayService.countUpcomingHolidaysInMonth(today,today.getMonthValue(),today.getYear());
+
         // 1. Stats Row
         HorizontalLayout statsRow = new HorizontalLayout(
                 createStatsCard("Total Holidays", String.valueOf(holidayService.getAllHolidays().size()), VaadinIcon.CALENDAR, "var(--lumo-primary-color)"),
-                createStatsCard("Upcoming", "3", VaadinIcon.CLOCK, "var(--lumo-success-color)") // Note: "3" is hardcoded visually, could be dynamically calculated
+                createStatsCard("Upcoming", String.valueOf(upcomingCount), VaadinIcon.CLOCK, "var(--lumo-success-color)") // Note: "3" is hardcoded visually, could be dynamically calculated
         );
         statsRow.addClassNames(LumoUtility.Margin.Bottom.MEDIUM);
 
