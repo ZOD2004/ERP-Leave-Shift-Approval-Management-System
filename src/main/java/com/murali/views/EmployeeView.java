@@ -6,6 +6,7 @@ import com.murali.service.DepartmentService;
 import com.murali.service.EmployeeService;
 import com.murali.service.RoleService;
 import com.murali.service.UserService;
+import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.combobox.ComboBox;
@@ -29,6 +30,8 @@ import com.vaadin.flow.data.value.ValueChangeMode;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
 import jakarta.annotation.security.RolesAllowed;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 
 @Route(value = "add-employees",layout = MainLayout.class)
 @PageTitle("Employee Directory")
@@ -128,6 +131,31 @@ public class EmployeeView extends VerticalLayout {
         department.setItems(deptService.findAll());
         department.setItemLabelGenerator(Department::getName);
 
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        boolean canManageDepartments = auth != null && auth.getAuthorities().stream()
+                .anyMatch(a -> a.getAuthority().equals("ROLE_SUPER_ADMIN") ||
+                        a.getAuthority().equals("ROLE_HR_ADMIN"));
+
+        HorizontalLayout departmentWrapper = new HorizontalLayout(department);
+        departmentWrapper.setWidthFull();
+        departmentWrapper.setAlignItems(Alignment.BASELINE);
+        department.setWidthFull();
+
+        if (canManageDepartments) {
+            Button addDeptBtn = new Button(new Icon(VaadinIcon.PLUS));
+            addDeptBtn.addThemeVariants(ButtonVariant.LUMO_TERTIARY, ButtonVariant.LUMO_SMALL);
+            addDeptBtn.setTooltipText("Add Department");
+
+            addDeptBtn.getStyle().set("color", "var(--lumo-secondary-text-color)");
+
+            addDeptBtn.addClickListener(e -> {
+                formDialog.close();
+                UI.getCurrent().navigate("add-departments");
+            });
+
+            departmentWrapper.add(addDeptBtn);
+        }
+
         role.setItems(roleService.getRoles());
         role.setItemLabelGenerator(Role::getName);
 
@@ -179,7 +207,7 @@ public class EmployeeView extends VerticalLayout {
         applicableLeavesField.setPlaceholder("Defaults to ALL if left blank");
 
         FormLayout userLayout = new FormLayout(username, email, password, role);
-        FormLayout empLayout = new FormLayout(employeeCode, firstName, department, manager);
+        FormLayout empLayout = new FormLayout(employeeCode, firstName, departmentWrapper, manager);
 
         VerticalLayout dialogBody = new VerticalLayout(
                 new H3("User Identity"), userLayout,

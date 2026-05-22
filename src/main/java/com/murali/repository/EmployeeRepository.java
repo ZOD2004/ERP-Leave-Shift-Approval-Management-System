@@ -19,21 +19,16 @@ public interface EmployeeRepository extends JpaRepository<Employee, Long> {
     @Query("""
         SELECT DISTINCT e
         FROM Employee e
-        LEFT JOIN FETCH e.department
-        LEFT JOIN FETCH e.user
-        LEFT JOIN FETCH e.manager
+        LEFT JOIN FETCH e.department d
+        LEFT JOIN FETCH e.user u
+        LEFT JOIN FETCH u.role r
+        WHERE u.active = true 
+          AND (
+               u.username IN ('super', 'hr') 
+               OR r.name IN ('ROLE_MANAGER', 'ROLE_DEPT_HEAD') 
+               OR d.id = :departmentId
+          )
     """)
-    List<Employee> findAllManagers();
-    @Query("""
-    SELECT DISTINCT e
-    FROM Employee e
-    LEFT JOIN FETCH e.department d
-    LEFT JOIN FETCH e.user u
-    LEFT JOIN FETCH u.role r
-    WHERE u.username IN ('super', 'hr') 
-       OR r.name IN ('ROLE_MANAGER', 'ROLE_DEPT_HEAD') 
-       OR d.id = :departmentId
-""")
     List<Employee> findAvailableManagers(@Param("departmentId") Long departmentId);
 
     @Query("""
