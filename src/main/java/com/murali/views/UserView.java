@@ -32,7 +32,7 @@ import jakarta.annotation.security.RolesAllowed;
 
 @Route(value = "add-user", layout = MainLayout.class)
 @PageTitle("Manage Users")
-@RolesAllowed({"ROLE_SUPER_ADMIN", "ROLE_HR_ADMIN"})
+@RolesAllowed({"ROLE_SUPER_ADMIN"})
 public class UserView extends VerticalLayout {
 
     private final UserService userService;

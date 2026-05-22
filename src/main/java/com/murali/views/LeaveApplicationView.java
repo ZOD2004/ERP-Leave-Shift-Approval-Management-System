@@ -27,12 +27,13 @@ import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
 import com.vaadin.flow.theme.lumo.LumoUtility;
 import jakarta.annotation.security.PermitAll;
+import jakarta.annotation.security.RolesAllowed;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 
-@PermitAll
+@RolesAllowed({"ROLE_SUPER_ADMIN", "ROLE_HR_ADMIN", "ROLE_MANAGER", "ROLE_DEPT_HEAD", "ROLE_EMPLOYEE", "ROLE_AUDITOR"})
 @PageTitle("Leave Dashboard")
 @Route(value = "apply-leave", layout = MainLayout.class)
 public class LeaveApplicationView extends VerticalLayout {
