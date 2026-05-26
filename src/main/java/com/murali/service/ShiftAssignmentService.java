@@ -393,10 +393,6 @@ public class ShiftAssignmentService {
         saveAuditLog(id, "DELETED", "shift_assignments", "Deleted shift assignment ID: " + id);
     }
 
-    // ==========================================
-    // HALF-DAY LEAVE OVERRIDE LOGIC
-    // ==========================================
-
     @Transactional
     public void applyHalfDayLeaveOverride(LeaveRequest leaveRequest) {
         // Only process if it's actually a half-day leave
@@ -494,7 +490,8 @@ public class ShiftAssignmentService {
     }
 
     private boolean isFullDayLeave(LeaveRequest leave) {
-        return leave.getDurationDays().compareTo(new BigDecimal("0.5")) > 0;
+        if (leave == null) return false;
+        return leave.getDurationDays().compareTo(BigDecimal.valueOf(1.0)) >= 0;
     }
 
     private ShiftConflictDTO createConflictBase(Employee employee, Shift shift, LocalDate date) {
@@ -546,9 +543,18 @@ public class ShiftAssignmentService {
             List<LeaveRequest> empLeaves = leavesByEmployee.getOrDefault(assignment.getEmployee().getId(), Collections.emptyList());
             LeaveRequest activeLeave = getActiveLeaveForDate(empLeaves, assignment.getAssignmentDate());
 
-            // Hide the shift ONLY if they have an active leave AND it's a Full Day.
-            // Half-days will return true and remain visible.
-            return activeLeave == null || !isFullDayLeave(activeLeave);
+            if (activeLeave != null) {
+                boolean isFullDay = isFullDayLeave(activeLeave);
+                log.info("Date: {} | Leave ID: {} | Detected as Full Day? {}",
+                        assignment.getAssignmentDate(), activeLeave.getId(), isFullDay);
+
+                // If it IS a full day leave, return false to filter it out.
+                // If it's a half day, return true to keep it.
+                return !isFullDay;
+            }
+
+            // No leave active, keep the shift visible
+            return true;
         }).toList();
     }
 

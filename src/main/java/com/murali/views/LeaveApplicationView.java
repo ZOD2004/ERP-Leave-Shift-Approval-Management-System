@@ -20,6 +20,7 @@ import com.vaadin.flow.component.notification.NotificationVariant;
 import com.vaadin.flow.component.orderedlayout.FlexComponent;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
+import com.vaadin.flow.component.progressbar.ProgressBar;
 import com.vaadin.flow.component.radiobutton.RadioButtonGroup;
 import com.vaadin.flow.component.textfield.NumberField;
 import com.vaadin.flow.component.textfield.TextArea;
@@ -64,6 +65,10 @@ public class LeaveApplicationView extends VerticalLayout {
     private final Grid<LeaveRequest> historyGrid = new Grid<>(LeaveRequest.class, false);
     private final HorizontalLayout balanceLayout = new HorizontalLayout();
 
+    private final Grid<LeaveRequest> draftGrid = new Grid<>(LeaveRequest.class, false);
+    private final VerticalLayout draftSection = new VerticalLayout();
+    private LeaveRequest currentDraft = null;
+
     public LeaveApplicationView(LeaveRequestService leaveRequestService,
                                 AttendanceSyncService attendanceSyncService,
                                 LeaveTypeService leaveTypeService,
@@ -97,7 +102,7 @@ public class LeaveApplicationView extends VerticalLayout {
 
         Button applyLeaveBtn = new Button("Apply Leave", VaadinIcon.PLUS.create());
         applyLeaveBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
-        applyLeaveBtn.addClickListener(e -> openApplyLeaveDialog());
+        applyLeaveBtn.addClickListener(e -> openApplyLeaveDialog(null));
 
         HorizontalLayout header = new HorizontalLayout(title, applyLeaveBtn);
         header.setWidthFull();
@@ -105,7 +110,7 @@ public class LeaveApplicationView extends VerticalLayout {
         header.setAlignItems(FlexComponent.Alignment.CENTER);
         header.addClassNames(LumoUtility.Margin.Bottom.MEDIUM);
 
-        add(header, createBalanceSection(), createHistorySection());
+        add(header, createBalanceSection(),createDraftSection(), createHistorySection());
     }
 
     private Component createBalanceSection() {
@@ -225,40 +230,77 @@ public class LeaveApplicationView extends VerticalLayout {
         confirmDialog.open();
     }
 
-    private Component createMiniCard(String title, String value, String stats, VaadinIcon icon) {
-        HorizontalLayout card = new HorizontalLayout();
+    private Component createBalanceCard(String title, BigDecimal remaining, double used, BigDecimal total, String themeColor, VaadinIcon iconType) {
+        VerticalLayout card = new VerticalLayout();
         card.addClassNames(
-                LumoUtility.Background.BASE, LumoUtility.Border.ALL, LumoUtility.BorderColor.CONTRAST_10,
-                LumoUtility.BorderRadius.MEDIUM, LumoUtility.Padding.MEDIUM,
-                LumoUtility.BoxShadow.XSMALL, LumoUtility.AlignItems.CENTER
+                LumoUtility.Background.BASE,
+                LumoUtility.Border.ALL, LumoUtility.BorderColor.CONTRAST_10,
+                LumoUtility.BorderRadius.LARGE,
+                LumoUtility.Padding.LARGE,
+                LumoUtility.BoxShadow.SMALL
         );
-        card.setMinWidth("200px");
+        card.setWidth("280px");
+        card.setSpacing(false);
 
-        Icon i = icon.create();
-        i.addClassName(LumoUtility.TextColor.PRIMARY);
+        Icon icon = iconType.create();
+        icon.addClassNames("text-" + themeColor);
+        icon.getStyle().set("padding", "8px");
+        icon.getStyle().set("background-color", "var(--lumo-contrast-5pct)");
+        icon.getStyle().set("border-radius", "50%");
 
         Span titleSpan = new Span(title);
-        titleSpan.addClassNames(LumoUtility.FontSize.XSMALL, LumoUtility.TextColor.SECONDARY);
+        titleSpan.addClassNames(LumoUtility.FontSize.MEDIUM, LumoUtility.FontWeight.BOLD, LumoUtility.TextColor.SECONDARY);
 
-        Span valueSpan = new Span(value);
-        valueSpan.addClassNames(LumoUtility.FontWeight.BOLD);
+        HorizontalLayout headerLayout = new HorizontalLayout(titleSpan, icon);
+        headerLayout.setWidthFull();
+        headerLayout.setJustifyContentMode(FlexComponent.JustifyContentMode.BETWEEN);
+        headerLayout.setAlignItems(FlexComponent.Alignment.CENTER);
 
-        Span statsSpan = new Span(stats);
-        statsSpan.addClassNames(LumoUtility.FontSize.XSMALL, LumoUtility.TextColor.TERTIARY);
+        Span valueSpan = new Span(remaining.stripTrailingZeros().toPlainString());
+        valueSpan.addClassNames(LumoUtility.FontWeight.BLACK, "text-" + themeColor);
+        valueSpan.getStyle().set("line-height", "1");
+        valueSpan.getStyle().set("font-size", "3rem");
 
-        VerticalLayout textLayout = new VerticalLayout(titleSpan, valueSpan, statsSpan);
-        textLayout.setSpacing(false);
-        textLayout.setPadding(false);
+        Span daysLabel = new Span("Days Left");
+        daysLabel.addClassNames(LumoUtility.FontSize.SMALL, LumoUtility.TextColor.SECONDARY, LumoUtility.Margin.Left.SMALL, LumoUtility.FontWeight.MEDIUM);
 
-        card.add(i, textLayout);
+        HorizontalLayout numberLayout = new HorizontalLayout(valueSpan, daysLabel);
+        numberLayout.setAlignItems(FlexComponent.Alignment.BASELINE);
+        numberLayout.addClassNames(LumoUtility.Margin.Top.LARGE, LumoUtility.Margin.Bottom.MEDIUM);
+
+        ProgressBar progressBar = new ProgressBar();
+        progressBar.setMin(0);
+        progressBar.setMax(total.doubleValue() > 0 ? total.doubleValue() : 1);
+        progressBar.setValue(used);
+
+        progressBar.getElement().getThemeList().add(themeColor);
+
+        if (remaining.doubleValue() <= 3.0 && remaining.doubleValue() > 0) {
+            progressBar.getElement().getThemeList().add("error");
+            valueSpan.addClassNames(LumoUtility.TextColor.ERROR);
+        }
+
+        Span statsSpan = new Span(String.format("%s used of %s total",
+                BigDecimal.valueOf(used).stripTrailingZeros().toPlainString(),
+                total.stripTrailingZeros().toPlainString()));
+        statsSpan.addClassNames(LumoUtility.FontSize.XSMALL, LumoUtility.TextColor.TERTIARY, LumoUtility.FontWeight.MEDIUM);
+
+        HorizontalLayout footerLayout = new HorizontalLayout(statsSpan);
+        footerLayout.setWidthFull();
+        footerLayout.setJustifyContentMode(FlexComponent.JustifyContentMode.END);
+        footerLayout.addClassNames(LumoUtility.Margin.Top.XSMALL);
+
+        card.add(headerLayout, numberLayout, progressBar, footerLayout);
         return card;
     }
-
-    private void openApplyLeaveDialog() {
+    private void openApplyLeaveDialog(LeaveRequest draftToEdit) {
         Dialog dialog = new Dialog();
-        dialog.setHeaderTitle("New Leave Request");
+        dialog.setHeaderTitle(draftToEdit == null ? "New Leave Request" : "Resume Draft");
         dialog.setWidth("500px");
 
+        this.currentDraft = draftToEdit;
+
+        // 1. Initialize Form Components
         leaveType.setItems(leaveTypeService.getAvailableLeaveTypes());
         leaveType.setItemLabelGenerator(LeaveType::getName);
 
@@ -273,6 +315,26 @@ public class LeaveApplicationView extends VerticalLayout {
         );
         leaveSessionGroup.setVisible(false);
 
+        // 2. If resuming a draft, populate the fields
+        if (draftToEdit != null) {
+            leaveType.setValue(draftToEdit.getLeaveType());
+            startDate.setValue(draftToEdit.getStartDate());
+            endDate.setValue(draftToEdit.getEndDate());
+            reason.setValue(draftToEdit.getReason());
+            leaveSessionGroup.setValue(draftToEdit.getLeaveSession());
+
+            // Re-trigger visibility logic for half days
+            if (isHalfDayType(draftToEdit.getLeaveType())) {
+                leaveSessionGroup.setVisible(true);
+                endDate.setVisible(false);
+            }
+            calculateDuration();
+        } else {
+            // Ensure form is fresh for new requests
+            clearForm();
+        }
+
+        // 3. Build Form Layout
         FormLayout formLayout = new FormLayout();
         formLayout.add(leaveType, 2);
         formLayout.add(leaveSessionGroup, 2);
@@ -283,11 +345,41 @@ public class LeaveApplicationView extends VerticalLayout {
         formLayout.setResponsiveSteps(new FormLayout.ResponsiveStep("0", 2));
 
         Span infoNote = new Span(VaadinIcon.INFO_CIRCLE.create(), new Span(" Routed to immediate manager."));
-        infoNote.addClassNames(LumoUtility.FontSize.XSMALL, LumoUtility.TextColor.SECONDARY, LumoUtility.Display.FLEX, LumoUtility.Gap.XSMALL, LumoUtility.Margin.Top.SMALL);
+        infoNote.addClassNames(LumoUtility.FontSize.XSMALL, LumoUtility.TextColor.SECONDARY,
+                LumoUtility.Display.FLEX, LumoUtility.Gap.XSMALL, LumoUtility.Margin.Top.SMALL);
 
         VerticalLayout dialogLayout = new VerticalLayout(formLayout, infoNote);
         dialogLayout.setPadding(false);
         dialog.add(dialogLayout);
+
+        // 4. Create Buttons & Logic
+        Button saveDraftBtn = new Button("Save as Draft", e -> {
+            // Basic validation because DB requires dates and type
+            if (leaveType.getValue() == null || startDate.getValue() == null || endDate.getValue() == null) {
+                Notification.show("Please select Leave Type and Dates to save a draft.", 3000, Notification.Position.MIDDLE)
+                        .addThemeVariants(NotificationVariant.LUMO_WARNING);
+                return;
+            }
+
+            try {
+                Long draftId = currentDraft != null ? currentDraft.getId() : null;
+                leaveRequestService.saveOrUpdateDraft(
+                        draftId, currentEmployee, leaveType.getValue(),
+                        startDate.getValue(), endDate.getValue(),
+                        reason.getValue(), leaveSessionGroup.getValue()
+                );
+                Notification.show("Draft saved successfully.", 3000, Notification.Position.TOP_END)
+                        .addThemeVariants(NotificationVariant.LUMO_SUCCESS);
+
+                this.currentDraft = null;
+                dialog.close();
+                refreshBalanceAndHistory();
+            } catch (Exception ex) {
+                Notification.show("Failed to save draft: " + ex.getMessage(), 5000, Notification.Position.MIDDLE)
+                        .addThemeVariants(NotificationVariant.LUMO_ERROR);
+            }
+        });
+        saveDraftBtn.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
 
         Button submitBtn = new Button("Submit", e -> {
             if (attemptSubmit()) {
@@ -298,10 +390,19 @@ public class LeaveApplicationView extends VerticalLayout {
 
         Button cancelBtn = new Button("Cancel", e -> {
             clearForm();
+            this.currentDraft = null; // Clear state
             dialog.close();
         });
 
-        dialog.getFooter().add(cancelBtn, submitBtn);
+        // 5. Layout the Footer (Draft on left, Cancel/Submit on right)
+        HorizontalLayout leftFooter = new HorizontalLayout(saveDraftBtn);
+        HorizontalLayout rightFooter = new HorizontalLayout(cancelBtn, submitBtn);
+
+        HorizontalLayout footerLayout = new HorizontalLayout(leftFooter, rightFooter);
+        footerLayout.setWidthFull();
+        footerLayout.setJustifyContentMode(FlexComponent.JustifyContentMode.BETWEEN);
+
+        dialog.getFooter().add(footerLayout);
         dialog.open();
     }
 
@@ -399,20 +500,29 @@ public class LeaveApplicationView extends VerticalLayout {
                 return false;
             }
 
+            Long draftId = this.currentDraft != null ? this.currentDraft.getId() : null;
+
+            LocalDate finalEndDate = endDate.getValue();
+            if (isHalfDayType(leaveType.getValue()) && startDate.getValue() != null) {
+                finalEndDate = startDate.getValue(); // Force end date to match start date for half days
+            }
+
             leaveRequestService.submitLeaveRequest(
+                    draftId,
                     currentEmployee,
-                    currentRequest.getLeaveType(),
-                    currentRequest.getStartDate(),
-                    currentRequest.getEndDate(),
-                    currentRequest.getReason(),
+                    leaveType.getValue(),
+                    startDate.getValue(),
+                    finalEndDate,
+                    reason.getValue(),
                     LocalDate.now().getYear(),
-                    currentRequest.getLeaveSession()
+                    leaveSessionGroup.getValue()
             );
 
             Notification.show("Leave request submitted successfully!", 4000, Notification.Position.TOP_END)
                     .addThemeVariants(NotificationVariant.LUMO_SUCCESS);
 
             clearForm();
+            this.currentDraft = null;
             refreshBalanceAndHistory();
             return true;
 
@@ -446,18 +556,70 @@ public class LeaveApplicationView extends VerticalLayout {
             BigDecimal remaining = leaveBalanceService.getEffectiveBalance(balance);
             double used = total.subtract(remaining).doubleValue();
 
-            String daysLeftText = remaining + " Days Left";
-            String statsText = String.format("Used: %s / %s total", used, total);
+            // Smart Color & Icon Assignment based on Leave Name
+            String leaveName = balance.getLeaveType().getName().toLowerCase();
+            String themeColor = "primary"; // Default Blue
+            VaadinIcon iconType = VaadinIcon.CALENDAR_CLOCK; // Default Icon
 
-            balanceLayout.add(createMiniCard(
+            if (leaveName.contains("annual") || leaveName.contains("vacation") || leaveName.contains("paid")) {
+                themeColor = "success"; // Green
+                iconType = VaadinIcon.AIRPLANE;
+            } else if (leaveName.contains("sick") || leaveName.contains("medical")) {
+                themeColor = "error"; // Red
+                iconType = VaadinIcon.PLUS_SQUARE_O; // Medical Cross
+            } else if (leaveName.contains("casual") || leaveName.contains("personal")) {
+                themeColor = "warning"; // Orange/Yellow
+                iconType = VaadinIcon.COFFEE;
+            } else if (leaveName.contains("maternity") || leaveName.contains("paternity")) {
+                themeColor = "primary";
+                iconType = VaadinIcon.FAMILY;
+            }
+
+            balanceLayout.add(createBalanceCard(
                     balance.getLeaveType().getName(),
-                    daysLeftText,
-                    statsText,
-                    VaadinIcon.PIE_CHART
+                    remaining,
+                    used,
+                    total,
+                    themeColor,
+                    iconType
             ));
         }
 
-        historyGrid.setItems(leaveRequestService.getLeaveHistoryForEmployee(currentEmployee.getId()));
+        historyGrid.setItems(leaveRequestService.getLeaveHistoryForEmployee(currentEmployee.getId())
+                .stream().filter(req -> !"DRAFT".equals(req.getStatus())).toList());
+
+        List<LeaveRequest> drafts = leaveRequestService.getDraftsForEmployee(currentEmployee.getId());
+        if (drafts.isEmpty()) {
+            draftSection.setVisible(false);
+        } else {
+            draftGrid.setItems(drafts);
+            draftSection.setVisible(true);
+        }
+    }
+
+    private Component createDraftSection() {
+        H3 title = new H3("My Drafts");
+        title.addClassNames(LumoUtility.Margin.Top.LARGE, LumoUtility.Margin.Bottom.SMALL);
+
+        draftGrid.addColumn(req -> req.getLeaveType() != null ? req.getLeaveType().getName() : "").setHeader("Type").setAutoWidth(true);
+        draftGrid.addColumn(LeaveRequest::getStartDate).setHeader("Start").setAutoWidth(true);
+        draftGrid.addColumn(LeaveRequest::getEndDate).setHeader("End").setAutoWidth(true);
+        draftGrid.addColumn(LeaveRequest::getDurationDays).setHeader("Days").setAutoWidth(true);
+
+        draftGrid.addComponentColumn(draft -> {
+            Button resumeBtn = new Button("Resume / Edit", VaadinIcon.EDIT.create());
+            resumeBtn.addThemeVariants(ButtonVariant.LUMO_SMALL, ButtonVariant.LUMO_PRIMARY);
+            resumeBtn.addClickListener(e -> openApplyLeaveDialog(draft));
+            return resumeBtn;
+        }).setHeader("Action").setAutoWidth(true);
+
+        draftGrid.addThemeVariants(GridVariant.LUMO_NO_BORDER, GridVariant.LUMO_ROW_STRIPES);
+        draftGrid.setAllRowsVisible(true);
+
+        draftSection.add(title, draftGrid);
+        draftSection.setPadding(false);
+        draftSection.setVisible(false); // Hidden by default
+        return draftSection;
     }
     // Add these methods to your View class
 

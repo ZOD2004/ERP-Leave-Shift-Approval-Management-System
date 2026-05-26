@@ -34,6 +34,7 @@ public class LeaveRequestService {
     public static final String STATUS_APPROVED = "APPROVED";
     public static final String STATUS_REJECTED = "REJECTED";
     public static final String STATUS_CANCELLED = "CANCELLED";
+    public static final String STATUS_DRAFT = "DRAFT";
 
     private static final List<String> BACKDATED_ALLOWED_CODES = List.of("EMG-001", "SL-001");
 
@@ -51,10 +52,13 @@ public class LeaveRequestService {
     }
 
     @Transactional
-    public void submitLeaveRequest(Employee detachedEmployee, LeaveType leaveType,
+    public void submitLeaveRequest(Long existingDraftId,Employee detachedEmployee, LeaveType leaveType,
                                    LocalDate startDate, LocalDate endDate,
                                    String reason, Integer currentYear, LeaveSession leaveSession) {
 
+        if (leaveSession != null) {
+            endDate = startDate;
+        }
         Employee employee = employeeRepository.findById(detachedEmployee.getId())
                 .orElseThrow(() -> new IllegalArgumentException("Employee not found"));
 
@@ -120,7 +124,15 @@ public class LeaveRequestService {
             reason = "[WARNING: NEGATIVE BALANCE REQUEST] - " + reason;
         }
 
-        LeaveRequest request = new LeaveRequest();
+
+        LeaveRequest request;
+        if (existingDraftId != null) {
+            request = leaveRequestRepository.findById(existingDraftId)
+                    .orElseThrow(() -> new IllegalArgumentException("Draft not found"));
+        } else {
+            request = new LeaveRequest();
+        }
+
         request.setEmployee(employee);
         request.setLeaveType(leaveType);
         request.setStartDate(startDate);
@@ -161,6 +173,11 @@ public class LeaveRequestService {
         return leaveRequestRepository.countActiveLeavesForDate(date);
     }
 
+    @Transactional(readOnly = true)
+    public List<LeaveRequest> getDraftsForEmployee(Long employeeId) {
+        return leaveRequestRepository.findByEmployeeIdAndStatusOrderByIdDesc(employeeId, STATUS_DRAFT);
+    }
+
     @Transactional
     public void cancelLeaveRequest(Long leaveRequestId, Long requestingEmployeeId, Integer currentYear) {
         LeaveRequest request = leaveRequestRepository.findById(leaveRequestId)
@@ -196,6 +213,34 @@ public class LeaveRequestService {
 
         log.info("Leave request cancelled successfully. Leave Request ID: {}, Previous Status: {}", leaveRequestId, currentStatus);
         saveAuditLog(leaveRequestId, "CANCELLED", "leave_requests", "Leave request cancelled by employee ID " + requestingEmployeeId + ". Previous status was " + currentStatus);
+    }
+
+    @Transactional
+    public LeaveRequest saveOrUpdateDraft(Long draftId, Employee detachedEmployee, LeaveType leaveType,
+                                          LocalDate startDate, LocalDate endDate, String reason,
+                                          LeaveSession leaveSession) {
+
+        Employee employee = employeeRepository.findById(detachedEmployee.getId())
+                .orElseThrow(() -> new IllegalArgumentException("Employee not found"));
+
+        BigDecimal duration = durationEngineService.calculateNetLeaveDays(startDate, endDate, employee, leaveType, false);
+
+        LeaveRequest draft = draftId != null ?
+                leaveRequestRepository.findById(draftId).orElse(new LeaveRequest()) :
+                new LeaveRequest();
+
+        draft.setEmployee(employee);
+        draft.setLeaveType(leaveType);
+        draft.setStartDate(startDate);
+        draft.setEndDate(endDate);
+        draft.setDurationDays(duration);
+        // If reason is null/empty, provide a fallback space so it doesn't fail any implicit DB constraints
+        draft.setReason(reason != null ? reason : "");
+        draft.setLeaveSession(leaveSession);
+        draft.setStatus(STATUS_DRAFT);
+        draft.setCurrentLevel(0); // Drafts haven't entered the workflow yet
+
+        return leaveRequestRepository.save(draft);
     }
 
     private void saveAuditLog(Long recordId, String action, String tableAffected, String details) {

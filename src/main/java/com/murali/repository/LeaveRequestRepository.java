@@ -85,4 +85,6 @@ public interface LeaveRequestRepository extends JpaRepository<LeaveRequest, Long
             @Param("endDate") LocalDate endDate,
             @Param("activeStatuses") List<String> activeStatuses
     );
+    @EntityGraph(attributePaths = {"leaveType"})
+    List<LeaveRequest> findByEmployeeIdAndStatusOrderByIdDesc(Long employeeId, String status);
 }
