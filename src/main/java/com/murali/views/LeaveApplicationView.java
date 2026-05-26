@@ -337,19 +337,32 @@ public class LeaveApplicationView extends VerticalLayout {
     private void setupDateCalculations() {
         leaveType.addValueChangeListener(e -> {
             LeaveType type = e.getValue();
-            // Check if the selected type is a Half Day
-            if (type != null && "HDL-001".equalsIgnoreCase(type.getCode())) {
+            boolean isHalfDay = isHalfDayType(type);
+
+            if (isHalfDay) {
                 leaveSessionGroup.setVisible(true);
+                endDate.setVisible(false); // Hide End Date from UI
+
+                // Auto-sync end date with start date
+                if (startDate.getValue() != null) {
+                    endDate.setValue(startDate.getValue());
+                }
             } else {
                 leaveSessionGroup.setVisible(false);
                 leaveSessionGroup.clear(); // Clear value if they switch back to a full day
+                endDate.setVisible(true);  // Show End Date again
             }
             calculateDuration();
         });
 
         endDate.addValueChangeListener(e -> calculateDuration());
+
         startDate.addValueChangeListener(e -> {
-            endDate.setMin(e.getValue());
+            if (isHalfDayType(leaveType.getValue())) {
+                endDate.setValue(e.getValue()); // Keep synced behind the scenes
+            } else {
+                endDate.setMin(e.getValue());
+            }
             calculateDuration();
         });
     }
@@ -418,6 +431,7 @@ public class LeaveApplicationView extends VerticalLayout {
         binder.readBean(new LeaveRequest());
         durationDays.clear();
         endDate.setMin(null);
+        endDate.setVisible(true);
     }
 
     private void refreshBalanceAndHistory() {
@@ -494,5 +508,11 @@ public class LeaveApplicationView extends VerticalLayout {
             case 3: return "Head of Department (HOD)";
             default: return "Approver Level " + level;
         }
+    }
+    private boolean isHalfDayType(LeaveType type) {
+        return type != null && (
+                "HDL-001".equalsIgnoreCase(type.getCode()) ||
+                        (type.getName() != null && type.getName().toLowerCase().contains("half day"))
+        );
     }
 }

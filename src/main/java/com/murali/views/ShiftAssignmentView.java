@@ -103,6 +103,8 @@ public class ShiftAssignmentView extends VerticalLayout {
 
         setSizeFull();
         setPadding(false);
+        contentArea.setSizeFull();
+        contentArea.getStyle().set("overflow", "hidden");
 
         buildDashboard();
         buildAssignmentDialog();
@@ -152,6 +154,7 @@ public class ShiftAssignmentView extends VerticalLayout {
         header.getStyle().set("box-sizing", "border-box");
 
         add(header, dashboardLayout, tabs, contentArea);
+        setFlexGrow(1, contentArea);
 
         contentArea.add(buildListLayout());
         refreshListGrid();

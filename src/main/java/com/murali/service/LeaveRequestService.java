@@ -28,6 +28,7 @@ public class LeaveRequestService {
     private final ApprovalRoutingService approvalRoutingService;
     private final AuditLogRepository auditLogRepository;
     private final SecurityService securityService;
+    private final ShiftAssignmentService shiftAssignmentService;
 
     public static final String STATUS_PENDING = "PENDING";
     public static final String STATUS_APPROVED = "APPROVED";
@@ -36,7 +37,7 @@ public class LeaveRequestService {
 
     private static final List<String> BACKDATED_ALLOWED_CODES = List.of("EMG-001", "SL-001");
 
-    public LeaveRequestService(LeaveRequestRepository leaveRequestRepository, DurationEngineService durationEngineService, LeaveBalanceService leaveBalanceService, LeaveApprovalRuleService ruleService, EmployeeRepository employeeRepository, AttendanceSyncService attendanceSyncService, ApprovalRoutingService approvalRoutingService, AuditLogRepository auditLogRepository, SecurityService securityService) {
+    public LeaveRequestService(LeaveRequestRepository leaveRequestRepository, DurationEngineService durationEngineService, LeaveBalanceService leaveBalanceService, LeaveApprovalRuleService ruleService, EmployeeRepository employeeRepository, AttendanceSyncService attendanceSyncService, ApprovalRoutingService approvalRoutingService, AuditLogRepository auditLogRepository, SecurityService securityService, ShiftAssignmentService shiftAssignmentService) {
         this.leaveRequestRepository = leaveRequestRepository;
         this.durationEngineService = durationEngineService;
         this.leaveBalanceService = leaveBalanceService;
@@ -46,6 +47,7 @@ public class LeaveRequestService {
         this.approvalRoutingService = approvalRoutingService;
         this.auditLogRepository = auditLogRepository;
         this.securityService = securityService;
+        this.shiftAssignmentService = shiftAssignmentService;
     }
 
     @Transactional
@@ -187,6 +189,7 @@ public class LeaveRequestService {
                     request.getEmployee(), request.getLeaveType(), request.getDurationDays(), request.getId(), currentYear
             );
             attendanceSyncService.revertLeaveFromAttendance(request);
+            shiftAssignmentService.revertHalfDayLeaveOverride(request);
         }
 
         leaveRequestRepository.save(request);

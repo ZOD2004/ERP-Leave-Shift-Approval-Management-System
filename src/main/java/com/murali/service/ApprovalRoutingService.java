@@ -27,6 +27,7 @@ public class ApprovalRoutingService {
     private final AttendanceSyncService attendanceSyncService;
     private final AuditLogRepository auditLogRepository;
     private final SecurityService securityService;
+    private final ShiftAssignmentService shiftAssignmentService;
 
     private final UserRepository userRepository;
 
@@ -35,13 +36,14 @@ public class ApprovalRoutingService {
     public static final String ACTION_APPROVED = "APPROVED";
     public static final String ACTION_PENDING = "PENDING";
 
-    public ApprovalRoutingService(LeaveApprovalRepository leaveApprovalRepository, LeaveRequestRepository leaveRequestRepository, LeaveBalanceService leaveBalanceService, AttendanceSyncService attendanceSyncService, AuditLogRepository auditLogRepository, SecurityService securityService, UserRepository userRepository) {
+    public ApprovalRoutingService(LeaveApprovalRepository leaveApprovalRepository, LeaveRequestRepository leaveRequestRepository, LeaveBalanceService leaveBalanceService, AttendanceSyncService attendanceSyncService, AuditLogRepository auditLogRepository, SecurityService securityService, ShiftAssignmentService shiftAssignmentService, UserRepository userRepository) {
         this.leaveApprovalRepository = leaveApprovalRepository;
         this.leaveRequestRepository = leaveRequestRepository;
         this.leaveBalanceService = leaveBalanceService;
         this.attendanceSyncService = attendanceSyncService;
         this.auditLogRepository = auditLogRepository;
         this.securityService = securityService;
+        this.shiftAssignmentService = shiftAssignmentService;
         this.userRepository = userRepository;
     }
 
@@ -139,6 +141,7 @@ public class ApprovalRoutingService {
 
         // 2. Attendance Sync: Block out the calendar
         attendanceSyncService.syncLeaveRecords(request);
+        shiftAssignmentService.applyHalfDayLeaveOverride(request);
 
         // TODO: Trigger Email/Notification Service to Employee: "Your leave is approved"
     }

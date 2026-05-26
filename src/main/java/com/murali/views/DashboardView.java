@@ -738,7 +738,7 @@ public class DashboardView extends VerticalLayout {
         add(header, new Hr());
         add(createSuperAdminKpis());
         add(new Hr());
-        add(createSystemStatusWidget());
+//        add(createSystemStatusWidget());
         add(new Hr());
 
         HorizontalLayout bottomRow = new HorizontalLayout();
@@ -747,7 +747,7 @@ public class DashboardView extends VerticalLayout {
         Component logs = createAuditLogWidget();
         Component nav = createQuickNavWidget();
 
-        bottomRow.add(logs, nav);
+        bottomRow.add(logs, new VerticalLayout(nav,createSystemStatusWidget()));
         bottomRow.setFlexGrow(2, logs);
         bottomRow.setFlexGrow(1, nav);
 

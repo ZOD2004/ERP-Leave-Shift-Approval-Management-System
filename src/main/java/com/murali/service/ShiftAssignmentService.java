@@ -231,9 +231,7 @@ public class ShiftAssignmentService {
                     conflict.setStandardStartTime(shift.getStartTime());
                     conflict.setStandardEndTime(shift.getEndTime());
 
-                    // Calculate midpoint for system resolution suggestion
-                    long totalMinutes = java.time.Duration.between(shift.getStartTime(), shift.getEndTime()).toMinutes();
-                    LocalTime midPoint = shift.getStartTime().plusMinutes(totalMinutes / 2);
+                    LocalTime midPoint = calculateShiftMidPoint(shift.getStartTime(), shift.getEndTime());
 
                     if (LeaveSession.SECOND_HALF.equals(activeLeave.getLeaveSession())) {
                         // Taking the afternoon off. They work the morning.
@@ -395,6 +393,80 @@ public class ShiftAssignmentService {
         saveAuditLog(id, "DELETED", "shift_assignments", "Deleted shift assignment ID: " + id);
     }
 
+    // ==========================================
+    // HALF-DAY LEAVE OVERRIDE LOGIC
+    // ==========================================
+
+    @Transactional
+    public void applyHalfDayLeaveOverride(LeaveRequest leaveRequest) {
+        // Only process if it's actually a half-day leave
+        if (leaveRequest.getDurationDays().compareTo(new BigDecimal("0.5")) != 0) {
+            return;
+        }
+
+        // Fetch the shift assignment for this specific day
+        shiftAssignmentRepository.findByEmployeeIdAndAssignmentDate(
+                leaveRequest.getEmployee().getId(), leaveRequest.getStartDate()
+        ).ifPresent(assignment -> {
+
+            Shift shift = assignment.getShift();
+            LocalTime start = shift.getStartTime();
+            LocalTime end = shift.getEndTime();
+
+            // Calculate total duration safely, accounting for night shifts that cross midnight
+            long durationMinutes;
+            if (start.isBefore(end) || start.equals(end)) {
+                durationMinutes = java.time.Duration.between(start, end).toMinutes();
+            } else {
+                // Night shift math: Time until midnight + Time from midnight to end
+                durationMinutes = java.time.Duration.between(start, LocalTime.MAX).toMinutes() + 1 +
+                        java.time.Duration.between(LocalTime.MIN, end).toMinutes();
+            }
+
+            LocalTime midPoint = calculateShiftMidPoint(start, end);
+
+            // Apply overrides based on which half they took off
+            if (LeaveSession.FIRST_HALF.equals(leaveRequest.getLeaveSession())) {
+                // Took morning off. They work the second half.
+                assignment.setOverrideStartTime(midPoint);
+                assignment.setOverrideEndTime(end);
+            } else if (LeaveSession.SECOND_HALF.equals(leaveRequest.getLeaveSession())) {
+                // Took afternoon off. They work the first half.
+                assignment.setOverrideStartTime(start);
+                assignment.setOverrideEndTime(midPoint);
+            }
+
+            assignment.setOverrideApplied(true);
+            shiftAssignmentRepository.save(assignment);
+
+            log.info("Applied Half-Day Override for Employee {} on {}. New working hours: {} to {}",
+                    leaveRequest.getEmployee().getId(), leaveRequest.getStartDate(),
+                    assignment.getOverrideStartTime(), assignment.getOverrideEndTime());
+        });
+    }
+
+    @Transactional
+    public void revertHalfDayLeaveOverride(LeaveRequest leaveRequest) {
+        if (leaveRequest.getDurationDays().compareTo(new BigDecimal("0.5")) != 0) {
+            return;
+        }
+
+        shiftAssignmentRepository.findByEmployeeIdAndAssignmentDate(
+                leaveRequest.getEmployee().getId(), leaveRequest.getStartDate()
+        ).ifPresent(assignment -> {
+
+            // Revert back to the standard shift template
+            assignment.setOverrideStartTime(null);
+            assignment.setOverrideEndTime(null);
+            assignment.setOverrideApplied(false);
+
+            shiftAssignmentRepository.save(assignment);
+
+            log.info("Reverted Half-Day Override for Employee {} on {}. Back to standard shift.",
+                    leaveRequest.getEmployee().getId(), leaveRequest.getStartDate());
+        });
+    }
+
 
     private LocalDate calculateEndDate(LocalDate startDate, String duration) {
         return switch (duration.toLowerCase()) {
@@ -497,6 +569,17 @@ public class ShiftAssignmentService {
         // 3. Filter out full-day leaves and map to DTO
         teamAssignments = filterOutApprovedFullDayLeaves(teamAssignments);
         return mapToDTOList(teamAssignments);
+    }
+
+    private LocalTime calculateShiftMidPoint(LocalTime start, LocalTime end) {
+        long durationMinutes;
+        if (start.isBefore(end) || start.equals(end)) {
+            durationMinutes = java.time.Duration.between(start, end).toMinutes();
+        } else {
+            durationMinutes = java.time.Duration.between(start, LocalTime.MAX).toMinutes() + 1 +
+                    java.time.Duration.between(LocalTime.MIN, end).toMinutes();
+        }
+        return start.plusMinutes(durationMinutes / 2);
     }
 
     // --- ADDED HELPER METHOD ---
