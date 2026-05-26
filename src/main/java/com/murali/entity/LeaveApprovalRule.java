@@ -49,5 +49,4 @@ public class LeaveApprovalRule {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "required_role_id",nullable = false)
     private Role requiredRole;
-
 }

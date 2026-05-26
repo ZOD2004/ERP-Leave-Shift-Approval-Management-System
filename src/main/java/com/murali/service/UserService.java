@@ -145,6 +145,29 @@ public class UserService {
         return userRepository.countByActiveTrue();
     }
 
+    @Transactional
+    public boolean changePassword(String username, String oldPassword, String newPassword) {
+        User user = userRepository.findByUsername(username);
+
+        if (user == null) {
+            return false;
+        }
+
+        // Verify the old password
+        if (!passwordEncoder.matches(oldPassword, user.getPasswordHash())) {
+            return false;
+        }
+
+        // Encode and save the new password
+        user.setPasswordHash(passwordEncoder.encode(newPassword));
+        userRepository.save(user);
+
+        // Log the action
+        saveAuditLog(user.getId(), "PASSWORD_CHANGED", "users", "Password changed for user: " + username);
+
+        return true;
+    }
+
     private void saveAuditLog(Long recordId, String action, String tableAffected, String details) {
         try {
             String username = "SYSTEM";

@@ -1,7 +1,8 @@
 package com.murali.views;
 
 import com.murali.entity.Shift;
-import com.murali.entity.WorkingDay;
+import com.murali.entity.enums.Shifts;
+import com.murali.entity.enums.WorkingDay;
 import com.murali.service.ShiftService;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
@@ -30,7 +31,7 @@ import jakarta.annotation.security.RolesAllowed;
 
 import java.time.Duration;
 
-@Route(value = "add-shifts",layout = MainLayout.class)
+@Route(value = "add-shifts", layout = MainLayout.class)
 @PageTitle("Manage Shifts")
 @RolesAllowed({"ROLE_SUPER_ADMIN", "ROLE_HR_ADMIN"})
 public class ShiftView extends VerticalLayout {
@@ -43,7 +44,9 @@ public class ShiftView extends VerticalLayout {
 
     private final Dialog formDialog = new Dialog();
     private final TextField nameField = new TextField("Shift Name");
-    private final ComboBox<String> shiftTypeField = new ComboBox<>("Shift Type");
+
+    // FIXED: Changed from ComboBox<String> to ComboBox<Shifts> to match your Enum type
+    private final ComboBox<Shifts> shiftTypeField = new ComboBox<>("Shift Type");
     private final TimePicker startTimeField = new TimePicker("Start Time");
     private final TimePicker endTimeField = new TimePicker("End Time");
     private final MultiSelectComboBox<WorkingDay> workingDaysField = new MultiSelectComboBox<>("Working Days");
@@ -109,8 +112,12 @@ public class ShiftView extends VerticalLayout {
     private void configureForm() {
         formDialog.setHeaderTitle("Shift Details");
 
-        shiftTypeField.setItems("Morning Shift", "Evening Shift", "Night Shift", "Rotational Shift");
+        // UI Setup
+        shiftTypeField.setItems(Shifts.values());
         shiftTypeField.setAllowCustomValue(false);
+        // Optional: Cleans up the underscores in the dropdown display text (e.g. "MORNING SHIFT")
+        shiftTypeField.setItemLabelGenerator(type -> type.name().replace("_", " "));
+
         workingDaysField.setItems(WorkingDay.values());
 
         startTimeField.setStep(Duration.ofMinutes(30));
@@ -129,6 +136,7 @@ public class ShiftView extends VerticalLayout {
                 new FormLayout.ResponsiveStep("500px", 2)
         );
 
+        // Binder Bindings
         binder.forField(nameField)
                 .asRequired("Shift Name is required")
                 .bind(Shift::getName, Shift::setName);
@@ -166,11 +174,13 @@ public class ShiftView extends VerticalLayout {
 
     private void saveShift() {
         try {
-            if(startTimeField.getValue().isAfter(endTimeField.getValue())){
-                Notification.show("The start time comes after end time in case of wrong edit it")
-                        .addThemeVariants(NotificationVariant.INFO);
+            if (startTimeField.getValue() != null && endTimeField.getValue() != null
+                    && startTimeField.getValue().isAfter(endTimeField.getValue())) {
+                Notification.show("The start time cannot come after the end time.")
+                        .addThemeVariants(NotificationVariant.LUMO_ERROR);
                 return;
             }
+
             binder.writeBean(currentShift);
             shiftService.addShift(currentShift);
 
@@ -196,9 +206,7 @@ public class ShiftView extends VerticalLayout {
         dialog.setConfirmText("Delete");
         dialog.setConfirmButtonTheme("error primary");
 
-        // Only execute deletion if confirmed
         dialog.addConfirmListener(event -> deleteShift(shift));
-
         dialog.open();
     }
 

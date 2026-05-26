@@ -1,4 +1,4 @@
-package com.murali.dto;
+package com.murali.entity;
 
 
 public final class AttendanceStatus {

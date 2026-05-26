@@ -195,7 +195,7 @@ public class ShiftAssignmentView extends VerticalLayout {
 
         listGrid.addColumn(new ComponentRenderer<>(assignment -> {
             Span badge = new Span(assignment.getShiftName());
-            String type = assignment.getShiftType().toLowerCase();
+            String type = assignment.getShiftType().name();
 
             badge.getElement().getThemeList().add("badge");
 

@@ -1,6 +1,6 @@
 package com.murali.service;
 
-import com.murali.dto.AttendanceStatus;
+import com.murali.entity.AttendanceStatus;
 import com.murali.dto.TeamAttendanceSummaryDTO;
 import com.murali.entity.Attendance;
 import com.murali.entity.Employee;

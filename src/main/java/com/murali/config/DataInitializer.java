@@ -7,6 +7,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.util.Arrays;
 import java.util.List;
 
@@ -20,6 +21,7 @@ public class DataInitializer implements CommandLineRunner {
     private final LeaveTypeRepository leaveTypeRepository;
     private final PasswordEncoder passwordEncoder;
     private final NavMenuItemRepository navMenuItemRepository;
+    private final LeaveApprovalRuleRepository leaveApprovalRuleRepository;
 
     public DataInitializer(RoleRepository roleRepository,
                            UserRepository userRepository,
@@ -27,7 +29,7 @@ public class DataInitializer implements CommandLineRunner {
                            EmployeeRepository employeeRepository,
                            LeaveTypeRepository leaveTypeRepository,
                            PasswordEncoder passwordEncoder,
-                           NavMenuItemRepository navMenuItemRepository) {
+                           NavMenuItemRepository navMenuItemRepository, LeaveApprovalRuleRepository leaveApprovalRuleRepository) {
         this.roleRepository = roleRepository;
         this.userRepository = userRepository;
         this.departmentRepository = departmentRepository;
@@ -35,6 +37,7 @@ public class DataInitializer implements CommandLineRunner {
         this.leaveTypeRepository = leaveTypeRepository;
         this.passwordEncoder = passwordEncoder;
         this.navMenuItemRepository = navMenuItemRepository;
+        this.leaveApprovalRuleRepository = leaveApprovalRuleRepository;
     }
 
     @Override
@@ -56,7 +59,10 @@ public class DataInitializer implements CommandLineRunner {
         }
 
         // 2. Initialize Leave Types
+        createLeaveTypeIfNotFound("Casual Leave", "CL-001", 10, true);
         createLeaveTypeIfNotFound("Sick Leave", "SL-001", 12, true);
+        createLeaveTypeIfNotFound("Earned Leave", "EL-001", 6, true);
+        createLeaveTypeIfNotFound("Work From Home", "WFH-001", 60, true);
         createLeaveTypeIfNotFound("Half Day Leave", "HDL-001", 12, true);
         createLeaveTypeIfNotFound("Emergency Leave", "EMG-001", 10, true);
 
@@ -103,6 +109,8 @@ public class DataInitializer implements CommandLineRunner {
 
         // 7. Initialize Navigation Menus
         initializeNavigationMenus();
+        initializeLeaveApprovalRules();
+
 
         System.out.println("System Initialized: Roles, Leave Types, Super Admin, and Navigation Menus setup complete.");
     }
@@ -174,6 +182,50 @@ public class DataInitializer implements CommandLineRunner {
                     .iconName(iconName)
                     .build();
             navMenuItemRepository.save(navMenuItem);
+        }
+    }
+    private void createApprovalRuleIfNotFound(String leaveTypeCode, double minDays, double maxDays, int level, String roleName) {
+        LeaveType leaveType = leaveTypeRepository.findByCode(leaveTypeCode)
+                .orElseThrow(() -> new RuntimeException("Leave type not found: " + leaveTypeCode));
+
+        Role role = roleRepository.findByName(roleName);
+        if (role == null) throw new RuntimeException("Role not found: " + roleName);
+
+        BigDecimal min = BigDecimal.valueOf(minDays);
+        BigDecimal max = BigDecimal.valueOf(maxDays);
+
+        boolean exists = leaveApprovalRuleRepository.findAll().stream().anyMatch(rule ->
+                rule.getLeaveType().getCode().equals(leaveTypeCode) &&
+                        rule.getMinDays().compareTo(min) == 0 &&
+                        rule.getMaxDays().compareTo(max) == 0 &&
+                        rule.getApprovalLevel() == level
+        );
+
+        if (!exists) {
+            LeaveApprovalRule rule = new LeaveApprovalRule();
+            rule.setLeaveType(leaveType);
+            rule.setMinDays(min);
+            rule.setMaxDays(max);
+            rule.setApprovalLevel(level);
+            rule.setRequiredRole(role);
+            leaveApprovalRuleRepository.save(rule);
+        }
+    }
+    private void initializeLeaveApprovalRules() {
+        List<String> leaveTypeCodes = Arrays.asList("CL-001", "SL-001", "EL-001", "WFH-001", "HDL-001", "EMG-001");
+
+        for (String code : leaveTypeCodes) {
+            // Tier 1: Small duration (0.5 to 2.0 days) -> Needs Manager Approval (Level 1)
+            createApprovalRuleIfNotFound(code, 0.5, 2.0, 1, "ROLE_MANAGER");
+
+            // Tier 2: Mid duration (2.5 to 5.0 days) -> Needs Manager (Level 1) then HR Admin (Level 2)
+            createApprovalRuleIfNotFound(code, 2.5, 5.0, 1, "ROLE_MANAGER");
+            createApprovalRuleIfNotFound(code, 2.5, 5.0, 2, "ROLE_HR_ADMIN");
+
+            // Tier 3: High duration (5.5+ days) -> Needs Manager (Level 1), HR Admin (Level 2), then Dept Head (Level 3)
+            createApprovalRuleIfNotFound(code, 5.5, 99.9, 1, "ROLE_MANAGER");
+            createApprovalRuleIfNotFound(code, 5.5, 99.9, 2, "ROLE_HR_ADMIN");
+            createApprovalRuleIfNotFound(code, 5.5, 99.9, 3, "ROLE_DEPT_HEAD");
         }
     }
 }

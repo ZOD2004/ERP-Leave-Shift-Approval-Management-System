@@ -1,6 +1,7 @@
 package com.murali.service;
 
 import com.murali.entity.*;
+import com.murali.entity.enums.LeaveSession;
 import com.murali.exception.PastDateException;
 import com.murali.repository.AuditLogRepository;
 import com.murali.repository.EmployeeRepository;
@@ -50,7 +51,7 @@ public class LeaveRequestService {
     @Transactional
     public void submitLeaveRequest(Employee detachedEmployee, LeaveType leaveType,
                                    LocalDate startDate, LocalDate endDate,
-                                   String reason, Integer currentYear) {
+                                   String reason, Integer currentYear, LeaveSession leaveSession) {
 
         Employee employee = employeeRepository.findById(detachedEmployee.getId())
                 .orElseThrow(() -> new IllegalArgumentException("Employee not found"));
@@ -101,7 +102,7 @@ public class LeaveRequestService {
             if (!code.equals("SL-001") && !code.equals("EMG-001")) {
                 throw new IllegalArgumentException(
                         "Insufficient balance. You only have " + effectiveBalance + " days available. " +
-                                "Negative balances are only permitted for Sick or Emergency leaves."
+                                "Negative balances are only permitted for Sick[SL-001] or Emergency leaves[EMG-001]."
                 );
             }
             reason = "[WARNING: NEGATIVE BALANCE REQUEST] - " + reason;
@@ -125,6 +126,7 @@ public class LeaveRequestService {
         request.setDurationDays(duration);
         request.setReason(reason);
         request.setStatus(STATUS_PENDING);
+        request.setLeaveSession(leaveSession);
         request.setCurrentLevel(1);
 
         LeaveRequest savedRequest = leaveRequestRepository.save(request);

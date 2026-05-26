@@ -1,5 +1,7 @@
 package com.murali.entity;
 
+import com.murali.entity.enums.Shifts;
+import com.murali.entity.enums.WorkingDay;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -26,7 +28,8 @@ public class Shift {
     private String name;
 
     @Column(name = "shift_type", length = 20)
-    private String shiftType;
+    @Enumerated(EnumType.STRING)
+    private Shifts shiftType;
 
     @Column(name = "start_time", nullable = false)
     private LocalTime startTime;

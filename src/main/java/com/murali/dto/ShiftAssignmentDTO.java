@@ -1,14 +1,11 @@
 package com.murali.dto;
 
+import com.murali.entity.enums.Shifts;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import java.time.LocalDate;
 
-import lombok.AllArgsConstructor;
-import lombok.Data;
-import lombok.NoArgsConstructor;
-import java.time.LocalDate;
 import java.time.LocalTime;
 
 @Data
@@ -20,7 +17,7 @@ public class ShiftAssignmentDTO {
     private String employeeName;
     private Long shiftId;
     private String shiftName;
-    private String shiftType;
+    private Shifts shiftType;
     private LocalDate assignmentDate;
 
     private LocalTime startTime;

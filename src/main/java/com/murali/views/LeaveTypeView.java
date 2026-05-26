@@ -34,7 +34,7 @@ public class LeaveTypeView extends VerticalLayout {
 
     private final LeaveTypeService leaveTypeService;
 
-    private static final Set<String> SYSTEM_CODES = Set.of("HDL-001", "EMG-001", "SL-001");
+    private static final Set<String> SYSTEM_CODES = Set.of("HDL-001", "EMG-001", "SL-001","CL-001","EL-001","WFH-001");
 
     private final Grid<LeaveType> grid = new Grid<>(LeaveType.class, false);
     private final TextField searchField = new TextField();

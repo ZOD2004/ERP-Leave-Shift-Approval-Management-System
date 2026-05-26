@@ -238,10 +238,21 @@ public class AdminConfigurationView extends VerticalLayout {
                 .setHeader("Required Role")
                 .setAutoWidth(true);
 
-        ruleGrid.addComponentColumn(rule -> createDeleteButton("approval rule for '" + rule.getLeaveType().getName() + "'", () -> {
-            ruleService.deleteRule(rule.getId());
-            refreshRules();
-        })).setHeader("Actions").setAutoWidth(true).setFlexGrow(0);
+        ruleGrid.addComponentColumn(rule -> {
+            // 1. Create the Edit Button
+            Button editBtn = new Button(VaadinIcon.EDIT.create());
+            editBtn.addThemeVariants(ButtonVariant.LUMO_ICON, ButtonVariant.LUMO_TERTIARY);
+            editBtn.addClickListener(e -> openRuleDialog(rule)); // Calls your existing dialog!
+
+            // 2. Keep your existing Delete Button
+            Button deleteBtn = createDeleteButton("approval rule for '" + rule.getLeaveType().getName() + "'", () -> {
+                ruleService.deleteRule(rule.getId());
+                refreshRules();
+            });
+
+            // 3. Return both in a layout
+            return new HorizontalLayout(editBtn, deleteBtn);
+        }).setHeader("Actions").setAutoWidth(true).setFlexGrow(0);
 
         refreshRules();
 
@@ -362,7 +373,6 @@ public class AdminConfigurationView extends VerticalLayout {
 
         HorizontalLayout header = new HorizontalLayout(iconComp, titleSpan);
         header.setAlignItems(FlexComponent.Alignment.CENTER);
-
         card.add(header, valueH3);
         return card;
     }

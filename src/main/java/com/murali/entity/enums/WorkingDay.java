@@ -1,4 +1,4 @@
-package com.murali.entity;
+package com.murali.entity.enums;
 
 public enum WorkingDay {
     MONDAY,

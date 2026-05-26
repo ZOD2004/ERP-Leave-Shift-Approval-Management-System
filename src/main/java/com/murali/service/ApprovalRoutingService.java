@@ -184,6 +184,7 @@ public class ApprovalRoutingService {
 
     }
 
+//    This is used to fetch the list = List<LeaveApprovalRule> applicableRules = ruleService.getApplicableRules(leaveType.getId(), duration);
     @Transactional
     public void generateApprovalWorkflow(LeaveRequest request, List<LeaveApprovalRule> rules, boolean isNegativeBalance) {
         if ((rules == null || rules.isEmpty()) && !isNegativeBalance) {
@@ -197,7 +198,7 @@ public class ApprovalRoutingService {
 
             // PREVENT SELF-APPROVAL: If the resolved approver is the applicant, escalate to HR
             if (approver.getId().equals(applicant.getUser().getId())) {
-//                System.out.println("Self-approval detected for role " + requiredRoleName + ". Escalating to HR.");
+                log.info("Self-approval detected for role " + requiredRoleName + ". Escalating to HR.");
                 approver = getFallbackAdminUser();
             }
 
@@ -233,14 +234,12 @@ public class ApprovalRoutingService {
                 if (applicant.getManager() != null) {
                     return applicant.getManager().getUser();
                 }
-                // FALLBACK: If no manager, escalate directly to HR
                 return getFallbackAdminUser();
 
             case "ROLE_DEPT_HEAD":
                 if (applicant.getDepartment() != null && applicant.getDepartment().getHod() != null) {
                     return applicant.getDepartment().getHod().getUser();
                 }
-                // FALLBACK: If no Dept Head, escalate to HR
                 return getFallbackAdminUser();
 
             case "ROLE_HR_ADMIN":

@@ -121,7 +121,6 @@ public class AttendanceSyncService {
                 }
             }
         }
-
         if (!recordsToDelete.isEmpty()) {
             attendanceRepository.deleteAll(recordsToDelete);
         }

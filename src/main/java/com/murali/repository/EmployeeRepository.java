@@ -68,5 +68,12 @@ public interface EmployeeRepository extends JpaRepository<Employee, Long> {
     """)
     List<Employee> findReportingEmployees(@Param("managerId") Long managerId);
 
-    Optional<Employee> findByUserId(Long userId);
+    @Query("""
+    SELECT e 
+    FROM Employee e 
+    LEFT JOIN FETCH e.department 
+    LEFT JOIN FETCH e.manager 
+    WHERE e.user.id = :userId
+""")
+    Optional<Employee> findByUserId(@Param("userId") Long userId);
 }

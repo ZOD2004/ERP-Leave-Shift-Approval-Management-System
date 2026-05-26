@@ -8,6 +8,7 @@ import com.murali.entity.Employee;
 import com.murali.entity.LeaveRequest;
 import com.murali.entity.Shift;
 import com.murali.entity.ShiftAssignment;
+import com.murali.entity.enums.LeaveSession;
 import com.murali.exception.EmployeeNotFoundException;
 import com.murali.exception.ShiftConflictException;
 import com.murali.exception.ShiftNotFoundException;
@@ -230,11 +231,19 @@ public class ShiftAssignmentService {
 
                     // Calculate midpoint for system resolution suggestion
                     long totalMinutes = java.time.Duration.between(shift.getStartTime(), shift.getEndTime()).toMinutes();
-                    LocalTime secondHalfStart = shift.getStartTime().plusMinutes(totalMinutes / 2);
+                    LocalTime midPoint = shift.getStartTime().plusMinutes(totalMinutes / 2);
 
-                    conflict.setSystemResolution("Leave: 1st Half | Work: " + secondHalfStart + " to " + shift.getEndTime());
-                    conflict.setSuggestedOverrideStart(secondHalfStart);
-                    conflict.setSuggestedOverrideEnd(shift.getEndTime());
+                    if (!LeaveSession.SECOND_HALF.equals(activeLeave.getLeaveSession())) {
+                        // Taking the afternoon off. They work the morning.
+                        conflict.setSystemResolution("Leave: 1st Half | Work: " + shift.getStartTime() + " to " + midPoint);
+                        conflict.setSuggestedOverrideStart(shift.getStartTime());
+                        conflict.setSuggestedOverrideEnd(midPoint);
+                    } else {
+                        // Default to FIRST_HALF (Taking the morning off. They work the afternoon).
+                        conflict.setSystemResolution("Leave: 2nd Half | Work: " + midPoint + " to " + shift.getEndTime());
+                        conflict.setSuggestedOverrideStart(midPoint);
+                        conflict.setSuggestedOverrideEnd(shift.getEndTime());
+                    }
 
                     response.getPartialConflicts().add(conflict);
 

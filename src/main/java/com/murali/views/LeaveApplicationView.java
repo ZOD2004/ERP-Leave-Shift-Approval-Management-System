@@ -1,6 +1,7 @@
 package com.murali.views;
 
 import com.murali.entity.*;
+import com.murali.entity.enums.LeaveSession;
 import com.murali.service.*;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.button.Button;
@@ -19,6 +20,7 @@ import com.vaadin.flow.component.notification.NotificationVariant;
 import com.vaadin.flow.component.orderedlayout.FlexComponent;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
+import com.vaadin.flow.component.radiobutton.RadioButtonGroup;
 import com.vaadin.flow.component.textfield.NumberField;
 import com.vaadin.flow.component.textfield.TextArea;
 import com.vaadin.flow.data.binder.Binder;
@@ -57,6 +59,7 @@ public class LeaveApplicationView extends VerticalLayout {
     private final DatePicker endDate = new DatePicker("End Date");
     private final NumberField durationDays = new NumberField("Net Duration (Days)");
     private final TextArea reason = new TextArea("Reason for Leave");
+    private final RadioButtonGroup<LeaveSession> leaveSessionGroup = new RadioButtonGroup<>("Session");
 
     private final Grid<LeaveRequest> historyGrid = new Grid<>(LeaveRequest.class, false);
     private final HorizontalLayout balanceLayout = new HorizontalLayout();
@@ -264,8 +267,15 @@ public class LeaveApplicationView extends VerticalLayout {
         durationDays.setHelperText("Excludes weekends/holidays");
         reason.setMinHeight("100px");
 
+        leaveSessionGroup.setItems(LeaveSession.FIRST_HALF, LeaveSession.SECOND_HALF);
+        leaveSessionGroup.setItemLabelGenerator(session ->
+                session == LeaveSession.FIRST_HALF ? "1st Half (Morning off)" : "2nd Half (Afternoon off)"
+        );
+        leaveSessionGroup.setVisible(false);
+
         FormLayout formLayout = new FormLayout();
         formLayout.add(leaveType, 2);
+        formLayout.add(leaveSessionGroup, 2);
         formLayout.add(startDate, 1);
         formLayout.add(endDate, 1);
         formLayout.add(durationDays, 2);
@@ -316,11 +326,27 @@ public class LeaveApplicationView extends VerticalLayout {
                 .withValidator(text -> text.length() >= 5, "Reason must be at least 5 characters")
                 .bind(LeaveRequest::getReason, LeaveRequest::setReason);
 
+        binder.forField(leaveSessionGroup)
+                .withValidator(session -> !leaveSessionGroup.isVisible() || session != null,
+                        "Please select which half of the day you are taking off")
+                .bind(LeaveRequest::getLeaveSession, LeaveRequest::setLeaveSession);
+
         binder.readBean(currentRequest);
     }
 
     private void setupDateCalculations() {
-        leaveType.addValueChangeListener(e -> calculateDuration());
+        leaveType.addValueChangeListener(e -> {
+            LeaveType type = e.getValue();
+            // Check if the selected type is a Half Day
+            if (type != null && "HDL-001".equalsIgnoreCase(type.getCode())) {
+                leaveSessionGroup.setVisible(true);
+            } else {
+                leaveSessionGroup.setVisible(false);
+                leaveSessionGroup.clear(); // Clear value if they switch back to a full day
+            }
+            calculateDuration();
+        });
+
         endDate.addValueChangeListener(e -> calculateDuration());
         startDate.addValueChangeListener(e -> {
             endDate.setMin(e.getValue());
@@ -366,7 +392,8 @@ public class LeaveApplicationView extends VerticalLayout {
                     currentRequest.getStartDate(),
                     currentRequest.getEndDate(),
                     currentRequest.getReason(),
-                    LocalDate.now().getYear()
+                    LocalDate.now().getYear(),
+                    currentRequest.getLeaveSession()
             );
 
             Notification.show("Leave request submitted successfully!", 4000, Notification.Position.TOP_END)

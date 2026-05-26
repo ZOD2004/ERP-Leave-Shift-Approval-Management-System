@@ -7,11 +7,15 @@ import com.vaadin.flow.component.applayout.AppLayout;
 import com.vaadin.flow.component.avatar.Avatar;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
+import com.vaadin.flow.component.contextmenu.MenuItem;
+import com.vaadin.flow.component.contextmenu.SubMenu;
 import com.vaadin.flow.component.html.Footer;
 import com.vaadin.flow.component.html.H1;
 import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.icon.Icon;
 import com.vaadin.flow.component.icon.VaadinIcon;
+import com.vaadin.flow.component.menubar.MenuBar;
+import com.vaadin.flow.component.menubar.MenuBarVariant;
 import com.vaadin.flow.component.orderedlayout.FlexComponent;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.Scroller;
@@ -27,6 +31,7 @@ import org.springframework.security.web.authentication.logout.SecurityContextLog
 
 import java.util.List;
 
+//TODO : dont commitpls
 @PermitAll
 public class MainLayout extends AppLayout {
 
@@ -46,17 +51,7 @@ public class MainLayout extends AppLayout {
         viewTitle = new H1();
         viewTitle.addClassNames(LumoUtility.FontSize.LARGE, LumoUtility.Margin.NONE);
 
-        Button logout = new Button("Log out", e -> {
-            SecurityContextLogoutHandler logoutHandler = new SecurityContextLogoutHandler();
-            logoutHandler.logout(
-                    com.vaadin.flow.server.VaadinServletRequest.getCurrent().getHttpServletRequest(),
-                    null,
-                    null
-            );
-        });
-        logout.addThemeVariants(ButtonVariant.LUMO_TERTIARY, ButtonVariant.LUMO_ERROR);
-
-        HorizontalLayout topRow = new HorizontalLayout(viewTitle, logout);
+        HorizontalLayout topRow = new HorizontalLayout(viewTitle);
         topRow.setWidthFull();
         topRow.expand(viewTitle);
         topRow.setAlignItems(FlexComponent.Alignment.CENTER);
@@ -73,15 +68,55 @@ public class MainLayout extends AppLayout {
         navWrapper.setPadding(false);
         navWrapper.setSpacing(false);
 
-        HorizontalLayout bottomBar = new HorizontalLayout(toggleButton);
-        bottomBar.setPadding(true);
-
         toggleButton.getStyle().set("position", "fixed");
         toggleButton.getStyle().set("bottom", "10px");
         toggleButton.getStyle().set("left", "10px");
         toggleButton.getStyle().set("z-index", "10");
 
         addToNavbar(true, topRow, toggleButton);
+    }
+
+    private Footer createFooter() {
+        Footer layout = new Footer();
+        layout.addClassNames(
+                LumoUtility.Display.FLEX,
+                LumoUtility.AlignItems.CENTER,
+                LumoUtility.Padding.SMALL,
+                LumoUtility.Border.TOP,
+                LumoUtility.BorderColor.CONTRAST_10);
+
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        String currentUsername = (auth != null) ? auth.getName() : "USER";
+
+        Avatar avatar = new Avatar(currentUsername);
+        avatar.addClassNames(LumoUtility.Margin.Right.SMALL);
+
+        Span name = new Span(currentUsername);
+        name.addClassNames(LumoUtility.FontWeight.MEDIUM, LumoUtility.FontSize.XSMALL, LumoUtility.Flex.GROW);
+
+        HorizontalLayout avatarLayout = new HorizontalLayout(avatar, name);
+        avatarLayout.setAlignItems(FlexComponent.Alignment.CENTER);
+        avatarLayout.setSpacing(false);
+
+        MenuBar userMenu = new MenuBar();
+        userMenu.addThemeVariants(MenuBarVariant.LUMO_TERTIARY_INLINE);
+
+        MenuItem avatarItem = userMenu.addItem(avatarLayout);
+        SubMenu avatarSubMenu = avatarItem.getSubMenu();
+
+        avatarSubMenu.addItem("My Profile", e -> getUI().ifPresent(ui -> ui.navigate("profile")));
+
+        avatarSubMenu.addItem("Log out", e -> {
+            SecurityContextLogoutHandler logoutHandler = new SecurityContextLogoutHandler();
+            logoutHandler.logout(
+                    com.vaadin.flow.server.VaadinServletRequest.getCurrent().getHttpServletRequest(),
+                    null,
+                    null
+            );
+        });
+
+        layout.add(userMenu);
+        return layout;
     }
 
     private void addDrawerContent() {
@@ -108,27 +143,6 @@ public class MainLayout extends AppLayout {
             }
         }
         return nav;
-    }
-
-    private Footer createFooter() {
-        Footer layout = new Footer();
-        layout.addClassNames(
-                LumoUtility.Display.FLEX,
-                LumoUtility.AlignItems.CENTER,
-                LumoUtility.Padding.SMALL,
-                LumoUtility.Border.TOP,
-                LumoUtility.BorderColor.CONTRAST_10);
-
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        String name1 = (auth != null)?auth.getName():"USER";
-        Avatar avatar = new Avatar(name1);
-        avatar.addClassNames(LumoUtility.Margin.Right.SMALL);
-
-        Span name = new Span(name1);
-        name.addClassNames(LumoUtility.FontWeight.MEDIUM, LumoUtility.FontSize.XSMALL, LumoUtility.Flex.GROW);
-
-        layout.add(avatar, name);
-        return layout;
     }
 
     private void updateToggleIcon() {

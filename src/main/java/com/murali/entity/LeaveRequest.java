@@ -1,5 +1,6 @@
 package com.murali.entity;
 
+import com.murali.entity.enums.LeaveSession;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -48,4 +49,8 @@ public class LeaveRequest {
     private Integer currentLevel = 1;
 
     private LocalDate createdAt;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "leave_session", length = 20)
+    private LeaveSession leaveSession;
 }
