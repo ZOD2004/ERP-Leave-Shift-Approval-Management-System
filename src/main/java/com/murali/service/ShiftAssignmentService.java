@@ -38,6 +38,7 @@ public class ShiftAssignmentService {
     private final LeaveRequestRepository leaveRequestRepository;
     private final EmployeeRepository employeeRepository;
     private final ShiftRepository shiftRepository;
+    private final AttendanceSyncService attendanceSyncService;
 
     // --- ADDED DEPENDENCIES ---
     private final AuditLogRepository auditLogRepository;
@@ -47,7 +48,7 @@ public class ShiftAssignmentService {
                                   HolidayRepository holidayRepository,
                                   LeaveRequestRepository leaveRequestRepository,
                                   EmployeeRepository employeeRepository,
-                                  ShiftRepository shiftRepository,
+                                  ShiftRepository shiftRepository, AttendanceSyncService attendanceSyncService,
                                   AuditLogRepository auditLogRepository,
                                   SecurityService securityService) {
         this.shiftAssignmentRepository = shiftAssignmentRepository;
@@ -55,6 +56,7 @@ public class ShiftAssignmentService {
         this.leaveRequestRepository = leaveRequestRepository;
         this.employeeRepository = employeeRepository;
         this.shiftRepository = shiftRepository;
+        this.attendanceSyncService = attendanceSyncService;
         this.auditLogRepository = auditLogRepository;
         this.securityService = securityService;
     }
@@ -233,14 +235,14 @@ public class ShiftAssignmentService {
                     long totalMinutes = java.time.Duration.between(shift.getStartTime(), shift.getEndTime()).toMinutes();
                     LocalTime midPoint = shift.getStartTime().plusMinutes(totalMinutes / 2);
 
-                    if (!LeaveSession.SECOND_HALF.equals(activeLeave.getLeaveSession())) {
+                    if (LeaveSession.SECOND_HALF.equals(activeLeave.getLeaveSession())) {
                         // Taking the afternoon off. They work the morning.
-                        conflict.setSystemResolution("Leave: 1st Half | Work: " + shift.getStartTime() + " to " + midPoint);
+                        conflict.setSystemResolution("Work: " + shift.getStartTime() + " to " + midPoint + " | Leave: 2nd Half");
                         conflict.setSuggestedOverrideStart(shift.getStartTime());
                         conflict.setSuggestedOverrideEnd(midPoint);
                     } else {
                         // Default to FIRST_HALF (Taking the morning off. They work the afternoon).
-                        conflict.setSystemResolution("Leave: 2nd Half | Work: " + midPoint + " to " + shift.getEndTime());
+                        conflict.setSystemResolution("Leave: 1st Half | Work: " + midPoint + " to " + shift.getEndTime());
                         conflict.setSuggestedOverrideStart(midPoint);
                         conflict.setSuggestedOverrideEnd(shift.getEndTime());
                     }
@@ -317,6 +319,17 @@ public class ShiftAssignmentService {
 
         log.info("Batch of {} shift assignments saved successfully.", assignmentsToSave.size());
         saveAuditLog(null, "BATCH_CREATED", "shift_assignments", "Created " + assignmentsToSave.size() + " shift assignments.");
+
+        LocalDate minDate = assignmentsToSave.stream().map(ShiftAssignment::getAssignmentDate).min(LocalDate::compareTo).orElse(LocalDate.now());
+        LocalDate maxDate = assignmentsToSave.stream().map(ShiftAssignment::getAssignmentDate).max(LocalDate::compareTo).orElse(LocalDate.now());
+        List<Long> savedEmpIds = assignmentsToSave.stream().map(a -> a.getEmployee().getId()).distinct().toList();
+
+        List<LeaveRequest> existingLeaves = leaveRequestRepository.findApprovedLeavesForEmployeesInRange(
+                savedEmpIds, "APPROVED", minDate, maxDate);
+
+        for (LeaveRequest leave : existingLeaves) {
+            attendanceSyncService.syncLeaveRecords(leave);
+        }
     }
 
     @Transactional
@@ -357,6 +370,16 @@ public class ShiftAssignmentService {
 
         log.info("Shift assignment UPDATED successfully. ID: {}", savedAssignment.getId());
         saveAuditLog(savedAssignment.getId(), "UPDATED", "shift_assignments", "Updated shift assignment for employee ID " + savedAssignment.getEmployee().getId() + " on " + savedAssignment.getAssignmentDate());
+
+        List<LeaveRequest> existingLeaves = leaveRequestRepository.findApprovedLeavesForEmployeesInRange(
+                List.of(savedAssignment.getEmployee().getId()),
+                "APPROVED",
+                savedAssignment.getAssignmentDate(),
+                savedAssignment.getAssignmentDate());
+
+        for (LeaveRequest leave : existingLeaves) {
+            attendanceSyncService.syncLeaveRecords(leave);
+        }
 
         return mapToDTO(savedAssignment);
     }
