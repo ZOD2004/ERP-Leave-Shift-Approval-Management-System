@@ -38,8 +38,6 @@ public class EmployeeService {
         this.leaveTypeRepository = leaveTypeRepository;
         this.auditLoggingService = auditLoggingService;
     }
-
-    @PreAuthorize("hasAnyRole('ROLE_SUPER_ADMIN', 'ROLE_HR_ADMIN')")
     public List<Employee> findAvailableManagers(Long departmentId) {
         if (departmentId == null) {
             return Collections.emptyList();
@@ -48,13 +46,11 @@ public class EmployeeService {
     }
 
     @Transactional
-    @PreAuthorize("hasAnyRole('ROLE_SUPER_ADMIN', 'ROLE_HR_ADMIN')")
     public void createOrUpdateEmployeeWithUser(Employee currentEmployee, User currentUser,
                                                boolean isExistingUserLinked, java.util.Set<LeaveType> selectedLeaves) {
 
         boolean isNew = (currentEmployee.getId() == null);
 
-        // 1. Capture Old State for updates
         String oldState = null;
         if (!isNew) {
             Optional<Employee> existingOpt = employeeRepository.findById(currentEmployee.getId());
@@ -66,8 +62,6 @@ public class EmployeeService {
                         existing.getUser() != null ? existing.getUser().getId() : null);
             }
         }
-
-        // --- ORIGINAL BUSINESS LOGIC (UNTOUCHED) ---
         User finalUser = currentUser;
 
         if (isExistingUserLinked && currentUser != null && currentUser.getUsername() != null) {
@@ -88,9 +82,7 @@ public class EmployeeService {
         Integer currentYear = LocalDate.now().getYear();
         employeeRepository.save(currentEmployee);
         leaveBalanceService.initializeBalancesForEmployee(currentEmployee, currentYear);
-        // -------------------------------------------
 
-        // 2. Capture New State and Log
         String newState = String.format("{ \"firstName\": \"%s\", \"employeeCode\": \"%s\", \"userId\": %d }",
                 currentEmployee.getFirstName(),
                 currentEmployee.getEmployeeCode(),
@@ -102,22 +94,16 @@ public class EmployeeService {
     }
 
     @Transactional
-    @PreAuthorize("hasAnyRole('ROLE_SUPER_ADMIN', 'ROLE_HR_ADMIN')")
     public void deactivateEmployee(Employee employee) {
 
-        // 1. Capture Old State (Targeting the User's active flag)
         boolean wasActive = employee.getUser() != null && employee.getUser().getActive();
         String oldState = String.format("{ \"userActive\": %b }", wasActive);
 
-        // --- ORIGINAL BUSINESS LOGIC (UNTOUCHED) ---
         User currUser = employee.getUser();
         if (currUser != null) {
             currUser.setActive(false);
         }
         employeeRepository.save(employee);
-        // -------------------------------------------
-
-        // 2. Capture New State and Log
         boolean isNowActive = employee.getUser() != null && employee.getUser().getActive();
         String newState = String.format("{ \"userActive\": %b }", isNowActive);
 
@@ -125,33 +111,12 @@ public class EmployeeService {
         auditLoggingService.saveAuditLog(employee.getId(), "DEACTIVATED", "employees", oldState, newState);
     }
 
-    @PreAuthorize("hasAnyRole('ROLE_SUPER_ADMIN', 'ROLE_HR_ADMIN')")
     public List<Employee> searchActive(String searchTerm) {
         return employeeRepository.searchActiveEmployees(searchTerm);
     }
 
-    @PreAuthorize("hasAnyRole('ROLE_SUPER_ADMIN', 'ROLE_HR_ADMIN')")
     public List<Employee> findAllActive() {
         return employeeRepository.findByActiveTrue();
-    }
-
-    @Transactional
-    @PreAuthorize("hasAnyRole('ROLE_SUPER_ADMIN', 'ROLE_HR_ADMIN')")
-    public void createEmployeeWithUser(Employee employee, User user) {
-        // --- ORIGINAL BUSINESS LOGIC (UNTOUCHED) ---
-        User finalUser = userService.findByUsername(user.getUsername());
-        employee.setUser(finalUser);
-        employeeRepository.save(employee);
-        // -------------------------------------------
-
-        // Capture New State and Log (Creation has no oldState)
-        String newState = String.format("{ \"firstName\": \"%s\", \"employeeCode\": \"%s\", \"userId\": %d }",
-                employee.getFirstName(),
-                employee.getEmployeeCode(),
-                finalUser.getId());
-
-        log.info("Employee created with existing user. Employee ID: {}", employee.getId());
-        auditLoggingService.saveAuditLog(employee.getId(), "CREATED", "employees", null, newState);
     }
 
     public Optional<Employee> findById(Long id){
