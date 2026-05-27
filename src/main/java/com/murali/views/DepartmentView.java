@@ -60,6 +60,7 @@ public class DepartmentView extends VerticalLayout {
 
         HorizontalLayout toolbar = new HorizontalLayout(new H1("Department Configuration"), addBtn);
         toolbar.setWidthFull();
+        toolbar.setJustifyContentMode(JustifyContentMode.BETWEEN);
 
         add(toolbar, grid);
 

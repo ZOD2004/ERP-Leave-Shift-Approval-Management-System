@@ -325,6 +325,19 @@ public class ShiftAssignmentView extends VerticalLayout {
     private void buildAssignmentDialog() {
         assignmentDialog.setHeaderTitle("Assign Shifts");
         dialogTabs.add(singleTab, bulkTab);
+        LocalDate minDate = LocalDate.now();
+        singleDatePicker.setMin(minDate);
+        startDatePicker.setMin(minDate);
+        endDatePicker.setMin(minDate);
+        assignmentDialog.addOpenedChangeListener(event -> {
+            if (!event.isOpened()) {
+                employeeCombo.clear();
+                shiftCombo.clear();
+                singleDatePicker.clear();
+                startDatePicker.clear();
+                endDatePicker.clear();
+            }
+        });
 
         employeeCombo.setItems(employeeService.findAllActive());
         employeeCombo.setItemLabelGenerator(Employee::getFirstName);
@@ -517,6 +530,15 @@ public class ShiftAssignmentView extends VerticalLayout {
     }
     private void buildBatchSetupDialog() {
         batchSetupDialog.setHeaderTitle("Advanced Batch Planning");
+        batchStartDate.setMin(LocalDate.now());
+        batchSetupDialog.addOpenedChangeListener(event -> {
+            if (!event.isOpened()) {
+                batchEmployees.clear();
+                batchShift.clear();
+                batchStartDate.clear();
+                batchDuration.clear();
+            }
+        });
 
         batchEmployees.setItems(employeeService.findAllActive());
         batchEmployees.setItemLabelGenerator(Employee::getFirstName);
