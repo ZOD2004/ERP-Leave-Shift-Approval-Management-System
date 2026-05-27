@@ -27,6 +27,7 @@ import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.tabs.Tab;
 import com.vaadin.flow.component.tabs.Tabs;
+import com.vaadin.flow.component.textfield.TextArea;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
 import com.vaadin.flow.theme.lumo.LumoUtility;
@@ -56,14 +57,14 @@ public class DashboardView extends VerticalLayout {
     private final UserService userService;
     private final DepartmentService departmentService;
     private final RoleService roleService;
-    private final AuditLogService auditLogService;
+    private final AuditLogService auditLoggingService;
     private final AttendanceCronJobService attendanceCronJobService;
 
     public DashboardView(LeaveBalanceService leaveBalanceService,
                          LeaveRequestService leaveRequestService,
                          SecurityService securityService,
                          ShiftAssignmentService shiftAssignmentService,
-                         AttendanceProcessService attendanceProcessService, ApprovalRoutingService approvalRoutingService, DashboardService dashboardService, AttendanceCorrectionService attendanceCorrectionService, UserService userService, DepartmentService departmentService, RoleService roleService, AuditLogService auditLogService, AttendanceCronJobService attendanceCronJobService) {
+                         AttendanceProcessService attendanceProcessService, ApprovalRoutingService approvalRoutingService, DashboardService dashboardService, AttendanceCorrectionService attendanceCorrectionService, UserService userService, DepartmentService departmentService, RoleService roleService, AuditLogService auditLoggingService, AttendanceCronJobService attendanceCronJobService) {
         this.leaveBalanceService = leaveBalanceService;
         this.leaveRequestService = leaveRequestService;
         this.securityService = securityService;
@@ -75,7 +76,7 @@ public class DashboardView extends VerticalLayout {
         this.userService = userService;
         this.departmentService = departmentService;
         this.roleService = roleService;
-        this.auditLogService = auditLogService;
+        this.auditLoggingService = auditLoggingService;
         this.attendanceCronJobService = attendanceCronJobService;
 
         setSizeFull();
@@ -819,15 +820,76 @@ public class DashboardView extends VerticalLayout {
         grid.addThemeVariants(GridVariant.LUMO_ROW_STRIPES, GridVariant.LUMO_COMPACT);
         grid.setHeight("350px");
 
-        grid.addColumn(log -> log.getActionTime() != null ? log.getActionTime().toLocalTime() : "").setHeader("Time").setAutoWidth(true);
-        grid.addColumn(com.murali.entity.AuditLog::getUsername).setHeader("User").setAutoWidth(true);
-        grid.addColumn(com.murali.entity.AuditLog::getAction).setHeader("Action").setAutoWidth(true);
-        grid.addColumn(com.murali.entity.AuditLog::getDetails).setHeader("Details").setAutoWidth(true).setFlexGrow(1);
+        // Time Column (Assuming your timestamp field is named 'timestamp' or similar)
+        grid.addColumn(log -> log.getTimestamp() != null ? log.getTimestamp().toLocalTime() : "")
+                .setHeader("Time").setAutoWidth(true);
 
-        grid.setItems(auditLogService.getRecentLogs(40));
+        // Updated fields based on our new AuditLoggingService
+        grid.addColumn(com.murali.entity.AuditLog::getPerformedBy).setHeader("User").setAutoWidth(true);
+        grid.addColumn(com.murali.entity.AuditLog::getEntityName).setHeader("Module").setAutoWidth(true);
+
+        // Action Badge
+        grid.addComponentColumn(log -> {
+            Span badge = new Span(log.getAction());
+            badge.getElement().getThemeList().add("badge");
+            if ("DELETED".equals(log.getAction())) badge.getElement().getThemeList().add("error");
+            if ("CREATED".equals(log.getAction())) badge.getElement().getThemeList().add("success");
+            return badge;
+        }).setHeader("Action").setAutoWidth(true);
+
+        // The JSON Diff Button
+        grid.addComponentColumn(log -> {
+            Button viewBtn = new Button("View Changes");
+            viewBtn.addThemeVariants(ButtonVariant.LUMO_TERTIARY, ButtonVariant.LUMO_SMALL);
+
+            // Hide button if there are no states to compare (e.g., simple login logs)
+            if (log.getOldState() == null && log.getNewState() == null) {
+                viewBtn.setVisible(false);
+            }
+
+            viewBtn.addClickListener(e -> openDiffViewer(log));
+            return viewBtn;
+        }).setHeader("Details").setAutoWidth(true).setFlexGrow(1);
+
+        // Assuming you have this method in your repository/service
+        grid.setItems(auditLoggingService.getRecentLogs(40));
 
         section.add(title, grid);
         return section;
+    }
+
+    /**
+     * Creates the split-screen JSON Diff Dialog
+     */
+    private void openDiffViewer(com.murali.entity.AuditLog log) {
+        Dialog dialog = new Dialog();
+        dialog.setHeaderTitle("Audit Diff: " + log.getEntityName().toUpperCase() + " (ID: " + log.getRecordId() + ")");
+        dialog.setWidth("800px");
+
+        HorizontalLayout diffLayout = new HorizontalLayout();
+        diffLayout.setSizeFull();
+
+        // Old State (Red)
+        TextArea oldStateArea = new TextArea("Old State");
+        oldStateArea.setValue(log.getOldState() != null ? log.getOldState() : "NULL (Created)");
+        oldStateArea.setReadOnly(true);
+        oldStateArea.setWidth("50%");
+        oldStateArea.getStyle().set("color", "var(--lumo-error-text-color)");
+
+        // New State (Green)
+        TextArea newStateArea = new TextArea("New State");
+        newStateArea.setValue(log.getNewState() != null ? log.getNewState() : "NULL (Deleted)");
+        newStateArea.setReadOnly(true);
+        newStateArea.setWidth("50%");
+        newStateArea.getStyle().set("color", "var(--lumo-success-text-color)");
+
+        diffLayout.add(oldStateArea, newStateArea);
+
+        Button closeButton = new Button("Close", e -> dialog.close());
+        dialog.getFooter().add(closeButton);
+
+        dialog.add(diffLayout);
+        dialog.open();
     }
 
     private Component createQuickNavWidget() {

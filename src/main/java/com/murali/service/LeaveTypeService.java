@@ -1,9 +1,7 @@
 package com.murali.service;
 
-import com.murali.entity.AuditLog;
 import com.murali.entity.LeaveType;
 import com.murali.exception.LeaveTypeNotFoundException;
-import com.murali.repository.AuditLogRepository;
 import com.murali.repository.LeaveTypeRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -17,15 +15,12 @@ import java.util.Optional;
 public class LeaveTypeService {
 
     private final LeaveTypeRepository leaveTypeRepository;
-    private final AuditLogRepository auditLogRepository;
-    private final SecurityService securityService;
+    private final AuditLogService auditLoggingService;
 
     public LeaveTypeService(LeaveTypeRepository leaveTypeRepository,
-                            AuditLogRepository auditLogRepository,
-                            SecurityService securityService) {
+                            AuditLogService auditLoggingService) {
         this.leaveTypeRepository = leaveTypeRepository;
-        this.auditLogRepository = auditLogRepository;
-        this.securityService = securityService;
+        this.auditLoggingService = auditLoggingService;
     }
 
     public List<LeaveType> getAllLeaveTypes() {
@@ -33,17 +28,28 @@ public class LeaveTypeService {
     }
 
     public void addLeaveType(LeaveType leaveType) {
-        leaveTypeRepository.save(leaveType);
+        LeaveType savedLeaveType = leaveTypeRepository.save(leaveType);
 
-        log.info("LeaveType CREATED successfully. ID: {}", leaveType.getId());
-        saveAuditLog(leaveType.getId(), "CREATED", "leave_types", "Created LeaveType: " + leaveType.getName() + " (" + leaveType.getCode() + ")");
+        String newState = String.format("{ \"name\": \"%s\", \"code\": \"%s\", \"paid\": %b, \"maxDaysPerYear\": %s }",
+                savedLeaveType.getName(), savedLeaveType.getCode(), savedLeaveType.getPaid(), savedLeaveType.getMaxDaysPerYear());
+
+        log.info("LeaveType CREATED successfully. ID: {}", savedLeaveType.getId());
+        auditLoggingService.saveAuditLog(savedLeaveType.getId(), "CREATED", "leave_types", null, newState);
     }
 
     public void deleteLeaveType(Long id) {
+        String oldState = null;
+        Optional<LeaveType> existingOpt = leaveTypeRepository.findById(id);
+        if (existingOpt.isPresent()) {
+            LeaveType existing = existingOpt.get();
+            oldState = String.format("{ \"name\": \"%s\", \"code\": \"%s\", \"paid\": %b, \"maxDaysPerYear\": %s }",
+                    existing.getName(), existing.getCode(), existing.getPaid(), existing.getMaxDaysPerYear());
+        }
+
         leaveTypeRepository.deleteById(id);
 
         log.info("LeaveType DELETED successfully. ID: {}", id);
-        saveAuditLog(id, "DELETED", "leave_types", "Deleted LeaveType with ID: " + id);
+        auditLoggingService.saveAuditLog(id, "DELETED", "leave_types", oldState, null);
     }
 
     public LeaveType editLeaveType(Long id, LeaveType leaveType) {
@@ -55,6 +61,10 @@ public class LeaveTypeService {
         } else {
             throw new LeaveTypeNotFoundException("LeaveType with id: " + id + " is not found");
         }
+
+        String oldState = String.format("{ \"name\": \"%s\", \"code\": \"%s\", \"paid\": %b, \"maxDaysPerYear\": %s }",
+                currLeaveType.getName(), currLeaveType.getCode(), currLeaveType.getPaid(), currLeaveType.getMaxDaysPerYear());
+
         currLeaveType.setName(leaveType.getName());
         currLeaveType.setCode(leaveType.getCode());
         currLeaveType.setPaid(leaveType.getPaid());
@@ -62,8 +72,11 @@ public class LeaveTypeService {
 
         LeaveType savedLeaveType = leaveTypeRepository.save(currLeaveType);
 
+        String newState = String.format("{ \"name\": \"%s\", \"code\": \"%s\", \"paid\": %b, \"maxDaysPerYear\": %s }",
+                savedLeaveType.getName(), savedLeaveType.getCode(), savedLeaveType.getPaid(), savedLeaveType.getMaxDaysPerYear());
+
         log.info("LeaveType UPDATED successfully. ID: {}", savedLeaveType.getId());
-        saveAuditLog(savedLeaveType.getId(), "UPDATED", "leave_types", "Updated LeaveType: " + savedLeaveType.getName() + " (" + savedLeaveType.getCode() + ")");
+        auditLoggingService.saveAuditLog(savedLeaveType.getId(), "UPDATED", "leave_types", oldState, newState);
 
         return savedLeaveType;
     }
@@ -81,31 +94,5 @@ public class LeaveTypeService {
     public LeaveType getLeaveTypeByCode(String code) {
         return leaveTypeRepository.findByCode(code)
                 .orElseThrow(() -> new IllegalArgumentException("Leave type code not found: " + code));
-    }
-
-    private void saveAuditLog(Long recordId, String action, String tableAffected, String details) {
-        try {
-            String username = "SYSTEM";
-            String role = "SYSTEM";
-
-            if (securityService.getPrincipal() != null) {
-                username = securityService.getPrincipal().getUsername();
-                if (securityService.getAuthentication() != null && !securityService.getAuthentication().getAuthorities().isEmpty()) {
-                    role = securityService.getAuthentication().getAuthorities().iterator().next().getAuthority();
-                }
-            }
-
-            AuditLog auditLog = new AuditLog();
-            auditLog.setUsername(username);
-            auditLog.setRole(role);
-            auditLog.setRecordId(recordId);
-            auditLog.setAction(action);
-            auditLog.setTableAffected(tableAffected);
-            auditLog.setDetails(details);
-
-            auditLogRepository.save(auditLog);
-        } catch (Exception e) {
-            log.error("Failed to save audit log for leave type record {}: {}", recordId, e.getMessage());
-        }
     }
 }

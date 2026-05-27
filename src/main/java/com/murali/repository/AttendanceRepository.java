@@ -46,11 +46,11 @@ public interface AttendanceRepository extends JpaRepository<Attendance, Long> {
             @Param("attendanceDate") LocalDate attendanceDate
     );
 
-    long countByEmployee_IdInAndAttendanceDateAndStatus(
-            List<Long> employeeIds,
-            LocalDate attendanceDate,
-            String status
-    );
+
+    @Query("SELECT COUNT(a) FROM Attendance a WHERE " +
+            "(a.attendanceDate BETWEEN :startDate AND :endDate) AND " +
+            "(a.status = 'MISSING_CHECKOUT' OR (a.checkIn IS NOT NULL AND a.checkOut IS NULL))")
+    long countMissingPunches(@Param("startDate") LocalDate startDate, @Param("endDate") LocalDate endDate);
 }
 
 

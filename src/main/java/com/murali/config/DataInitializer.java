@@ -140,6 +140,7 @@ public class DataInitializer implements CommandLineRunner {
         createNavMenuIfNotFound("ROLE_SUPER_ADMIN", "System Configuration", "admin-config", "COG");
         createNavMenuIfNotFound("ROLE_SUPER_ADMIN", "Apply Leave", "apply-leave", "FLIGHT_TAKEOFF");
         createNavMenuIfNotFound("ROLE_SUPER_ADMIN", "Approval Inbox", "approvals", "CHECK_SQUARE_O");
+        createNavMenuIfNotFound("ROLE_SUPER_ADMIN", "Audit & Compliance", "audit-dashboard", "CLIPBOARD_CHECK");
 
         // =============================================
         // ROLE_HR_ADMIN
@@ -171,6 +172,7 @@ public class DataInitializer implements CommandLineRunner {
         // ROLE_AUDITOR
         // =============================================
         createNavMenuIfNotFound("ROLE_AUDITOR", "Apply Leave", "apply-leave", "FLIGHT_TAKEOFF");
+        createNavMenuIfNotFound("ROLE_AUDITOR", "Audit & Compliance", "audit-dashboard", "CLIPBOARD_CHECK");
     }
 
     private void createNavMenuIfNotFound(String roleName, String label, String path, String iconName) {

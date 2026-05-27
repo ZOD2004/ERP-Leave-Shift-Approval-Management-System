@@ -93,8 +93,13 @@ public class ApprovalRoutingService {
         leaveApprovalRepository.save(approval);
 
         log.info("Leave approval {} processed by user {}. Action: {}", leaveApprovalId, actor.getUsername(), normalizedAction);
-        saveAuditLog(leaveApprovalId, normalizedAction, "leave_approvals", "Approver processed request with comments: " + comments);
-
+        saveAuditLog(
+                leaveApprovalId,
+                normalizedAction,
+                "leave_approvals",
+                null,
+                "{ \"action\": \"processed\", \"comments\": \"" + comments + "\" }"
+        );
         if (ACTION_REJECTED.equals(normalizedAction)) {
             handleRejection(request);
         } else {
@@ -177,7 +182,13 @@ public class ApprovalRoutingService {
 
         leaveApprovalRepository.saveAll(pendingApprovals);
         log.info("Cancelled {} pending approvals for leave request ID: {}", pendingApprovals.size(), leaveRequestId);
-        saveAuditLog(leaveRequestId, "CANCELLED", "leave_approvals", "System cancelled pending approvals due to employee request cancellation.");
+        saveAuditLog(
+                leaveRequestId,
+                "CANCELLED",
+                "leave_approvals",
+                "{ \"status\": \"PENDING\" }",
+                "{ \"status\": \"CANCELLED\", \"reason\": \"Employee request cancellation\" }"
+        );
     }
 
     @Transactional(readOnly = true)
@@ -228,7 +239,13 @@ public class ApprovalRoutingService {
             }
         }
         log.info("Approval workflow generated successfully for Leave Request ID: {}", request.getId());
-        saveAuditLog(request.getId(), "WORKFLOW_CREATED", "leave_approvals", "Generated routing workflow containing " + rules.size() + " rules.");
+        saveAuditLog(
+                request.getId(),
+                "WORKFLOW_CREATED",
+                "leave_approvals",
+                null,
+                "{ \"rulesGenerated\": " + rules.size() + ", \"status\": \"ACTIVE\" }"
+        );
     }
 
     private User resolveApproverForRole(Employee applicant, String roleName) {
@@ -266,26 +283,29 @@ public class ApprovalRoutingService {
     public List<LeaveApproval> getApprovalsForRequest(Long leaveRequestId) {
         return leaveApprovalRepository.findByLeaveRequestIdOrderByApprovalLevelAsc(leaveRequestId);
     }
-    private void saveAuditLog(Long recordId, String action, String tableAffected, String details) {
+    private void saveAuditLog(Long recordId, String action, String entityName, String oldState, String newState) {
         try {
-            String username = "SYSTEM";
-            String role = "SYSTEM";
+            String performedBy = "SYSTEM";
 
             // Safely fetch current user from SecurityService
             if (securityService.getPrincipal() != null) {
-                username = securityService.getPrincipal().getUsername();
+                String username = securityService.getPrincipal().getUsername();
+                String role = "USER";
+
                 if (securityService.getAuthentication() != null && !securityService.getAuthentication().getAuthorities().isEmpty()) {
                     role = securityService.getAuthentication().getAuthorities().iterator().next().getAuthority();
                 }
+                // Combine them to match your Vaadin grid requirement
+                performedBy = username + " (" + role + ")";
             }
 
             AuditLog auditLog = new AuditLog();
-            auditLog.setUsername(username);
-            auditLog.setRole(role);
             auditLog.setRecordId(recordId);
             auditLog.setAction(action);
-            auditLog.setTableAffected(tableAffected);
-            auditLog.setDetails(details);
+            auditLog.setEntityName(entityName);
+            auditLog.setPerformedBy(performedBy);
+            auditLog.setOldState(oldState);
+            auditLog.setNewState(newState);
 
             auditLogRepository.save(auditLog);
         } catch (Exception e) {

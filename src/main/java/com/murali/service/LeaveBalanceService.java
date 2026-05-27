@@ -5,13 +5,10 @@ import com.murali.entity.Employee;
 import com.murali.entity.LeaveBalance;
 import com.murali.entity.LeaveBalanceTransaction;
 import com.murali.entity.LeaveType;
-import com.murali.entity.AuditLog;
 import com.murali.repository.LeaveBalanceRepository;
 import com.murali.repository.LeaveBalanceTransactionRepository;
 import com.murali.repository.LeaveTypeRepository;
-import com.murali.repository.AuditLogRepository;
-import com.murali.service.SecurityService;
-import org.springframework.context.annotation.Lazy;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -25,8 +22,8 @@ public class LeaveBalanceService {
     private final LeaveBalanceRepository leaveBalanceRepository;
     private final LeaveBalanceTransactionRepository transactionRepository;
     private final LeaveTypeRepository leaveTypeRepository;
-    private final AuditLogRepository auditLogRepository;
-    private final SecurityService securityService;
+
+    private final AuditLogService auditLoggingService;
 
     public static final String ALLOCATION = "ALLOCATION";
     public static final String PENDING_HOLD = "PENDING_HOLD";
@@ -37,13 +34,11 @@ public class LeaveBalanceService {
     public LeaveBalanceService(LeaveBalanceRepository leaveBalanceRepository,
                                LeaveBalanceTransactionRepository transactionRepository,
                                LeaveTypeRepository leaveTypeRepository,
-                               AuditLogRepository auditLogRepository,
-                               @Lazy SecurityService securityService) {
+                               AuditLogService auditLoggingService) {
         this.leaveBalanceRepository = leaveBalanceRepository;
         this.transactionRepository = transactionRepository;
         this.leaveTypeRepository = leaveTypeRepository;
-        this.auditLogRepository = auditLogRepository;
-        this.securityService = securityService;
+        this.auditLoggingService = auditLoggingService;
     }
 
     @Transactional(readOnly = true)
@@ -96,7 +91,10 @@ public class LeaveBalanceService {
                 );
 
                 log.info("Initialized leave balance for Employee ID: {}, LeaveType: {}, Year: {}", employee.getId(), leaveType.getCode(), year);
-                saveAuditLog(balance.getId(), "INITIALIZED", "leave_balances", "Initialized balance for employee ID " + employee.getId() + " and leave type " + leaveType.getCode());
+
+                String newState = String.format("{ \"totalEntitled\": %s, \"used\": %s, \"pendingDays\": %s }",
+                        balance.getTotalEntitled(), balance.getUsed(), balance.getPendingDays());
+                auditLoggingService.saveAuditLog(balance.getId(), "INITIALIZED", "leave_balances", null, newState);
             }
         }
     }
@@ -104,6 +102,9 @@ public class LeaveBalanceService {
     @Transactional
     public void holdPendingBalance(Employee employee, LeaveType leaveType, BigDecimal duration, Integer year, Long referenceId) {
         LeaveBalance balance = getOrCreateBalance(employee, leaveType, year);
+
+        String oldState = String.format("{ \"totalEntitled\": %s, \"used\": %s, \"pendingDays\": %s }",
+                balance.getTotalEntitled(), balance.getUsed(), balance.getPendingDays());
 
         BigDecimal currentPending = balance.getPendingDays() != null ? balance.getPendingDays() : BigDecimal.ZERO;
         balance.setPendingDays(currentPending.add(duration));
@@ -113,12 +114,18 @@ public class LeaveBalanceService {
         recordTransaction(employee, leaveType, PENDING_HOLD, duration, referenceId, "Pending hold placed for new leave request");
 
         log.info("Held {} pending days for Employee ID: {}, LeaveType: {}", duration, employee.getId(), leaveType.getCode());
-        saveAuditLog(balance.getId(), "UPDATED", "leave_balances", "Held " + duration + " pending days for reference ID " + referenceId);
+
+        String newState = String.format("{ \"totalEntitled\": %s, \"used\": %s, \"pendingDays\": %s }",
+                balance.getTotalEntitled(), balance.getUsed(), balance.getPendingDays());
+        auditLoggingService.saveAuditLog(balance.getId(), "UPDATED", "leave_balances", oldState, newState);
     }
 
     @Transactional
     public void deduct(Employee employee, LeaveType leaveType, BigDecimal duration, Long leaveRequestId, Integer year) {
         LeaveBalance balance = getOrCreateBalance(employee, leaveType, year);
+
+        String oldState = String.format("{ \"totalEntitled\": %s, \"used\": %s, \"pendingDays\": %s }",
+                balance.getTotalEntitled(), balance.getUsed(), balance.getPendingDays());
 
         BigDecimal currentUsed = balance.getUsed() != null ? balance.getUsed() : BigDecimal.ZERO;
         balance.setUsed(currentUsed.add(duration));
@@ -137,12 +144,18 @@ public class LeaveBalanceService {
         recordTransaction(employee, leaveType, LEAVE_DEDUCT, duration, leaveRequestId, "Leave approved and deducted from balance");
 
         log.info("Deducted {} days from balance for Employee ID: {}, LeaveType: {}", duration, employee.getId(), leaveType.getCode());
-        saveAuditLog(balance.getId(), "UPDATED", "leave_balances", "Deducted " + duration + " days for leave request ID " + leaveRequestId);
+
+        String newState = String.format("{ \"totalEntitled\": %s, \"used\": %s, \"pendingDays\": %s }",
+                balance.getTotalEntitled(), balance.getUsed(), balance.getPendingDays());
+        auditLoggingService.saveAuditLog(balance.getId(), "UPDATED", "leave_balances", oldState, newState);
     }
 
     @Transactional
     public void rollbackDeduction(Employee employee, LeaveType leaveType, BigDecimal duration, Long originalLeaveRequestId, Integer year) {
         LeaveBalance balance = getOrCreateBalance(employee, leaveType, year);
+
+        String oldState = String.format("{ \"totalEntitled\": %s, \"used\": %s, \"pendingDays\": %s }",
+                balance.getTotalEntitled(), balance.getUsed(), balance.getPendingDays());
 
         BigDecimal currentUsed = balance.getUsed() != null ? balance.getUsed() : BigDecimal.ZERO;
         BigDecimal newUsed = currentUsed.subtract(duration);
@@ -163,12 +176,18 @@ public class LeaveBalanceService {
         );
 
         log.info("Refunded {} days to balance for Employee ID: {}, LeaveType: {}", duration, employee.getId(), leaveType.getCode());
-        saveAuditLog(balance.getId(), "UPDATED", "leave_balances", "Refunded " + duration + " days for cancelled leave request ID " + originalLeaveRequestId);
+
+        String newState = String.format("{ \"totalEntitled\": %s, \"used\": %s, \"pendingDays\": %s }",
+                balance.getTotalEntitled(), balance.getUsed(), balance.getPendingDays());
+        auditLoggingService.saveAuditLog(balance.getId(), "UPDATED", "leave_balances", oldState, newState);
     }
 
     @Transactional
     public void releasePendingHold(Employee employee, LeaveType leaveType, BigDecimal duration, Integer year, Long referenceId) {
         LeaveBalance balance = getOrCreateBalance(employee, leaveType, year);
+
+        String oldState = String.format("{ \"totalEntitled\": %s, \"used\": %s, \"pendingDays\": %s }",
+                balance.getTotalEntitled(), balance.getUsed(), balance.getPendingDays());
 
         BigDecimal currentPending = balance.getPendingDays() != null ? balance.getPendingDays() : BigDecimal.ZERO;
         BigDecimal newPending = currentPending.subtract(duration);
@@ -190,7 +209,10 @@ public class LeaveBalanceService {
         );
 
         log.info("Released {} pending days for Employee ID: {}, LeaveType: {}", duration, employee.getId(), leaveType.getCode());
-        saveAuditLog(balance.getId(), "UPDATED", "leave_balances", "Released " + duration + " pending days for reference ID " + referenceId);
+
+        String newState = String.format("{ \"totalEntitled\": %s, \"used\": %s, \"pendingDays\": %s }",
+                balance.getTotalEntitled(), balance.getUsed(), balance.getPendingDays());
+        auditLoggingService.saveAuditLog(balance.getId(), "UPDATED", "leave_balances", oldState, newState);
     }
 
     private LeaveBalance getOrCreateBalance(Employee employee, LeaveType leaveType, Integer year) {
@@ -206,7 +228,10 @@ public class LeaveBalanceService {
                     LeaveBalance savedBalance = leaveBalanceRepository.save(newBalance);
 
                     log.info("Created missing balance record for Employee ID: {}, LeaveType: {}", employee.getId(), leaveType.getCode());
-                    saveAuditLog(savedBalance.getId(), "CREATED", "leave_balances", "Created missing balance record for year " + year);
+
+                    String newState = String.format("{ \"totalEntitled\": %s, \"used\": %s, \"pendingDays\": %s }",
+                            savedBalance.getTotalEntitled(), savedBalance.getUsed(), savedBalance.getPendingDays());
+                    auditLoggingService.saveAuditLog(savedBalance.getId(), "CREATED", "leave_balances", null, newState);
 
                     return savedBalance;
                 });
@@ -228,6 +253,9 @@ public class LeaveBalanceService {
     public void deductPenalty(Employee employee, LeaveType leaveType, BigDecimal duration, Integer year, String description) {
         LeaveBalance balance = getOrCreateBalance(employee, leaveType, year);
 
+        String oldState = String.format("{ \"totalEntitled\": %s, \"used\": %s, \"pendingDays\": %s }",
+                balance.getTotalEntitled(), balance.getUsed(), balance.getPendingDays());
+
         BigDecimal currentUsed = balance.getUsed() != null ? balance.getUsed() : BigDecimal.ZERO;
         balance.setUsed(currentUsed.add(duration));
 
@@ -236,32 +264,14 @@ public class LeaveBalanceService {
         recordTransaction(employee, leaveType, LEAVE_DEDUCT, duration, null, description);
 
         log.info("Deducted penalty of {} days for Employee ID: {}, LeaveType: {}", duration, employee.getId(), leaveType.getCode());
-        saveAuditLog(balance.getId(), "UPDATED", "leave_balances", "Deducted penalty of " + duration + " days. Description: " + description);
+
+        String newState = String.format("{ \"totalEntitled\": %s, \"used\": %s, \"pendingDays\": %s }",
+                balance.getTotalEntitled(), balance.getUsed(), balance.getPendingDays());
+        auditLoggingService.saveAuditLog(balance.getId(), "UPDATED", "leave_balances", oldState, newState);
     }
 
-    private void saveAuditLog(Long recordId, String action, String tableAffected, String details) {
-        try {
-            String username = "SYSTEM";
-            String role = "SYSTEM";
-
-            if (securityService.getPrincipal() != null) {
-                username = securityService.getPrincipal().getUsername();
-                if (securityService.getAuthentication() != null && !securityService.getAuthentication().getAuthorities().isEmpty()) {
-                    role = securityService.getAuthentication().getAuthorities().iterator().next().getAuthority();
-                }
-            }
-
-            AuditLog auditLog = new AuditLog();
-            auditLog.setUsername(username);
-            auditLog.setRole(role);
-            auditLog.setRecordId(recordId);
-            auditLog.setAction(action);
-            auditLog.setTableAffected(tableAffected);
-            auditLog.setDetails(details);
-
-            auditLogRepository.save(auditLog);
-        } catch (Exception e) {
-            log.error("Failed to save audit log for leave balance record {}: {}", recordId, e.getMessage());
-        }
+    @Transactional(readOnly = true)
+    public List<LeaveBalanceTransaction> findAllWithDetails() {
+        return transactionRepository.findAllWithDetails();
     }
 }

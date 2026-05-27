@@ -14,6 +14,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -26,6 +27,8 @@ public class AttendanceSyncService {
     private final AttendanceRepository attendanceRepository;
     private final ShiftAssignmentRepository shiftAssignmentRepository;
 
+    private final AuditLogService auditLoggingService;
+
     public static final String STATUS_ON_LEAVE = "ON_LEAVE";
     public static final String STATUS_HALF_DAY_LEAVE = "HALF_DAY_LEAVE";
     public static final String STATUS_PRESENT = "PRESENT";
@@ -33,20 +36,17 @@ public class AttendanceSyncService {
 
     private static final int GRACE_PERIOD_MINUTES = 15;
 
-
     @Transactional
     public void syncLeaveRecords(LeaveRequest request) {
         LocalDate startDate = request.getStartDate();
         LocalDate endDate = request.getEndDate();
         Long employeeId = request.getEmployee().getId();
 
-        // Fetch existing attendance records
         Map<LocalDate, Attendance> attendanceMap = attendanceRepository
                 .findByEmployeeIdAndAttendanceDateBetween(employeeId, startDate, endDate)
                 .stream()
                 .collect(Collectors.toMap(Attendance::getAttendanceDate, a -> a));
 
-        // Fetch existing shift assignments to identify true working days
         List<ShiftAssignment> assignments = shiftAssignmentRepository
                 .findByEmployeeIdInAndAssignmentDateBetween(List.of(employeeId), startDate, endDate);
 
@@ -54,18 +54,26 @@ public class AttendanceSyncService {
                 .collect(Collectors.toMap(ShiftAssignment::getAssignmentDate, a -> a));
 
         List<Attendance> recordsToSave = new ArrayList<>();
+
+        // Memory map to hold the old states before we save the batch
+        Map<LocalDate, String> oldStateByDate = new HashMap<>();
+
         LocalDate currentDate = startDate;
 
         while (!currentDate.isAfter(endDate)) {
             if (!assignmentMap.containsKey(currentDate)) {
                 currentDate = currentDate.plusDays(1);
-                //skip no assignment found
                 continue;
             }
 
             Attendance attendance = attendanceMap.getOrDefault(currentDate, new Attendance());
+            boolean isNewRecord = (attendance.getId() == null);
 
-            if (attendance.getId() == null) {
+            // Capture old state (null if it's a new record)
+            String oldState = isNewRecord ? null : String.format("{ \"status\": \"%s\" }", attendance.getStatus());
+            oldStateByDate.put(currentDate, oldState);
+
+            if (isNewRecord) {
                 attendance.setEmployee(request.getEmployee());
                 attendance.setShiftAssignment(assignmentMap.get(currentDate));
                 attendance.setAttendanceDate(currentDate);
@@ -82,7 +90,17 @@ public class AttendanceSyncService {
         }
 
         if (!recordsToSave.isEmpty()) {
-            attendanceRepository.saveAll(recordsToSave);
+            // 1. Perform the batch save
+            List<Attendance> savedRecords = attendanceRepository.saveAll(recordsToSave);
+
+            // 2. Loop through the saved entities (which now have valid IDs) to generate audit logs
+            for (Attendance saved : savedRecords) {
+                String oldState = oldStateByDate.get(saved.getAttendanceDate());
+                String newState = String.format("{ \"status\": \"%s\" }", saved.getStatus());
+                String action = (oldState == null) ? "CREATED" : "UPDATED";
+
+                auditLoggingService.saveAuditLog(saved.getId(), action, "attendance", oldState, newState);
+            }
         }
     }
 
@@ -98,6 +116,9 @@ public class AttendanceSyncService {
         List<Attendance> recordsToDelete = new ArrayList<>();
         List<Attendance> recordsToUpdate = new ArrayList<>();
 
+        // Memory map to hold old states for updates
+        Map<Long, String> oldStatesById = new HashMap<>();
+
         for (Attendance attendance : existingRecords) {
             String currentStatus = attendance.getStatus();
 
@@ -106,6 +127,9 @@ public class AttendanceSyncService {
                 if (attendance.getCheckIn() == null && attendance.getCheckOut() == null) {
                     recordsToDelete.add(attendance);
                 } else {
+                    // Capture old state before mutating the object
+                    oldStatesById.put(attendance.getId(), String.format("{ \"status\": \"%s\" }", attendance.getStatus()));
+
                     if (attendance.getShiftAssignment() != null && attendance.getCheckIn() != null) {
                         LocalTime effectiveStart = attendance.getShiftAssignment().getEffectiveStartTime();
                         LocalTime actualStart = attendance.getCheckIn().toLocalTime();
@@ -121,12 +145,25 @@ public class AttendanceSyncService {
                 }
             }
         }
+
+        // Process Deletions
         if (!recordsToDelete.isEmpty()) {
+            for (Attendance toDelete : recordsToDelete) {
+                String oldState = String.format("{ \"status\": \"%s\" }", toDelete.getStatus());
+                // For deletions, new state is null
+                auditLoggingService.saveAuditLog(toDelete.getId(), "DELETED", "attendance", oldState, null);
+            }
             attendanceRepository.deleteAll(recordsToDelete);
         }
 
+        // Process Updates
         if (!recordsToUpdate.isEmpty()) {
-            attendanceRepository.saveAll(recordsToUpdate);
+            List<Attendance> savedUpdates = attendanceRepository.saveAll(recordsToUpdate);
+            for (Attendance saved : savedUpdates) {
+                String oldState = oldStatesById.get(saved.getId());
+                String newState = String.format("{ \"status\": \"%s\", \"isLate\": %b }", saved.getStatus(), saved.getIsLate());
+                auditLoggingService.saveAuditLog(saved.getId(), "UPDATED", "attendance", oldState, newState);
+            }
         }
     }
 }

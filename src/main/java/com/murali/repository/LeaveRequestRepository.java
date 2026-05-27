@@ -87,4 +87,8 @@ public interface LeaveRequestRepository extends JpaRepository<LeaveRequest, Long
     );
     @EntityGraph(attributePaths = {"leaveType"})
     List<LeaveRequest> findByEmployeeIdAndStatusOrderByIdDesc(Long employeeId, String status);
+    @Query("SELECT COUNT(lr) FROM LeaveRequest lr WHERE " +
+            "(lr.createdAt BETWEEN :startDate AND :endDate) AND " +
+            "lr.currentLevel >= 3 AND lr.status LIKE 'PENDING%'")
+    long countEscalatedApprovals(@Param("startDate") LocalDate startDate, @Param("endDate") LocalDate endDate);
 }

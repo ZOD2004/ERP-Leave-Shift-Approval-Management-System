@@ -15,20 +15,28 @@ public class AuditLog {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long auditId;
+    private Long id;
 
-    private String username;
-    private String role;
-
+    // ADD THIS BACK IN
+    @Column(name = "record_id")
     private Long recordId;
-    private String action;
-    private String tableAffected;
 
-    @Column(columnDefinition = "TEXT")
-    private String details;
-
+    @Column(name = "timestamp")
     @CreationTimestamp
-    private LocalDateTime actionTime;
+    private LocalDateTime timestamp;
 
-    private Boolean isActive = true;
+    @Column(name = "action", length = 20)
+    private String action; // CREATE, UPDATE, DELETE
+
+    @Column(name = "entity_name", length = 100)
+    private String entityName; // e.g., "LeaveBalance", "ShiftAssignment"
+
+    @Column(name = "performed_by")
+    private String performedBy;
+
+    @Column(name = "old_state", columnDefinition = "text")
+    private String oldState;
+
+    @Column(name = "new_state", columnDefinition = "text")
+    private String newState;
 }

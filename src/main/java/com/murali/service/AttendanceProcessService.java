@@ -27,6 +27,7 @@ public class AttendanceProcessService {
     private final AttendanceRepository attendanceRepository;
     private final ShiftAssignmentRepository shiftAssignmentRepository;
     private final EmployeeRepository employeeRepository;
+    private final AuditLogService auditLoggingService;
 
     private static final int GRACE_PERIOD_MINUTES = 15;
 
@@ -38,16 +39,26 @@ public class AttendanceProcessService {
                 .findByEmployeeIdAndAssignmentDate(employeeId, today)
                 .orElseThrow(() -> new IllegalArgumentException("No shift assigned for employee ID " + employeeId + " on " + today));
 
+        // Track if this is a brand new record for the audit log
+        boolean isNewRecord = false;
         Attendance attendance = attendanceRepository
                 .findByEmployee_IdAndAttendanceDate(employeeId, today)
-                .orElseGet(() -> {
-                    Attendance newRecord = new Attendance();
-                    newRecord.setEmployee(employeeRepository.getReferenceById(employeeId));
-                    newRecord.setShiftAssignment(assignment);
-                    newRecord.setAttendanceDate(today);
-                    newRecord.setIsLate(false);
-                    return newRecord;
-                });
+                .orElse(null);
+
+        if (attendance == null) {
+            isNewRecord = true;
+            attendance = new Attendance();
+            attendance.setEmployee(employeeRepository.getReferenceById(employeeId));
+            attendance.setShiftAssignment(assignment);
+            attendance.setAttendanceDate(today);
+            attendance.setIsLate(false);
+            attendance.setStatus("PENDING");
+        }
+
+        // Capture Old State for Audit Log
+        String oldStatus = attendance.getStatus();
+        LocalDateTime oldCheckIn = attendance.getCheckIn();
+        LocalDateTime oldCheckOut = attendance.getCheckOut();
 
         // Hard Block: Cannot check in if on a Full Day Leave
         if (isCheckIn && "ON_LEAVE".equals(attendance.getStatus())) {
@@ -71,7 +82,6 @@ public class AttendanceProcessService {
                 log.info("Employee {} checked in late at {} against effective start {}", employeeId, actualStart, effectiveStart);
             }
 
-            // Only overwrite the status string if they aren't on a Half-Day Leave
             if (!"HALF_DAY_LEAVE".equals(attendance.getStatus())) {
                 attendance.setStatus(isLate ? "LATE" : "PRESENT");
             }
@@ -83,9 +93,23 @@ public class AttendanceProcessService {
             attendance.setCheckOut(punchTime);
         }
 
-        return attendanceRepository.save(attendance);
-    }
+        Attendance savedAttendance = attendanceRepository.save(attendance);
 
+        String oldState = isNewRecord ? null : String.format("{ \"status\": \"%s\", \"checkIn\": \"%s\", \"checkOut\": \"%s\" }",
+                oldStatus,
+                oldCheckIn != null ? oldCheckIn : "null",
+                oldCheckOut != null ? oldCheckOut : "null");
+
+        String newState = String.format("{ \"status\": \"%s\", \"checkIn\": \"%s\", \"checkOut\": \"%s\", \"isLate\": %b }",
+                savedAttendance.getStatus(),
+                savedAttendance.getCheckIn() != null ? savedAttendance.getCheckIn() : "null",
+                savedAttendance.getCheckOut() != null ? savedAttendance.getCheckOut() : "null",
+                savedAttendance.getIsLate());
+
+        auditLoggingService.saveAuditLog(savedAttendance.getId(), isCheckIn ? "PUNCH_IN" : "PUNCH_OUT", "attendance", oldState, newState);
+
+        return savedAttendance;
+    }
     public Optional<Attendance> getTodayAttendance(Long employeeId) {
         return attendanceRepository.findByEmployee_IdAndAttendanceDate(employeeId, LocalDate.now());
     }

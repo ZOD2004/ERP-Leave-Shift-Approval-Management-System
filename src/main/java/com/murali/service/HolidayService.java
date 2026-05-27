@@ -1,29 +1,25 @@
 package com.murali.service;
 
-import com.murali.entity.AuditLog;
 import com.murali.entity.Holiday;
-import com.murali.repository.AuditLogRepository;
 import com.murali.repository.HolidayRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 
 @Slf4j
 @Service
 public class HolidayService {
 
     private final HolidayRepository holidayRepository;
-    private final AuditLogRepository auditLogRepository;
-    private final SecurityService securityService;
+    private final AuditLogService auditLoggingService;
 
     public HolidayService(HolidayRepository holidayRepository,
-                          AuditLogRepository auditLogRepository,
-                          SecurityService securityService) {
+                          AuditLogService auditLoggingService) {
         this.holidayRepository = holidayRepository;
-        this.auditLogRepository = auditLogRepository;
-        this.securityService = securityService;
+        this.auditLoggingService = auditLoggingService;
     }
 
     public List<Holiday> getAllHolidays(){
@@ -32,47 +28,43 @@ public class HolidayService {
 
     public void saveHoliday(Holiday holiday){
         boolean isNew = (holiday.getId() == null);
-        holidayRepository.save(holiday);
+        String oldState = null;
+
+        if (!isNew) {
+            Optional<Holiday> existingOpt = holidayRepository.findById(holiday.getId());
+            if (existingOpt.isPresent()) {
+                Holiday existing = existingOpt.get();
+                oldState = String.format("{ \"name\": \"%s\", \"holidayDate\": \"%s\" }",
+                        existing.getName(), existing.getHolidayDate());
+            }
+        }
+
+        Holiday savedHoliday = holidayRepository.save(holiday);
+
+        String newState = String.format("{ \"name\": \"%s\", \"holidayDate\": \"%s\" }",
+                savedHoliday.getName(), savedHoliday.getHolidayDate());
 
         String action = isNew ? "CREATED" : "UPDATED";
-        log.info("Holiday {} successfully. ID: {}", action, holiday.getId());
-        saveAuditLog(holiday.getId(), action, "holidays",
-                "Holiday record " + action.toLowerCase() + " successfully.");
+        log.info("Holiday {} successfully. ID: {}", action, savedHoliday.getId());
+        auditLoggingService.saveAuditLog(savedHoliday.getId(), action, "holidays", oldState, newState);
     }
 
     public void deleteHoliday(Long id){
+        String oldState = null;
+        Optional<Holiday> existingOpt = holidayRepository.findById(id);
+        if (existingOpt.isPresent()) {
+            Holiday existing = existingOpt.get();
+            oldState = String.format("{ \"name\": \"%s\", \"holidayDate\": \"%s\" }",
+                    existing.getName(), existing.getHolidayDate());
+        }
+
         holidayRepository.deleteById(id);
 
         log.info("Holiday DELETED successfully. ID: {}", id);
-        saveAuditLog(id, "DELETED", "holidays", "Deleted Holiday with ID: " + id);
-    }
-
-    private void saveAuditLog(Long recordId, String action, String tableAffected, String details) {
-        try {
-            String username = "SYSTEM";
-            String role = "SYSTEM";
-
-            if (securityService.getPrincipal() != null) {
-                username = securityService.getPrincipal().getUsername();
-                if (securityService.getAuthentication() != null && !securityService.getAuthentication().getAuthorities().isEmpty()) {
-                    role = securityService.getAuthentication().getAuthorities().iterator().next().getAuthority();
-                }
-            }
-
-            AuditLog auditLog = new AuditLog();
-            auditLog.setUsername(username);
-            auditLog.setRole(role);
-            auditLog.setRecordId(recordId);
-            auditLog.setAction(action);
-            auditLog.setTableAffected(tableAffected);
-            auditLog.setDetails(details);
-            auditLogRepository.save(auditLog);
-        } catch (Exception e) {
-            log.error("Failed to save audit log for holiday record {}: {}", recordId, e.getMessage());
-        }
+        auditLoggingService.saveAuditLog(id, "DELETED", "holidays", oldState, null);
     }
 
     public long countUpcomingHolidaysInMonth(LocalDate today, int monthValue, int year) {
-        return holidayRepository.countUpcomingHolidaysInMonth(today,monthValue,year);
+        return holidayRepository.countUpcomingHolidaysInMonth(today, monthValue, year);
     }
 }

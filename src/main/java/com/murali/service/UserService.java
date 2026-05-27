@@ -1,19 +1,15 @@
 package com.murali.service;
 
-import com.murali.entity.AuditLog;
 import com.murali.entity.Department;
 import com.murali.entity.Employee;
 import com.murali.entity.Role;
 import com.murali.entity.User;
-import com.murali.repository.AuditLogRepository;
 import com.murali.repository.DepartmentRepository;
 import com.murali.repository.EmployeeRepository;
 import com.murali.repository.RoleRepository;
 import com.murali.repository.UserRepository;
 import jakarta.annotation.security.PermitAll;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.context.annotation.Lazy;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -29,30 +25,36 @@ public class UserService {
     private final DepartmentRepository departmentRepository;
     private final RoleRepository roleRepository;
     private final EmployeeRepository employeeRepository;
-
-    private final AuditLogRepository auditLogRepository;
-    private final SecurityService securityService;
+    private final AuditLogService auditLoggingService;
 
     public UserService(UserRepository userRepository,
                        PasswordEncoder passwordEncoder,
                        DepartmentRepository departmentRepository,
                        RoleRepository roleRepository,
                        EmployeeRepository employeeRepository,
-                       AuditLogRepository auditLogRepository,
-                       @Lazy SecurityService securityService) {
+                       AuditLogService auditLoggingService) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.departmentRepository = departmentRepository;
         this.roleRepository = roleRepository;
         this.employeeRepository = employeeRepository;
-        this.auditLogRepository = auditLogRepository;
-        this.securityService = securityService;
+        this.auditLoggingService = auditLoggingService;
     }
 
-//    @PreAuthorize("hasAnyRole('ROLE_SUPER_ADMIN', 'ROLE_HR_ADMIN')")
     @PermitAll
     public User save(User user) {
         boolean isNew = (user.getId() == null);
+        String oldState = null;
+
+        if (!isNew) {
+            Optional<User> existingOpt = userRepository.findById(user.getId());
+            if (existingOpt.isPresent()) {
+                User existing = existingOpt.get();
+                oldState = String.format("{ \"username\": \"%s\", \"email\": \"%s\", \"isActive\": %b, \"roleId\": %d }",
+                        existing.getUsername(), existing.getEmail(), existing.getActive(),
+                        existing.getRole() != null ? existing.getRole().getId() : null);
+            }
+        }
 
         if (user.getId() == null || !user.getPasswordHash().startsWith("$2a$")) {
             user.setPasswordHash(passwordEncoder.encode(user.getPasswordHash()));
@@ -60,14 +62,17 @@ public class UserService {
 
         User savedUser = userRepository.save(user);
 
+        String newState = String.format("{ \"username\": \"%s\", \"email\": \"%s\", \"isActive\": %b, \"roleId\": %d }",
+                savedUser.getUsername(), savedUser.getEmail(), savedUser.getActive(),
+                savedUser.getRole() != null ? savedUser.getRole().getId() : null);
         String action = isNew ? "CREATED" : "UPDATED";
+
         log.info("User {} successfully. ID: {}", action, savedUser.getId());
-        saveAuditLog(savedUser.getId(), action, "users", "User " + action.toLowerCase() + ": " + savedUser.getUsername());
+        auditLoggingService.saveAuditLog(savedUser.getId(), action, "users", oldState, newState);
 
         return savedUser;
     }
 
-//    @PreAuthorize("hasAnyRole('ROLE_SUPER_ADMIN', 'ROLE_HR_ADMIN', 'ROLE_AUDITOR', 'ROLE_MANAGER')")
     public List<User> findAll() {
         return userRepository.findAll();
     }
@@ -79,17 +84,19 @@ public class UserService {
 
         Long userId = managedUser.getId();
         String username = managedUser.getUsername();
+        String oldState = String.format("{ \"username\": \"%s\", \"email\": \"%s\", \"isActive\": %b, \"roleId\": %d }",
+                managedUser.getUsername(), managedUser.getEmail(), managedUser.getActive(),
+                managedUser.getRole() != null ? managedUser.getRole().getId() : null);
 
         employeeRepository.findByUserId(userId).ifPresent(employee -> {
             employee.setUser(null);
             employeeRepository.save(employee);
         });
 
-        // 3. Delete the user safely
         userRepository.delete(managedUser);
 
         log.info("User DELETED successfully. ID: {}", userId);
-        saveAuditLog(userId, "DELETED", "users", "Deleted User: " + username);
+        auditLoggingService.saveAuditLog(userId, "DELETED", "users", oldState, null);
     }
 
     public User findByUsername(String username) {
@@ -128,17 +135,12 @@ public class UserService {
                 empPayload.setManager(null);
             }
 
-            // 4. Save the Employee
             Employee savedEmployee = employeeRepository.save(empPayload);
-
-            // 5. (Optional) Generate Leave Balances
-            // Based on your previous logs, you generate leave balances upon creation.
-            // If you have a separate service for this, call it here:
-            // leaveBalanceService.initializeBalancesForNewEmployee(savedEmployee);
         }
 
+        String newState = String.format("{ \"importedCount\": %d }", employees.size());
         log.info("Successfully imported {} employees/users from JSON.", employees.size());
-        saveAuditLog(null, "IMPORTED", "users", "Bulk imported " + employees.size() + " employees/users from JSON.");
+        auditLoggingService.saveAuditLog(null, "IMPORTED", "users", null, newState);
     }
 
     public long getActiveUsersCount() {
@@ -153,44 +155,16 @@ public class UserService {
             return false;
         }
 
-        // Verify the old password
         if (!passwordEncoder.matches(oldPassword, user.getPasswordHash())) {
             return false;
         }
 
-        // Encode and save the new password
         user.setPasswordHash(passwordEncoder.encode(newPassword));
         userRepository.save(user);
 
-        // Log the action
-        saveAuditLog(user.getId(), "PASSWORD_CHANGED", "users", "Password changed for user: " + username);
+        String newState = "{ \"passwordChanged\": true }";
+        auditLoggingService.saveAuditLog(user.getId(), "PASSWORD_CHANGED", "users", null, newState);
 
         return true;
-    }
-
-    private void saveAuditLog(Long recordId, String action, String tableAffected, String details) {
-        try {
-            String username = "SYSTEM";
-            String role = "SYSTEM";
-
-            if (securityService.getPrincipal() != null) {
-                username = securityService.getPrincipal().getUsername();
-                if (securityService.getAuthentication() != null && !securityService.getAuthentication().getAuthorities().isEmpty()) {
-                    role = securityService.getAuthentication().getAuthorities().iterator().next().getAuthority();
-                }
-            }
-
-            AuditLog auditLog = new AuditLog();
-            auditLog.setUsername(username);
-            auditLog.setRole(role);
-            auditLog.setRecordId(recordId);
-            auditLog.setAction(action);
-            auditLog.setTableAffected(tableAffected);
-            auditLog.setDetails(details);
-
-            auditLogRepository.save(auditLog);
-        } catch (Exception e) {
-            log.error("Failed to save audit log for user record {}: {}", recordId, e.getMessage());
-        }
     }
 }

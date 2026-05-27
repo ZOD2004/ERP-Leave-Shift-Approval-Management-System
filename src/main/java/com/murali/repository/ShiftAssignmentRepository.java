@@ -157,4 +157,8 @@ public interface ShiftAssignmentRepository extends JpaRepository<ShiftAssignment
             @Param("employeeIds") List<Long> employeeIds,
             @Param("assignmentDate") LocalDate assignmentDate
     );
+
+    @Query("SELECT COUNT(sa) FROM ShiftAssignment sa WHERE " +
+            "sa.assignmentDate BETWEEN :startDate AND :endDate AND sa.overrideApplied = true")
+    long countByOverrideAppliedTrue(@Param("startDate") LocalDate startDate, @Param("endDate") LocalDate endDate);
 }

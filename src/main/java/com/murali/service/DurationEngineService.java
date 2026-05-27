@@ -1,10 +1,8 @@
 package com.murali.service;
 
-import com.murali.entity.AuditLog;
 import com.murali.entity.Employee;
 import com.murali.entity.LeaveType;
 import com.murali.exception.PastDateException;
-import com.murali.repository.AuditLogRepository;
 import com.murali.repository.HolidayRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -20,17 +18,14 @@ import java.util.List;
 public class DurationEngineService {
 
     private final HolidayRepository holidayRepository;
-    private final AuditLogRepository auditLogRepository;
-    private final SecurityService securityService;
+    private final AuditLogService auditLoggingService;
 
     public static final String HALF_DAY_CODE = "HDL-001";
 
     public DurationEngineService(HolidayRepository holidayRepository,
-                                 AuditLogRepository auditLogRepository,
-                                 SecurityService securityService) {
+                                 AuditLogService auditLoggingService) {
         this.holidayRepository = holidayRepository;
-        this.auditLogRepository = auditLogRepository;
-        this.securityService = securityService;
+        this.auditLoggingService = auditLoggingService;
     }
 
     public BigDecimal calculateNetLeaveDays(LocalDate startDate, LocalDate endDate,
@@ -74,9 +69,11 @@ public class DurationEngineService {
             }
             log.info("Standard calculation applied. Net working days calculated: {}", duration);
         }
-        saveAuditLog(null, "CALCULATE_DURATION", "none",
-                "Calculated " + duration + " days for employee ID: " + employee.getId() +
-                        " (Dates: " + startDate + " to " + endDate + ")");
+
+        String newState = String.format("{ \"startDate\": \"%s\", \"endDate\": \"%s\", \"calculatedDuration\": %s, \"sandwichRule\": %b }",
+                startDate, endDate, duration, applySandwichRule);
+
+        auditLoggingService.saveAuditLog(null, "CALCULATE_DURATION", "none", null, newState);
 
         return duration;
     }
@@ -84,31 +81,5 @@ public class DurationEngineService {
     private boolean isOffDay(LocalDate date) {
         DayOfWeek day = date.getDayOfWeek();
         return day == DayOfWeek.SATURDAY || day == DayOfWeek.SUNDAY;
-    }
-
-    private void saveAuditLog(Long recordId, String action, String tableAffected, String details) {
-        try {
-            String username = "SYSTEM";
-            String role = "SYSTEM";
-
-            if (securityService.getPrincipal() != null) {
-                username = securityService.getPrincipal().getUsername();
-                if (securityService.getAuthentication() != null && !securityService.getAuthentication().getAuthorities().isEmpty()) {
-                    role = securityService.getAuthentication().getAuthorities().iterator().next().getAuthority();
-                }
-            }
-
-            AuditLog auditLog = new AuditLog();
-            auditLog.setUsername(username);
-            auditLog.setRole(role);
-            auditLog.setRecordId(recordId);
-            auditLog.setAction(action);
-            auditLog.setTableAffected(tableAffected);
-            auditLog.setDetails(details);
-
-            auditLogRepository.save(auditLog);
-        } catch (Exception e) {
-            log.error("Failed to save audit log for duration calculation: {}", e.getMessage());
-        }
     }
 }

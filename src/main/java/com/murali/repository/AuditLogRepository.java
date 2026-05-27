@@ -8,8 +8,12 @@ import org.springframework.stereotype.Repository;
 
 import java.util.List;
 
+
+
 @Repository
 public interface AuditLogRepository extends JpaRepository<AuditLog, Long> {
-    @Query("SELECT a FROM AuditLog a WHERE a.isActive = true ORDER BY a.actionTime DESC")
+    @Query("SELECT a FROM AuditLog a ORDER BY a.id DESC")
     List<AuditLog> findRecentLogs(Pageable pageable);
+    List<AuditLog> findAllByOrderByTimestampDesc();
+
 }

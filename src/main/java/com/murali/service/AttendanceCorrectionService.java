@@ -4,10 +4,12 @@ import com.murali.entity.Attendance;
 import com.murali.entity.AttendanceCorrection;
 import com.murali.entity.LeaveType;
 import com.murali.entity.User;
+import com.murali.entity.AuditLog;
 import com.murali.repository.AttendanceCorrectionRepository;
 import com.murali.repository.AttendanceRepository;
 import com.murali.repository.LeaveTypeRepository;
 import com.murali.repository.UserRepository;
+import com.murali.repository.AuditLogRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -28,6 +30,10 @@ public class AttendanceCorrectionService {
     private final LeaveTypeRepository leaveTypeRepository;
     private final UserRepository userRepository;
 
+    // Injected for Audit Logging
+    private final AuditLogRepository auditLogRepository;
+    private final SecurityService securityService;
+
 
     @Transactional
     public void autoCreateCorrection(Attendance attendance) {
@@ -41,6 +47,11 @@ public class AttendanceCorrectionService {
         correctionRepository.save(correction);
         log.info("Auto-triggered Attendance Correction for employee {}, routed to manager {}",
                 attendance.getEmployee().getId(), approver.getUsername());
+
+        // Audit Log: Creation event (No old state)
+        String newState = String.format("{ \"status\": \"PENDING\", \"attendanceId\": %d, \"approverId\": %d }",
+                attendance.getId(), approver.getId());
+        saveAuditLog(correction.getId(), "CREATED", "attendance_corrections", null, newState);
     }
 
     @Transactional
@@ -53,6 +64,10 @@ public class AttendanceCorrectionService {
         }
 
         Attendance attendance = correction.getAttendance();
+
+        // Capture old state for the Audit Log before modifying
+        String oldStatus = correction.getStatus();
+        String safeComments = (comments != null) ? comments.replace("\"", "\\\"") : ""; // Escape quotes for JSON
 
         if ("APPROVED".equalsIgnoreCase(action)) {
             if (manualCheckOutTime == null) {
@@ -68,6 +83,13 @@ public class AttendanceCorrectionService {
             correction.setResolvedCheckOutTime(manualCheckOutTime);
             correction.setStatus("APPROVED");
 
+            // Audit Log: Approval Diff
+            String oldState = String.format("{ \"status\": \"%s\", \"checkOut\": null }", oldStatus);
+            String newState = String.format("{ \"status\": \"APPROVED\", \"checkOut\": \"%s\", \"comments\": \"%s\" }",
+                    manualCheckOutTime.toString(), safeComments);
+
+            saveAuditLog(correction.getId(), "APPROVED", "attendance_corrections", oldState, newState);
+
         } else if ("REJECTED".equalsIgnoreCase(action)) {
             attendance.setStatus("ABSENT");
 
@@ -81,6 +103,13 @@ public class AttendanceCorrectionService {
             );
 
             correction.setStatus("REJECTED");
+
+            // Audit Log: Rejection Diff
+            String oldState = String.format("{ \"status\": \"%s\" }", oldStatus);
+            String newState = String.format("{ \"status\": \"REJECTED\", \"comments\": \"%s\" }", safeComments);
+
+            saveAuditLog(correction.getId(), "REJECTED", "attendance_corrections", oldState, newState);
+
         } else {
             throw new IllegalArgumentException("Invalid action.");
         }
@@ -100,10 +129,12 @@ public class AttendanceCorrectionService {
                 .stream().findFirst()
                 .orElseThrow(() -> new IllegalStateException("No Manager or HR Admin available to route anomaly."));
     }
+
     @Transactional(readOnly = true)
     public List<AttendanceCorrection> getPendingCorrectionsForApprover(Long approverId) {
         return correctionRepository.findPendingCorrectionsForManager(approverId);
     }
+
     @Transactional(readOnly = true)
     public List<AttendanceCorrection> getAllPendingCorrectionsGlobally() {
         return correctionRepository.findAllPendingCorrectionsGlobally();
@@ -112,5 +143,34 @@ public class AttendanceCorrectionService {
     @Transactional(readOnly = true)
     public long getGlobalPendingCorrectionsCount() {
         return correctionRepository.countByStatus("PENDING");
+    }
+
+    // --- Private Audit Log Helper ---
+    private void saveAuditLog(Long recordId, String action, String entityName, String oldState, String newState) {
+        try {
+            String performedBy = "SYSTEM";
+
+            if (securityService.getPrincipal() != null) {
+                String username = securityService.getPrincipal().getUsername();
+                String role = "USER";
+
+                if (securityService.getAuthentication() != null && !securityService.getAuthentication().getAuthorities().isEmpty()) {
+                    role = securityService.getAuthentication().getAuthorities().iterator().next().getAuthority();
+                }
+                performedBy = username + " (" + role + ")";
+            }
+
+            AuditLog auditLog = new AuditLog();
+            auditLog.setRecordId(recordId);
+            auditLog.setAction(action);
+            auditLog.setEntityName(entityName);
+            auditLog.setPerformedBy(performedBy);
+            auditLog.setOldState(oldState);
+            auditLog.setNewState(newState);
+
+            auditLogRepository.save(auditLog);
+        } catch (Exception e) {
+            log.error("Failed to save database audit log for record {}: {}", recordId, e.getMessage());
+        }
     }
 }
