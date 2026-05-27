@@ -174,7 +174,11 @@ public class ShiftView extends VerticalLayout {
 
     private void saveShift() {
         try {
-            if (startTimeField.getValue() != null && endTimeField.getValue() != null
+            Shifts selectedShift = shiftTypeField.getValue();
+
+            boolean isNightShift = Shifts.NIGHT_SHIFT.equals(selectedShift);
+
+            if (!isNightShift && startTimeField.getValue() != null && endTimeField.getValue() != null
                     && startTimeField.getValue().isAfter(endTimeField.getValue())) {
                 Notification.show("The start time cannot come after the end time.")
                         .addThemeVariants(NotificationVariant.LUMO_ERROR);
