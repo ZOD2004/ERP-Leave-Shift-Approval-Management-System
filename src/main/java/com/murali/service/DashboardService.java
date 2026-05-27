@@ -37,7 +37,6 @@ public class DashboardService {
     }
 
     public String getTodayAbsenceCount() {
-        // Assume leaveRequestService has a method to find active leaves for a date
         return String.valueOf(leaveRequestService.getActiveLeavesCountForDate(java.time.LocalDate.now()));
     }
 
@@ -45,11 +44,6 @@ public class DashboardService {
         return String.valueOf(leaveRequestService.countPendingRequests());
     }
 
-
-
-    public List<LeaveRequest> getOldestPendingRequests(int limit) {
-        return leaveRequestService.getPendingRequestsOrderByDate(limit);
-    }
     @Transactional(readOnly = true)
     public Map<String, BigDecimal> getGlobalLeaveUtilization(int year) {
         List<Object[]> result = leaveBalanceRepository.getGlobalLeaveUtilization(year);

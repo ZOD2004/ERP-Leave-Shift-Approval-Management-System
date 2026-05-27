@@ -20,6 +20,8 @@ public interface LeaveBalanceRepository extends JpaRepository<LeaveBalance, Long
 
     @Query("SELECT COALESCE(SUM(lb.totalEntitled), 0), COALESCE(SUM(lb.used), 0) FROM LeaveBalance lb WHERE lb.year = :year")
     List<Object[]> getGlobalLeaveUtilization(@Param("year") Integer year);
+
+
     @Query("SELECT COUNT(lb) FROM LeaveBalance lb WHERE " +
             "(lb.totalEntitled - lb.used - lb.pendingDays) < 0 AND lb.year = :year")
     long countNegativeBalances(@Param("year") int year);

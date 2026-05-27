@@ -37,7 +37,6 @@ public class AuditLogService {
                 if (securityService.getAuthentication() != null && !securityService.getAuthentication().getAuthorities().isEmpty()) {
                     role = securityService.getAuthentication().getAuthorities().iterator().next().getAuthority();
                 }
-                // Combines them to look like "john_doe (ROLE_MANAGER)" for the Vaadin Grid
                 performedBy = username + " (" + role + ")";
             }
 
@@ -45,16 +44,6 @@ public class AuditLogService {
 
         } catch (Exception e) {
             log.error("Failed to save database audit log for record {}: {}", recordId, e.getMessage());
-        }
-    }
-
-
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void saveSystemAuditLog(Long recordId, String action, String entityName, String oldState, String newState) {
-        try {
-            saveToDatabase(recordId, action, entityName, "SYSTEM (CRON)", oldState, newState);
-        } catch (Exception e) {
-            log.error("Failed to save system audit log for record {}: {}", recordId, e.getMessage());
         }
     }
 
@@ -68,10 +57,6 @@ public class AuditLogService {
         auditLog.setNewState(newState);
 
         auditLogRepository.save(auditLog);
-    }
-    @Transactional(readOnly = true)
-    public List<AuditLog> getAllLogs() {
-        return auditLogRepository.findAllByOrderByTimestampDesc();
     }
     @Transactional(readOnly = true)
     public List<AuditLog> getRecentLogs(int limit) {

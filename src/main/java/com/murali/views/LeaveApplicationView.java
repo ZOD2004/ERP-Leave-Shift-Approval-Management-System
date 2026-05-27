@@ -475,9 +475,8 @@ public class LeaveApplicationView extends VerticalLayout {
 
         if (type != null && start != null && end != null && !end.isBefore(start)) {
             try {
-                boolean applySandwich = true;
                 BigDecimal netDays = durationEngineService.calculateNetLeaveDays(
-                        start, end, currentEmployee, type, applySandwich
+                        start, end, currentEmployee, type, false
                 );
                 durationDays.setValue(netDays.doubleValue());
             } catch (Exception ex) {
