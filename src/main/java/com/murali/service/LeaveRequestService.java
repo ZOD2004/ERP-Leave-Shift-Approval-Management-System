@@ -110,7 +110,6 @@ public class LeaveRequestService {
                                 "Negative balances are only permitted for Sick[SL-001] or Emergency leaves[EMG-001]."
                 );
             }
-            reason = "[WARNING: NEGATIVE BALANCE REQUEST] - " + reason;
         }
 
         List<LeaveApprovalRule> applicableRules = ruleService.getApplicableRules(leaveType.getId(), duration);
@@ -203,7 +202,7 @@ public class LeaveRequestService {
             throw new IllegalStateException("This request is already " + currentStatus);
         }
 
-        if (currentStatus.equals(STATUS_PENDING)) {
+        if (currentStatus.startsWith(STATUS_PENDING)) {
             request.setStatus(STATUS_CANCELLED);
             leaveBalanceService.releasePendingHold(
                     request.getEmployee(), request.getLeaveType(), request.getDurationDays(), currentYear, request.getId()

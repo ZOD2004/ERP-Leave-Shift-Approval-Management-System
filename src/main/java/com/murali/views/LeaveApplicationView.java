@@ -309,7 +309,7 @@ public class LeaveApplicationView extends VerticalLayout {
         durationDays.setHelperText("Excludes weekends/holidays");
         reason.setMinHeight("100px");
 
-        leaveSessionGroup.setItems(LeaveSession.FIRST_HALF, LeaveSession.SECOND_HALF);
+        leaveSessionGroup.setItems(LeaveSession.FIRST_HALF, LeaveSession.SECOND_HALF,LeaveSession.FULL_DAY);
         leaveSessionGroup.setItemLabelGenerator(session ->
                 session == LeaveSession.FIRST_HALF ? "1st Half (Morning off)" : "2nd Half (Afternoon off)"
         );

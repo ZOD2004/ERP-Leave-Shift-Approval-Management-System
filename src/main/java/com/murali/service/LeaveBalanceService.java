@@ -222,7 +222,7 @@ public class LeaveBalanceService {
                     newBalance.setEmployee(employee);
                     newBalance.setLeaveType(leaveType);
                     newBalance.setYear(year);
-                    newBalance.setTotalEntitled(BigDecimal.ZERO);
+                    newBalance.setTotalEntitled(BigDecimal.valueOf(10));
                     newBalance.setUsed(BigDecimal.ZERO);
                     newBalance.setPendingDays(BigDecimal.ZERO);
                     LeaveBalance savedBalance = leaveBalanceRepository.save(newBalance);

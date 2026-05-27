@@ -410,4 +410,3 @@ public class ManagerApprovalView extends VerticalLayout {
         return row;
     }
 }
-

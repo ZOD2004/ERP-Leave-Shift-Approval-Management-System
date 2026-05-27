@@ -35,8 +35,6 @@ public class AttendanceCronJobService {
     private final LeaveTypeRepository leaveTypeRepository;
     private final ShiftAssignmentRepository shiftAssignmentRepository;
     private final AttendanceCorrectionService attendanceCorrectionService;
-
-    // Injected for Audit Logging
     private final AuditLogRepository auditLogRepository;
 
     private static final int MINIMUM_HOURS_FOR_FULL_DAY = 4;
@@ -74,7 +72,6 @@ public class AttendanceCronJobService {
                 continue;
             }
 
-            // Capture initial state to determine if it's new or an existing record
             boolean isNewRecord = !targetDateAttendanceMap.containsKey(employeeId);
             Attendance attendance = targetDateAttendanceMap.getOrDefault(
                     employeeId,

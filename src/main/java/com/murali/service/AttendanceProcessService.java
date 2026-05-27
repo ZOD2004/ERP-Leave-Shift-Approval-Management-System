@@ -39,7 +39,6 @@ public class AttendanceProcessService {
                 .findByEmployeeIdAndAssignmentDate(employeeId, today)
                 .orElseThrow(() -> new IllegalArgumentException("No shift assigned for employee ID " + employeeId + " on " + today));
 
-        // Track if this is a brand new record for the audit log
         boolean isNewRecord = false;
         Attendance attendance = attendanceRepository
                 .findByEmployee_IdAndAttendanceDate(employeeId, today)
@@ -55,7 +54,6 @@ public class AttendanceProcessService {
             attendance.setStatus("PENDING");
         }
 
-        // Capture Old State for Audit Log
         String oldStatus = attendance.getStatus();
         LocalDateTime oldCheckIn = attendance.getCheckIn();
         LocalDateTime oldCheckOut = attendance.getCheckOut();

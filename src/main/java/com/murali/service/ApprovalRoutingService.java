@@ -122,7 +122,7 @@ public class ApprovalRoutingService {
             request.setCurrentLevel(nextLevel);
             request.setStatus("PENDING LVL"+nextLevel);
             leaveRequestRepository.save(request);
-            // TODO: Trigger Email/Notification Service for the Next Level Approver
+            // TODO: Trigger Email for the Next Level Approver
         } else {
             finalizeApproval(request);
         }
@@ -132,8 +132,7 @@ public class ApprovalRoutingService {
         request.setStatus(LeaveRequestService.STATUS_APPROVED);
         leaveRequestRepository.save(request);
 
-        // 1. Ledger: Deduct the actual days and remove the pending hold
-        // Assuming current year based on start date
+        // Deduct the actual days and remove the pending hold
         Integer year = request.getStartDate().getYear();
 
         leaveBalanceService.deduct(
@@ -148,7 +147,7 @@ public class ApprovalRoutingService {
         attendanceSyncService.syncLeaveRecords(request);
         shiftAssignmentService.applyHalfDayLeaveOverride(request);
 
-        // TODO: Trigger Email/Notification Service to Employee: "Your leave is approved"
+        // TODO: Trigger Email to Employee: "Your leave is approved"
     }
 
     private void handleRejection(LeaveRequest request) {
@@ -157,7 +156,7 @@ public class ApprovalRoutingService {
 
         Integer year = request.getStartDate().getYear();
 
-        // Ledger: We must release the "Pending Hold" we placed when the request was submitted.
+        //Must release the "Pending Hold" we placed when the request was submitted.
         leaveBalanceService.releasePendingHold(
                 request.getEmployee(),
                 request.getLeaveType(),
@@ -166,7 +165,7 @@ public class ApprovalRoutingService {
                 request.getId()
         );
 
-        // TODO: Trigger Email/Notification Service to Employee: "Your leave was rejected"
+        // TODO: Trigger Email to Employee: "Your leave was rejected with reason maybe"
     }
     @Transactional
     public void cancelPendingApprovals(Long leaveRequestId) {
@@ -193,7 +192,6 @@ public class ApprovalRoutingService {
 
     @Transactional(readOnly = true)
     public List<LeaveApproval> getPendingApprovalsForUser(Long userId) {
-
         return leaveApprovalRepository.findActivePendingApprovalsForUser(userId);
 
     }
@@ -210,7 +208,6 @@ public class ApprovalRoutingService {
             String requiredRoleName = rule.getRequiredRole().getName();
             User approver = resolveApproverForRole(applicant, requiredRoleName);
 
-            // PREVENT SELF-APPROVAL: If the resolved approver is the applicant, escalate to HR
             if (approver.getId().equals(applicant.getUser().getId())) {
                 log.info("Self-approval detected for role " + requiredRoleName + ". Escalating to HR.");
                 approver = getFallbackAdminUser();

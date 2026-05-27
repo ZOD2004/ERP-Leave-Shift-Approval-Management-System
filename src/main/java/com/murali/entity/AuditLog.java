@@ -17,7 +17,6 @@ public class AuditLog {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    // ADD THIS BACK IN
     @Column(name = "record_id")
     private Long recordId;
 

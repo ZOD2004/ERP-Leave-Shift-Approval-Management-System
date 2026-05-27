@@ -65,7 +65,6 @@ public class AttendanceCorrectionService {
 
         Attendance attendance = correction.getAttendance();
 
-        // Capture old state for the Audit Log before modifying
         String oldStatus = correction.getStatus();
         String safeComments = (comments != null) ? comments.replace("\"", "\\\"") : ""; // Escape quotes for JSON
 
@@ -78,12 +77,9 @@ public class AttendanceCorrectionService {
             attendance.setCheckOut(manualCheckOutTime);
             attendance.setStatus("PRESENT");
 
-            // Note: The 0.5 penalty remains in the LeaveBalance ledger as per strict company policy.
-
             correction.setResolvedCheckOutTime(manualCheckOutTime);
             correction.setStatus("APPROVED");
 
-            // Audit Log: Approval Diff
             String oldState = String.format("{ \"status\": \"%s\", \"checkOut\": null }", oldStatus);
             String newState = String.format("{ \"status\": \"APPROVED\", \"checkOut\": \"%s\", \"comments\": \"%s\" }",
                     manualCheckOutTime.toString(), safeComments);
@@ -104,7 +100,6 @@ public class AttendanceCorrectionService {
 
             correction.setStatus("REJECTED");
 
-            // Audit Log: Rejection Diff
             String oldState = String.format("{ \"status\": \"%s\" }", oldStatus);
             String newState = String.format("{ \"status\": \"REJECTED\", \"comments\": \"%s\" }", safeComments);
 

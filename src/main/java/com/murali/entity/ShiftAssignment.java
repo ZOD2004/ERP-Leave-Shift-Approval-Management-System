@@ -51,5 +51,4 @@ public class ShiftAssignment {
                 ? overrideEndTime
                 : shift.getEndTime();
     }
-
 }

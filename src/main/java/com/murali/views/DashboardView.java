@@ -101,8 +101,8 @@ public class DashboardView extends VerticalLayout {
         }
         add(new Hr());
         add(createHeaderWidget(employeeId));
-        add(new Hr());
-        add(createLeaveBalanceWidget(employeeId));
+//        add(new Hr());
+//        add(createLeaveBalanceWidget(employeeId));
 
         if (securityService.hasRole("ROLE_MANAGER") || securityService.hasRole("ROLE_DEPT_HEAD")) {
             add(new Hr());
