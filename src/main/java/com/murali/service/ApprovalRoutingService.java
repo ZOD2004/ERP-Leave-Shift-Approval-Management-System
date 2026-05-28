@@ -130,7 +130,6 @@ public class ApprovalRoutingService {
         request.setStatus(LeaveRequestService.STATUS_APPROVED);
         leaveRequestRepository.save(request);
 
-        // Deduct the actual days and remove the pending hold
         Integer year = request.getStartDate().getYear();
 
         leaveBalanceService.deduct(
@@ -141,7 +140,6 @@ public class ApprovalRoutingService {
                 year
         );
 
-        // 2. Attendance Sync: Block out the calendar
         attendanceSyncService.syncLeaveRecords(request);
         shiftAssignmentService.applyHalfDayLeaveOverride(request);
 
@@ -154,7 +152,6 @@ public class ApprovalRoutingService {
 
         Integer year = request.getStartDate().getYear();
 
-        //Must release the "Pending Hold" we placed when the request was submitted.
         leaveBalanceService.releasePendingHold(
                 request.getEmployee(),
                 request.getLeaveType(),
@@ -282,7 +279,6 @@ public class ApprovalRoutingService {
         try {
             String performedBy = "SYSTEM";
 
-            // Safely fetch current user from SecurityService
             if (securityService.getPrincipal() != null) {
                 String username = securityService.getPrincipal().getUsername();
                 String role = "USER";
@@ -290,7 +286,6 @@ public class ApprovalRoutingService {
                 if (securityService.getAuthentication() != null && !securityService.getAuthentication().getAuthorities().isEmpty()) {
                     role = securityService.getAuthentication().getAuthorities().iterator().next().getAuthority();
                 }
-                // Combine them to match your Vaadin grid requirement
                 performedBy = username + " (" + role + ")";
             }
 

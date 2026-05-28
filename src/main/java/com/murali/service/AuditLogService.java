@@ -29,7 +29,6 @@ public class AuditLogService {
         try {
             String performedBy = "SYSTEM";
 
-            // Safely fetch current user from SecurityService
             if (securityService.getPrincipal() != null) {
                 String username = securityService.getPrincipal().getUsername();
                 String role = "USER";

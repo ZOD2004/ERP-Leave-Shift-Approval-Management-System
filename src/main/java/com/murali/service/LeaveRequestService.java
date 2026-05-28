@@ -27,8 +27,7 @@ public class LeaveRequestService {
     private final ApprovalRoutingService approvalRoutingService;
     private final ShiftAssignmentService shiftAssignmentService;
 
-    // Replaced AuditLogRepository and SecurityService with AuditLoggingService
-    private final AuditLogService auditLoggingService;
+   private final AuditLogService auditLoggingService;
 
     public static final String STATUS_PENDING = "PENDING";
     public static final String STATUS_APPROVED = "APPROVED";
@@ -161,10 +160,6 @@ public class LeaveRequestService {
         return leaveRequestRepository.findByEmployeeIdOrderByStartDateDesc(employeeId);
     }
 
-    @Transactional(readOnly = true)
-    public List<LeaveRequest> getPendingRequestsOrderByDate(int limit) {
-        return leaveRequestRepository.findPendingRequests(STATUS_PENDING, PageRequest.of(0, limit));
-    }
 
     @Transactional(readOnly = true)
     public long countPendingRequests() {

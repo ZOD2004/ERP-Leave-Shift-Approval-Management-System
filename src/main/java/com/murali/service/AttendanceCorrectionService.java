@@ -30,8 +30,6 @@ public class AttendanceCorrectionService {
     private final LeaveBalanceService leaveBalanceService;
     private final LeaveTypeRepository leaveTypeRepository;
     private final UserRepository userRepository;
-
-    // Injected for Audit Logging
     private final AuditLogRepository auditLogRepository;
     private final SecurityService securityService;
 
@@ -49,7 +47,6 @@ public class AttendanceCorrectionService {
         log.info("Auto-triggered Attendance Correction for employee {}, routed to manager {}",
                 attendance.getEmployee().getId(), approver.getUsername());
 
-        // Audit Log: Creation event (No old state)
         String newState = String.format("{ \"status\": \"PENDING\", \"attendanceId\": %d, \"approverId\": %d }",
                 attendance.getId(), approver.getId());
         saveAuditLog(correction.getId(), "CREATED", "attendance_corrections", null, newState);
@@ -74,7 +71,6 @@ public class AttendanceCorrectionService {
                 throw new IllegalArgumentException("A manual check-out time must be provided for approval.");
             }
 
-            // 1. Update Attendance Status and Time
             attendance.setCheckOut(manualCheckOutTime);
             attendance.setStatus("PRESENT");
 
@@ -141,7 +137,6 @@ public class AttendanceCorrectionService {
         return correctionRepository.countByStatus("PENDING");
     }
 
-    // --- Private Audit Log Helper ---
     private void saveAuditLog(Long recordId, String action, String entityName, String oldState, String newState) {
         try {
             String performedBy = "SYSTEM";

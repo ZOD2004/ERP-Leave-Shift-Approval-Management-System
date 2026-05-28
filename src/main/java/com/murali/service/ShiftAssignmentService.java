@@ -133,7 +133,6 @@ public class ShiftAssignmentService {
             , LocalDate startDate, LocalDate endDate) {
         BatchPreviewResponse response = new BatchPreviewResponse();
 
-        // the created shift not shiftAssignmentId
         Shift shift = shiftRepository.findById(shiftId)
                 .orElseThrow(() -> new ShiftNotFoundException("Shift not found with ID: " + shiftId));
 
@@ -249,8 +248,6 @@ public class ShiftAssignmentService {
         List<ShiftAssignment> assignmentsToSave = new ArrayList<>();
 
         for (ShiftAssignmentDTO dto : finalCleanAssignments) {
-
-            //true when only one side differs
             if ((dto.getOverrideStartTime() == null) != (dto.getOverrideEndTime() == null)) {
                 throw new IllegalArgumentException("Both override times must be provided for Employee ID: "
                         + dto.getEmployeeId() + " on " + dto.getAssignmentDate());
@@ -562,7 +559,6 @@ public class ShiftAssignmentService {
         if (start.isBefore(end) || start.equals(end)) {
             durationMinutes = java.time.Duration.between(start, end).toMinutes();
         } else {
-            //night shift
             durationMinutes = java.time.Duration.between(start, LocalTime.MAX).toMinutes() + 1 +
                     java.time.Duration.between(LocalTime.MIN, end).toMinutes();
         }

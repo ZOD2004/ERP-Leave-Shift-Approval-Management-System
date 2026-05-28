@@ -55,8 +55,7 @@ public class AttendanceSyncService {
 
         List<Attendance> recordsToSave = new ArrayList<>();
 
-        // Memory map to hold the old states before we save the batch
-        Map<LocalDate, String> oldStateByDate = new HashMap<>();
+       Map<LocalDate, String> oldStateByDate = new HashMap<>();
 
         LocalDate currentDate = startDate;
 
@@ -69,7 +68,6 @@ public class AttendanceSyncService {
             Attendance attendance = attendanceMap.getOrDefault(currentDate, new Attendance());
             boolean isNewRecord = (attendance.getId() == null);
 
-            // Capture old state (null if it's a new record)
             String oldState = isNewRecord ? null : String.format("{ \"status\": \"%s\" }", attendance.getStatus());
             oldStateByDate.put(currentDate, oldState);
 
@@ -90,10 +88,8 @@ public class AttendanceSyncService {
         }
 
         if (!recordsToSave.isEmpty()) {
-            // 1. Perform the batch save
             List<Attendance> savedRecords = attendanceRepository.saveAll(recordsToSave);
 
-            // 2. Loop through the saved entities (which now have valid IDs) to generate audit logs
             for (Attendance saved : savedRecords) {
                 String oldState = oldStateByDate.get(saved.getAttendanceDate());
                 String newState = String.format("{ \"status\": \"%s\" }", saved.getStatus());
@@ -116,7 +112,6 @@ public class AttendanceSyncService {
         List<Attendance> recordsToDelete = new ArrayList<>();
         List<Attendance> recordsToUpdate = new ArrayList<>();
 
-        // Memory map to hold old states for updates
         Map<Long, String> oldStatesById = new HashMap<>();
 
         for (Attendance attendance : existingRecords) {
@@ -127,7 +122,6 @@ public class AttendanceSyncService {
                 if (attendance.getCheckIn() == null && attendance.getCheckOut() == null) {
                     recordsToDelete.add(attendance);
                 } else {
-                    // Capture old state before mutating the object
                     oldStatesById.put(attendance.getId(), String.format("{ \"status\": \"%s\" }", attendance.getStatus()));
 
                     if (attendance.getShiftAssignment() != null && attendance.getCheckIn() != null) {
@@ -145,18 +139,14 @@ public class AttendanceSyncService {
                 }
             }
         }
-
-        // Process Deletions
         if (!recordsToDelete.isEmpty()) {
             for (Attendance toDelete : recordsToDelete) {
                 String oldState = String.format("{ \"status\": \"%s\" }", toDelete.getStatus());
-                // For deletions, new state is null
                 auditLoggingService.saveAuditLog(toDelete.getId(), "DELETED", "attendance", oldState, null);
             }
             attendanceRepository.deleteAll(recordsToDelete);
         }
 
-        // Process Updates
         if (!recordsToUpdate.isEmpty()) {
             List<Attendance> savedUpdates = attendanceRepository.saveAll(recordsToUpdate);
             for (Attendance saved : savedUpdates) {

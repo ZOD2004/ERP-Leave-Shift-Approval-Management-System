@@ -84,7 +84,6 @@ public class AttendanceCronJobService {
                 continue;
             }
 
-            // Rule A: No Check-In -> Mark Absent and Deduct EMERGENCY LEAVE
             if (attendance.getCheckIn() == null) {
                 if (!"HALF_DAY_LEAVE".equals(oldStatus)) {
                     attendance.setStatus("ABSENT");
@@ -94,11 +93,9 @@ public class AttendanceCronJobService {
                     leaveBalanceService.deductPenalty(attendance.getEmployee(), emergencyLeave, BigDecimal.valueOf(0.5), targetDate.getYear(), "Missed shift on half-day leave");
                 }
             }
-            // Rule B: Checked In -> Validate Hours Worked
             else {
                 if (attendance.getCheckOut() == null) {
                     attendance.setStatus("MISSING_CHECKOUT");
-                    // We must save early here to pass a valid ID to the correction service
                     attendance = attendanceRepository.save(attendance);
 
                     attendanceCorrectionService.autoCreateCorrection(attendance);
@@ -114,12 +111,8 @@ public class AttendanceCronJobService {
                     }
                 }
             }
-
-            // Save the entity and capture the final state
             Attendance savedAttendance = attendanceRepository.save(attendance);
             String newStatus = savedAttendance.getStatus();
-
-            // Only log if the cron job actually changed the status
             if (!newStatus.equals(oldStatus)) {
                 String oldState = isNewRecord ? null : String.format("{ \"status\": \"%s\" }", oldStatus);
                 String newState = String.format("{ \"status\": \"%s\", \"automated\": true }", newStatus);
@@ -149,7 +142,7 @@ public class AttendanceCronJobService {
             auditLog.setRecordId(recordId);
             auditLog.setAction(action);
             auditLog.setEntityName(entityName);
-            auditLog.setPerformedBy("SYSTEM (CRON)"); // Hardcoded because there is no SecurityContext
+            auditLog.setPerformedBy("SYSTEM (CRON)");
             auditLog.setOldState(oldState);
             auditLog.setNewState(newState);
 

@@ -24,8 +24,7 @@ public class EmployeeService {
     private final LeaveBalanceService leaveBalanceService;
     private final LeaveTypeRepository leaveTypeRepository;
 
-    // Replaced AuditLogRepository and SecurityService with the centralized logger
-    private final AuditLogService auditLoggingService;
+   private final AuditLogService auditLoggingService;
 
     public EmployeeService(UserService userService,
                            EmployeeRepository employeeRepository,

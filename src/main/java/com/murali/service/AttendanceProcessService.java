@@ -58,7 +58,6 @@ public class AttendanceProcessService {
         LocalDateTime oldCheckIn = attendance.getCheckIn();
         LocalDateTime oldCheckOut = attendance.getCheckOut();
 
-        // Hard Block: Cannot check in if on a Full Day Leave
         if (isCheckIn && "ON_LEAVE".equals(attendance.getStatus())) {
             throw new IllegalStateException("Check-in denied: You are marked as ON LEAVE for today. If this is a mistake, please cancel your leave request first.");
         }
@@ -66,7 +65,7 @@ public class AttendanceProcessService {
         if (isCheckIn) {
             if (attendance.getCheckIn() != null) {
                 log.warn("Duplicate check-in attempt by Employee {} ignored.", employeeId);
-                return attendance; // Abort early, keep original check-in
+                return attendance;
             }
             attendance.setCheckIn(punchTime);
 
@@ -119,7 +118,6 @@ public class AttendanceProcessService {
     public TeamAttendanceSummaryDTO getTodayTeamAttendanceSummary(Long managerEmployeeId) {
         LocalDate today = LocalDate.now();
 
-        // STEP 1: Fetch reporting employees
         List<Employee> reportingEmployees = employeeRepository.findReportingEmployees(managerEmployeeId);
 
         if (reportingEmployees.isEmpty()) {
@@ -128,13 +126,11 @@ public class AttendanceProcessService {
 
         List<Long> teamIds = reportingEmployees.stream().map(Employee::getId).toList();
 
-        // STEP 2: Fetch today's shift assignments to know who is EXPECTED today
-        List<ShiftAssignment> todayShifts = shiftAssignmentRepository.findTodayAssignmentsForEmployees(teamIds, today);
+       List<ShiftAssignment> todayShifts = shiftAssignmentRepository.findTodayAssignmentsForEmployees(teamIds, today);
         List<Long> expectedEmployeeIds = todayShifts.stream()
                 .map(sa -> sa.getEmployee().getId())
                 .toList();
 
-        // STEP 3: Fetch today's actual attendance records
         List<Attendance> todayAttendances = attendanceRepository.findByEmployeeIdsAndAttendanceDate(teamIds, today);
         List<Long> attendedEmployeeIds = todayAttendances.stream()
                 .map(a -> a.getEmployee().getId())
@@ -154,9 +150,7 @@ public class AttendanceProcessService {
                 absentCount++;
             }
         }
-
-        // Add employees who HAD a shift but DID NOT punch in to the Absent count
-        for (Long expectedId : expectedEmployeeIds) {
+       for (Long expectedId : expectedEmployeeIds) {
             if (!attendedEmployeeIds.contains(expectedId)) {
                 absentCount++;
             }

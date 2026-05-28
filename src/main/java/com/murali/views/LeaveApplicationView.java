@@ -556,19 +556,18 @@ public class LeaveApplicationView extends VerticalLayout {
             BigDecimal remaining = leaveBalanceService.getEffectiveBalance(balance);
             double used = total.subtract(remaining).doubleValue();
 
-            // Smart Color & Icon Assignment based on Leave Name
             String leaveName = balance.getLeaveType().getName().toLowerCase();
-            String themeColor = "primary"; // Default Blue
-            VaadinIcon iconType = VaadinIcon.CALENDAR_CLOCK; // Default Icon
+            String themeColor = "primary";
+            VaadinIcon iconType = VaadinIcon.CALENDAR_CLOCK;
 
             if (leaveName.contains("annual") || leaveName.contains("vacation") || leaveName.contains("paid")) {
-                themeColor = "success"; // Green
+                themeColor = "success";
                 iconType = VaadinIcon.AIRPLANE;
             } else if (leaveName.contains("sick") || leaveName.contains("medical")) {
-                themeColor = "error"; // Red
-                iconType = VaadinIcon.PLUS_SQUARE_O; // Medical Cross
+                themeColor = "error";
+                iconType = VaadinIcon.PLUS_SQUARE_O;
             } else if (leaveName.contains("casual") || leaveName.contains("personal")) {
-                themeColor = "warning"; // Orange/Yellow
+                themeColor = "warning";
                 iconType = VaadinIcon.COFFEE;
             } else if (leaveName.contains("maternity") || leaveName.contains("paternity")) {
                 themeColor = "primary";
