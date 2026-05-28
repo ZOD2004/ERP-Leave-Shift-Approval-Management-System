@@ -4,12 +4,12 @@ package com.murali.views;
 import com.murali.dto.ShiftAssignmentDTO;
 import com.murali.dto.TeamAttendanceSummaryDTO;
 import com.murali.entity.*;
+import com.murali.security.SecurityService;
 import com.murali.service.*;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
-import com.vaadin.flow.component.combobox.ComboBox;
 import com.vaadin.flow.component.datepicker.DatePicker;
 import com.vaadin.flow.component.dialog.Dialog;
 import com.vaadin.flow.component.grid.Grid;
@@ -34,7 +34,6 @@ import com.vaadin.flow.theme.lumo.LumoUtility;
 import jakarta.annotation.security.PermitAll;
 
 import java.math.BigDecimal;
-import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -293,7 +292,7 @@ public class DashboardView extends VerticalLayout {
 
         LocalDate today = LocalDate.now();
         List<ShiftAssignmentDTO> myShifts = shiftAssignmentService
-                .fetchAssignmentsForCalendarPivot(today, today.plusDays(7))
+                .fetchAssignmentsForCalendar(today, today.plusDays(7))
                 .stream()
                 .filter(a -> a.getEmployeeId().equals(employeeId))
                 .toList();
@@ -714,7 +713,7 @@ public class DashboardView extends VerticalLayout {
         LocalDate startOfMonth = today.withDayOfMonth(1);
         LocalDate endOfMonth = today.withDayOfMonth(daysInMonth);
 
-        List<com.murali.dto.ShiftAssignmentDTO> flatAssignments = shiftAssignmentService.fetchAssignmentsForCalendarPivot(startOfMonth, endOfMonth);
+        List<com.murali.dto.ShiftAssignmentDTO> flatAssignments = shiftAssignmentService.fetchAssignmentsForCalendar(startOfMonth, endOfMonth);
         java.util.Map<String, com.murali.dto.MonthlyRowDTO> pivotData = new java.util.HashMap<>();
 
         for (com.murali.dto.ShiftAssignmentDTO dto : flatAssignments) {

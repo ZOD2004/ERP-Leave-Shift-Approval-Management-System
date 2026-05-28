@@ -28,8 +28,6 @@ public class CustomUserDetailsService implements UserDetailsService {
         if (user == null) {
             throw new UsernameNotFoundException("User not found with name: " + username);
         }
-        String role = user.getRole().getName();
-        SimpleGrantedAuthority authority = new SimpleGrantedAuthority(role);
 
         return new CustomUserDetails(user);
     }

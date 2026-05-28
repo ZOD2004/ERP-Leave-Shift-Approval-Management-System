@@ -2,14 +2,12 @@ package com.murali.service;
 
 import com.murali.entity.*;
 import com.murali.exception.EmployeeNotFoundException;
-import com.murali.exception.SelfApprovalException;
 import com.murali.repository.AuditLogRepository;
 import com.murali.repository.LeaveApprovalRepository;
 import com.murali.repository.LeaveRequestRepository;
 import com.murali.repository.UserRepository;
-import lombok.RequiredArgsConstructor;
+import com.murali.security.SecurityService;
 import lombok.extern.slf4j.Slf4j;
-import org.jspecify.annotations.NonNull;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 

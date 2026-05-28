@@ -114,7 +114,7 @@ public class ShiftAssignmentView extends VerticalLayout {
         Tab calendarTab = new Tab("Weekly Calendar View");
         Tab monthlyTab = new Tab("Monthly Calendar View");
 
-        tabs.add(listTab, calendarTab, monthlyTab);
+        tabs.add(monthlyTab,calendarTab,listTab);
 
         contentArea.setSizeFull();
 
@@ -156,8 +156,10 @@ public class ShiftAssignmentView extends VerticalLayout {
         add(header, dashboardLayout, tabs, contentArea);
         setFlexGrow(1, contentArea);
 
-        contentArea.add(buildListLayout());
-        refreshListGrid();
+        tabs.setSelectedTab(monthlyTab);
+        contentArea.removeAll();
+        refreshMonthlyGrid();
+        contentArea.add(buildMonthlyLayout());
     }
 
     private void buildDashboard() {
@@ -305,7 +307,7 @@ public class ShiftAssignmentView extends VerticalLayout {
         setupPivotColumns(startOfWeek);
 
         List<ShiftAssignmentDTO> flatAssignments =
-                assignmentService.fetchAssignmentsForCalendarPivot(startOfWeek, endOfWeek);
+                assignmentService.fetchAssignmentsForCalendar(startOfWeek, endOfWeek);
 
         Map<String,RowDTO> pivotData = new HashMap<>();
 
@@ -457,6 +459,7 @@ public class ShiftAssignmentView extends VerticalLayout {
         VerticalLayout layout = new VerticalLayout(controls, monthlyGrid);
         layout.setSizeFull();
         layout.setPadding(false);
+        layout.setFlexGrow(1, monthlyGrid);
         return layout;
     }
 
@@ -513,7 +516,7 @@ public class ShiftAssignmentView extends VerticalLayout {
         LocalDate startOfMonth = currentMonth.withDayOfMonth(1);
         LocalDate endOfMonth = currentMonth.withDayOfMonth(currentMonth.lengthOfMonth());
 
-        List<ShiftAssignmentDTO> flatAssignments = assignmentService.fetchAssignmentsForCalendarPivot(startOfMonth, endOfMonth);
+        List<ShiftAssignmentDTO> flatAssignments = assignmentService.fetchAssignmentsForCalendar(startOfMonth, endOfMonth);
 
         java.util.Map<String, MonthlyRowDTO> pivotData = new java.util.HashMap<>();
 

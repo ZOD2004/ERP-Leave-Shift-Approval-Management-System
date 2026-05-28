@@ -41,8 +41,6 @@ public class SecurityConfig {
                         .deleteCookies("JSESSIONID")
                         .clearAuthentication(true)
                 );
-//                .httpBasic(Customizer.withDefaults());
-
         return http.build();
     }
 

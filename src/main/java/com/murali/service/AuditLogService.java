@@ -2,7 +2,7 @@ package com.murali.service;
 
 import com.murali.entity.AuditLog;
 import com.murali.repository.AuditLogRepository;
-import lombok.RequiredArgsConstructor;
+import com.murali.security.SecurityService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.data.domain.PageRequest;
