@@ -34,6 +34,7 @@ import jakarta.annotation.security.RolesAllowed;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 @RolesAllowed({"ROLE_SUPER_ADMIN", "ROLE_HR_ADMIN", "ROLE_MANAGER", "ROLE_DEPT_HEAD", "ROLE_EMPLOYEE", "ROLE_AUDITOR"})
@@ -141,6 +142,9 @@ public class LeaveApplicationView extends VerticalLayout {
         historyGrid.addComponentColumn(req -> {
             Span badge = new Span(req.getStatus());
             badge.getElement().getThemeList().add("badge pill");
+            badge.getStyle().set("cursor", "pointer");
+            badge.setTitle("Click to view approval history");
+
             String status = req.getStatus() != null ? req.getStatus().toUpperCase() : "";
             if ("APPROVED".equals(status)) {
                 badge.getElement().getThemeList().add("success");
@@ -151,15 +155,12 @@ public class LeaveApplicationView extends VerticalLayout {
             } else if ("CANCELLED".equals(status)) {
                 badge.getElement().getThemeList().add("contrast");
             }
+
+            badge.addClickListener(e -> showApprovalHistoryDialog(req));
+
             return badge;
         }).setHeader("Status").setAutoWidth(true);
 
-        historyGrid.addComponentColumn(req -> {
-            Button viewCommentsBtn = new Button("View Comments");
-            viewCommentsBtn.addThemeVariants(ButtonVariant.LUMO_TERTIARY, ButtonVariant.LUMO_SMALL);
-            viewCommentsBtn.addClickListener(e -> showCommentsDialog(req));
-            return viewCommentsBtn;
-        }).setHeader("Comments").setAutoWidth(true);
 
         historyGrid.addComponentColumn(this::createActionColumn)
                 .setHeader("Actions")
@@ -620,42 +621,75 @@ public class LeaveApplicationView extends VerticalLayout {
         draftSection.setVisible(false); // Hidden by default
         return draftSection;
     }
-    // Add these methods to your View class
-
-    private void showCommentsDialog(LeaveRequest request) {
+    private void showApprovalHistoryDialog(LeaveRequest request) {
         Dialog dialog = new Dialog();
-        dialog.setHeaderTitle("Approval Workflow Comments");
+        dialog.setHeaderTitle("Approval History & Comments");
+        dialog.setWidth("500px");
 
         List<LeaveApproval> approvals = approvalRoutingService.getApprovalsForRequest(request.getId());
 
-        VerticalLayout layout = new VerticalLayout();
-        layout.setPadding(false);
-        layout.setSpacing(true);
+        VerticalLayout timelineLayout = new VerticalLayout();
+        timelineLayout.setPadding(false);
+        timelineLayout.setSpacing(true);
 
         if (approvals == null || approvals.isEmpty()) {
-            layout.add(new Span("No approval records found for this request yet."));
+            Span emptyState = new Span("No approval records found for this request yet.");
+            emptyState.addClassNames(LumoUtility.TextColor.SECONDARY);
+            timelineLayout.add(emptyState);
         } else {
+            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("MMM dd, yyyy - hh:mm a");
+
             for (LeaveApproval approval : approvals) {
                 String roleName = getRoleName(approval.getApprovalLevel());
+                String approverName = approval.getApprover() != null ? approval.getApprover().getUsername() : "Unknown"; // Adjust if you have a getFirstName() method
                 String actionText = approval.getAction() != null ? approval.getAction() : "PENDING";
                 String commentText = (approval.getComments() != null && !approval.getComments().isBlank())
                         ? approval.getComments()
-                        : "No comment provided.";
+                        : "No comments provided.";
 
-                Span headerSpan = new Span(roleName + " (" + actionText + "): ");
-                headerSpan.getStyle().set("font-weight", "bold");
+                // Card container for each timeline entry
+                VerticalLayout entryCard = new VerticalLayout();
+                entryCard.addClassNames(
+                        LumoUtility.Background.CONTRAST_5,
+                        LumoUtility.BorderRadius.MEDIUM,
+                        LumoUtility.Padding.SMALL,
+                        LumoUtility.Margin.Bottom.SMALL
+                );
+                entryCard.setSpacing(false);
 
-                Span bodySpan = new Span(commentText);
+                // Header: Role (Name) - Badge
+                Span roleSpan = new Span(roleName + " (" + approverName + ")");
+                roleSpan.addClassNames(LumoUtility.FontWeight.BOLD, LumoUtility.FontSize.MEDIUM);
 
-                Div entry = new Div(headerSpan, bodySpan);
-                entry.getStyle().set("margin-bottom", "10px");
-                layout.add(entry);
+                Span statusBadge = new Span(actionText);
+                statusBadge.getElement().getThemeList().add("badge small");
+                if ("APPROVED".equalsIgnoreCase(actionText)) statusBadge.getElement().getThemeList().add("success");
+                else if ("REJECTED".equalsIgnoreCase(actionText)) statusBadge.getElement().getThemeList().add("error");
+                else statusBadge.getElement().getThemeList().add("warning");
+
+                HorizontalLayout headerLayout = new HorizontalLayout(roleSpan, statusBadge);
+                headerLayout.setWidthFull();
+                headerLayout.setJustifyContentMode(FlexComponent.JustifyContentMode.BETWEEN);
+                headerLayout.setAlignItems(FlexComponent.Alignment.CENTER);
+
+                String timeString = approval.getActedAt() != null
+                        ? approval.getActedAt().format(formatter)
+                        : "Awaiting Action";
+                Span timeSpan = new Span(timeString);
+                timeSpan.addClassNames(LumoUtility.FontSize.XSMALL, LumoUtility.TextColor.TERTIARY, LumoUtility.Margin.Bottom.XSMALL);
+
+                Span commentSpan = new Span("\"" + commentText + "\"");
+                commentSpan.addClassNames(LumoUtility.FontSize.SMALL, LumoUtility.TextColor.SECONDARY);
+
+                entryCard.add(headerLayout, timeSpan, commentSpan);
+                timelineLayout.add(entryCard);
             }
         }
 
-        dialog.add(layout);
+        dialog.add(timelineLayout);
 
         Button closeButton = new Button("Close", e -> dialog.close());
+        closeButton.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
         dialog.getFooter().add(closeButton);
 
         dialog.open();
