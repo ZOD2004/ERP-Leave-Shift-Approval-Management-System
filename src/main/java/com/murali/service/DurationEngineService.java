@@ -1,85 +1,141 @@
 package com.murali.service;
 
+import com.murali.dto.LeaveDurationResultDTO;
 import com.murali.entity.Employee;
-import com.murali.entity.LeaveType;
+import com.murali.entity.enums.LeaveSession;
+import com.murali.entity.Shift;
+import com.murali.entity.ShiftAssignment;
 import com.murali.exception.PastDateException;
 import com.murali.repository.HolidayRepository;
+import com.murali.repository.ShiftAssignmentRepository;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
-import java.time.DayOfWeek;
 import java.time.LocalDate;
-import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
+@RequiredArgsConstructor
 public class DurationEngineService {
 
     private final HolidayRepository holidayRepository;
+    private final ShiftAssignmentRepository shiftAssignmentRepository;
     private final AuditLogService auditLoggingService;
 
-    public static final String HALF_DAY_CODE = "HDL-001";
+    public LeaveDurationResultDTO calculateLeaveDuration(
+            LocalDate startDate, LocalDate endDate,
+            Employee employee,
+            LeaveSession startSession, LeaveSession endSession,
+            boolean applySandwichRulePolicy) {
 
-    public DurationEngineService(HolidayRepository holidayRepository,
-                                 AuditLogService auditLoggingService) {
-        this.holidayRepository = holidayRepository;
-        this.auditLoggingService = auditLoggingService;
-    }
-
-    public BigDecimal calculateNetLeaveDays(LocalDate startDate, LocalDate endDate,
-                                            Employee employee, LeaveType leaveType,
-                                            boolean applySandwichRule) {
-
-        log.debug("Starting leave calculation for Employee ID: {} | Dates: {} to {}",
-                employee.getId(), startDate, endDate);
-
-        if (HALF_DAY_CODE.equalsIgnoreCase(leaveType.getCode())) {
-            log.info("Half-day leave type detected. Returning 0.5 days.");
-            return new BigDecimal("0.5");
-        }
+        log.debug("Starting leave calculation for Employee ID: {} | Dates: {} to {}", employee.getId(), startDate, endDate);
 
         if (endDate.isBefore(startDate)) {
             log.error("Calculation failed: End date {} is before Start date {}", endDate, startDate);
             throw new PastDateException("End date cannot be before Start date");
         }
 
-        BigDecimal duration;
+        List<ShiftAssignment> assignments = shiftAssignmentRepository
+                .findByEmployeeIdInAndDateRange(List.of(employee.getId()), startDate, endDate);
 
-        if (applySandwichRule) {
-            long totalCalendarDays = ChronoUnit.DAYS.between(startDate, endDate) + 1;
-            duration = BigDecimal.valueOf(totalCalendarDays);
-            log.info("Sandwich rule applied. Total days calculated: {}", duration);
-        } else {
-            List<LocalDate> holidays = holidayRepository.findHolidayDatesBetween(startDate, endDate);
+        Map<LocalDate, ShiftAssignment> assignmentMap = assignments.stream()
+                .collect(Collectors.toMap(ShiftAssignment::getStartDate, sa -> sa));
 
-            duration = BigDecimal.ZERO;
-            LocalDate currentDate = startDate;
+        // 1. Fetch Public Holidays
+        List<LocalDate> holidays = holidayRepository.findHolidayDatesBetween(startDate, endDate);
 
-            while (!currentDate.isAfter(endDate)) {
-                boolean isHoliday = holidays.contains(currentDate);
-                boolean isOffDay = isOffDay(currentDate);
+        BigDecimal baseWorkingDays = BigDecimal.ZERO;
+        int offDaysCount = 0;
 
-                if (!isHoliday && !isOffDay) {
-                    duration = duration.add(BigDecimal.ONE);
-                }
+        LocalDate currentDate = startDate;
 
-                currentDate = currentDate.plusDays(1);
+        // 2. Iterate through every day to classify it
+        while (!currentDate.isAfter(endDate)) {
+            ShiftAssignment dailyShift = assignmentMap.get(currentDate);
+
+            boolean isHoliday = holidays.contains(currentDate);
+            boolean isOffDay;
+
+            // --- THE FIX: Fallback Logic instead of throwing an Exception ---
+            if (dailyShift == null) {
+                log.debug("No shift assigned for {}. Applying standard weekend fallback.", currentDate);
+                java.time.DayOfWeek day = currentDate.getDayOfWeek();
+                isOffDay = (day == java.time.DayOfWeek.SATURDAY || day == java.time.DayOfWeek.SUNDAY);
+            } else {
+                isOffDay = !isWorkingDayForShift(currentDate, dailyShift.getShift());
             }
-            log.info("Standard calculation applied. Net working days calculated: {}", duration);
+
+            if (isHoliday) {
+                log.debug("{} is a Public Holiday (Free)", currentDate);
+            } else if (isOffDay) {
+                log.debug("{} is a scheduled Off-Day / Weekend", currentDate);
+                offDaysCount++;
+            } else {
+                baseWorkingDays = baseWorkingDays.add(BigDecimal.ONE);
+            }
+
+            currentDate = currentDate.plusDays(1);
         }
 
-        String newState = String.format("{ \"startDate\": \"%s\", \"endDate\": \"%s\", \"calculatedDuration\": %s, \"sandwichRule\": %b }",
-                startDate, endDate, duration, applySandwichRule);
+        // 3. Validation: Block applying solely on Off-Days/Holidays
+        if (baseWorkingDays.compareTo(BigDecimal.ZERO) == 0) {
+            throw new IllegalStateException("You cannot apply for leave exclusively on your scheduled off-days or a public holiday.");
+        }
 
+        // 4. Apply the Sandwich Rule
+        boolean sandwichRuleTriggered = false;
+        BigDecimal netLeaveDays = baseWorkingDays;
+
+        if (applySandwichRulePolicy && offDaysCount > 0) {
+            sandwichRuleTriggered = true;
+            // Add the off-days to the penalty. (Holidays remain free)
+            netLeaveDays = netLeaveDays.add(BigDecimal.valueOf(offDaysCount));
+            log.info("Sandwich rule applied. Added {} off-days to total.", offDaysCount);
+        }
+
+        // 5. Handle Sessions (Subtracting 0.5 days where applicable)
+        if (startDate.equals(endDate)) {
+            // Single day leave logic
+            if (startSession == LeaveSession.FIRST_HALF || startSession == LeaveSession.SECOND_HALF) {
+                netLeaveDays = netLeaveDays.subtract(new BigDecimal("0.5"));
+                baseWorkingDays = baseWorkingDays.subtract(new BigDecimal("0.5"));
+            }
+        } else {
+            // Multi-day leave logic
+            if (startSession == LeaveSession.SECOND_HALF) {
+                netLeaveDays = netLeaveDays.subtract(new BigDecimal("0.5"));
+                baseWorkingDays = baseWorkingDays.subtract(new BigDecimal("0.5"));
+            }
+            if (endSession == LeaveSession.FIRST_HALF) {
+                netLeaveDays = netLeaveDays.subtract(new BigDecimal("0.5"));
+                baseWorkingDays = baseWorkingDays.subtract(new BigDecimal("0.5"));
+            }
+        }
+
+        // 6. Final Validation
+        if (netLeaveDays.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new IllegalStateException("Calculated leave duration is invalid (0 days). Check your session selections.");
+        }
+
+        log.info("Calculation complete. Net Days: {}, Base Working Days: {}, Sandwich Triggered: {}",
+                netLeaveDays, baseWorkingDays, sandwichRuleTriggered);
+
+        // 7. Audit Logging
+        String newState = String.format("{ \"startDate\": \"%s\", \"endDate\": \"%s\", \"netLeaveDays\": %s, \"sandwichRule\": %b }",
+                startDate, endDate, netLeaveDays, sandwichRuleTriggered);
         auditLoggingService.saveAuditLog(null, "CALCULATE_DURATION", "none", null, newState);
 
-        return duration;
+        return new LeaveDurationResultDTO(netLeaveDays, sandwichRuleTriggered, baseWorkingDays);
     }
 
-    private boolean isOffDay(LocalDate date) {
-        DayOfWeek day = date.getDayOfWeek();
-        return day == DayOfWeek.SATURDAY || day == DayOfWeek.SUNDAY;
+    private boolean isWorkingDayForShift(LocalDate date, Shift shift) {
+        String dayName = date.getDayOfWeek().name();
+        return shift.getWorkingDays().stream()
+                .anyMatch(wd -> wd.name().equals(dayName));
     }
 }

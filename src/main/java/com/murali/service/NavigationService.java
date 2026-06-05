@@ -28,8 +28,6 @@ public class NavigationService {
                 .findFirst()
                 .orElse("");
 
-//        System.out.println("Debug: Primary Role identified: " + primaryRole);
-
         return repository.findByRoleName(primaryRole);
     }
 }

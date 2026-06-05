@@ -14,7 +14,7 @@ import java.time.LocalDateTime;
 public class AuditLog {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @GeneratedValue(strategy = GenerationType.SEQUENCE)
     private Long id;
 
     @Column(name = "record_id")
@@ -24,7 +24,7 @@ public class AuditLog {
     @CreationTimestamp
     private LocalDateTime timestamp;
 
-    @Column(name = "action", length = 20)
+    @Column(name = "action", length = 50)
     private String action; // CREATE, UPDATE, DELETE
 
     @Column(name = "entity_name", length = 100)

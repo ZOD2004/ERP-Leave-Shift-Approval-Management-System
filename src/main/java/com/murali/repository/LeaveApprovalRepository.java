@@ -1,6 +1,7 @@
 package com.murali.repository;
 
 import com.murali.entity.LeaveApproval;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -28,4 +29,13 @@ public interface LeaveApprovalRepository extends JpaRepository<LeaveApproval, Lo
             "WHERE a.leaveRequest.id = :leaveRequestId " +
             "ORDER BY a.approvalLevel ASC")
     List<LeaveApproval> findByLeaveRequestIdOrderByApprovalLevelAsc(@Param("leaveRequestId") Long leaveRequestId);
+
+    @Query("SELECT la FROM LeaveApproval la LEFT JOIN FETCH la.approver WHERE la.leaveRequest.id = :leaveRequestId ORDER BY la.id ASC")
+    List<LeaveApproval> findAllByLeaveRequestIdChronological(@Param("leaveRequestId") Long leaveRequestId);
+
+    @EntityGraph(attributePaths = {"leaveRequest", "leaveRequest.employee", "leaveRequest.leaveType"})
+    List<LeaveApproval> findByApproverIdAndAction(Long approverId, String action);
+
+    @Query("SELECT COUNT(la) FROM LeaveApproval la WHERE la.action = 'PENDING'")
+    Long countPendingEscalations();
 }

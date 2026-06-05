@@ -8,8 +8,6 @@ import lombok.Setter;
 
 import java.math.BigDecimal;
 
-@AllArgsConstructor
-@NoArgsConstructor
 @Getter
 @Setter
 @Entity
@@ -30,7 +28,7 @@ import java.math.BigDecimal;
 public class LeaveApprovalRule {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @GeneratedValue(strategy = GenerationType.SEQUENCE)
     private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY)

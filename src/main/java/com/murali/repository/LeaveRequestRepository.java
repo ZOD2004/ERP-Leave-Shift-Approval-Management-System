@@ -10,6 +10,7 @@ import org.springframework.stereotype.Repository;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public interface LeaveRequestRepository extends JpaRepository<LeaveRequest, Long> {
@@ -91,4 +92,22 @@ public interface LeaveRequestRepository extends JpaRepository<LeaveRequest, Long
             "(lr.createdAt BETWEEN :startDate AND :endDate) AND " +
             "lr.currentLevel >= 3 AND lr.status LIKE 'PENDING%'")
     long countEscalatedApprovals(@Param("startDate") LocalDate startDate, @Param("endDate") LocalDate endDate);
+
+    @Query("SELECT lr FROM LeaveRequest lr " +
+            "WHERE lr.employee.id = :employeeId " +
+            "AND lr.status = 'APPROVED' " +
+            "AND :targetDate BETWEEN lr.startDate AND lr.endDate")
+    Optional<LeaveRequest> findApprovedLeaveForEmployeeOnDate(
+            @Param("employeeId") Long employeeId,
+            @Param("targetDate") LocalDate targetDate
+    );
+
+    @Query("SELECT lr FROM LeaveRequest lr WHERE lr.employee.id = :employeeId " +
+            "AND lr.status IN ('APPROVED', 'PENDING') " +
+            "AND (lr.endDate = :dayBefore OR lr.startDate = :dayAfter)")
+    List<LeaveRequest> findAdjacentLeaves(
+            @Param("employeeId") Long employeeId,
+            @Param("dayBefore") LocalDate dayBefore,
+            @Param("dayAfter") LocalDate dayAfter
+    );
 }

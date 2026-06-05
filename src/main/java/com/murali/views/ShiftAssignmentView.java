@@ -3,6 +3,7 @@ package com.murali.views;
 import com.murali.dto.*;
 import com.murali.entity.Employee;
 import com.murali.entity.Shift;
+import com.murali.entity.enums.LeaveSession;
 import com.murali.service.EmployeeService;
 import com.murali.service.ShiftAssignmentService;
 import com.murali.service.ShiftService;
@@ -91,7 +92,6 @@ public class ShiftAssignmentView extends VerticalLayout {
 
     private final Dialog conflictDialog = new Dialog();
     private final Grid<ShiftConflictDTO> hardConflictGrid = new Grid<>(ShiftConflictDTO.class, false);
-    private final Grid<ShiftConflictDTO> partialConflictGrid = new Grid<>(ShiftConflictDTO.class, false);
 
     private BatchPreviewResponse currentBatchPreview;
 
@@ -196,7 +196,7 @@ public class ShiftAssignmentView extends VerticalLayout {
         listGrid.setSizeFull();
         listGrid.removeAllColumns();
         listGrid.addColumn(ShiftAssignmentDTO::getEmployeeName).setHeader("Employee");
-        listGrid.addColumn(ShiftAssignmentDTO::getAssignmentDate).setHeader("Date");
+        listGrid.addColumn(dto -> dto.getStartDate() + " to " + dto.getEndDate()).setHeader("Dates");
 
         listGrid.addColumn(new ComponentRenderer<>(assignment -> {
             Span badge = new Span(assignment.getShiftName());
@@ -217,11 +217,19 @@ public class ShiftAssignmentView extends VerticalLayout {
         listGrid.addComponentColumn(assignment -> {
             Button editBtn = new Button(new Icon(VaadinIcon.EDIT));
             editBtn.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
-            editBtn.addClickListener(e -> openEditDialog(assignment));
 
             Button deleteBtn = new Button(new Icon(VaadinIcon.TRASH));
             deleteBtn.addThemeVariants(ButtonVariant.LUMO_TERTIARY, ButtonVariant.LUMO_ERROR);
-            deleteBtn.addClickListener(e -> confirmDelete(assignment));
+
+            // FIX: Disable Edit and Delete completely for past and today
+            if (!assignment.getStartDate().isAfter(LocalDate.now())) {
+                editBtn.setEnabled(false);
+                deleteBtn.setEnabled(false);
+                editBtn.getElement().setProperty("title", "Locked: Past or active shifts cannot be modified");
+            } else {
+                editBtn.addClickListener(e -> openEditDialog(assignment, assignment.getStartDate()));
+                deleteBtn.addClickListener(e -> openPartialDeleteDialog(assignment, assignment.getStartDate(), assignment.getEndDate()));
+            }
 
             return new HorizontalLayout(editBtn, deleteBtn);
         }).setHeader("Actions");
@@ -276,26 +284,67 @@ public class ShiftAssignmentView extends VerticalLayout {
             String dayName = currentDate.getDayOfWeek().toString().substring(0, 3) + " (" + currentDate.getDayOfMonth() + ")";
 
             pivotGrid.addColumn(new ComponentRenderer<>(row -> {
-                ShiftAssignmentDTO assignment = row.getAssignmentForDate(currentDate);
+                DailyCellDTO cell = row.getCellForDate(currentDate);
+                Button cellBtn = new Button();
+                cellBtn.addThemeVariants(ButtonVariant.LUMO_SMALL);
+                cellBtn.getStyle().set("padding", "0").set("margin", "0").set("width", "100%");
 
-                if (assignment != null && assignment.getShiftName() != null) {
-                    String shortCode = assignment.getShiftName().length() > 4
-                            ? assignment.getShiftName().substring(0, 4)
-                            : assignment.getShiftName();
-                    Button cellBtn = new Button(shortCode);
-                    cellBtn.addThemeVariants(ButtonVariant.LUMO_TERTIARY, ButtonVariant.LUMO_SMALL);
-                    cellBtn.getStyle().set("padding", "0").set("margin", "0");
+                if (cell == null) return new Span(); // Failsafe
 
-                    cellBtn.addClickListener(e -> openEditDialog(assignment));
-
+                if (cell.isOnLeave() && cell.getLeaveSession() == LeaveSession.FULL_DAY) {
+                    cellBtn.setText("Leave");
+                    cellBtn.addThemeVariants(ButtonVariant.LUMO_ERROR, ButtonVariant.LUMO_PRIMARY);
+                    cellBtn.addClickListener(e -> showNotification("Employee on Full Day Leave", NotificationVariant.LUMO_WARNING));
                     return cellBtn;
-                } else {
-                    return new Span("Holiday");
                 }
+
+                if (cell.isHoliday()) {
+                    cellBtn.setText("Holiday");
+                    cellBtn.addThemeVariants(ButtonVariant.LUMO_ERROR, ButtonVariant.LUMO_TERTIARY);
+                    cellBtn.addClickListener(e -> handleEmptyCellClick(cell));
+                    return cellBtn;
+                }
+
+                if (cell.isOffDay()) {
+                    cellBtn.setText("Off");
+                    cellBtn.addThemeVariants(ButtonVariant.LUMO_CONTRAST, ButtonVariant.LUMO_TERTIARY);
+                    cellBtn.addClickListener(e -> handleEmptyCellClick(cell));
+                    return cellBtn;
+                }
+
+                if (cell.getAssignment() != null) {
+                    String shiftName = cell.getAssignment().getShiftName();
+                    String shortCode = shiftName.length() > 4 ? shiftName.substring(0, 4) : shiftName;
+
+                    if (cell.isOnLeave()) {
+                        String sessionStr = cell.getLeaveSession() == LeaveSession.FIRST_HALF ? "L(1st)" : "L(2nd)";
+                        cellBtn.setText(sessionStr + " / " + shortCode);
+                        cellBtn.addThemeVariants(ButtonVariant.LUMO_WARNING, ButtonVariant.LUMO_PRIMARY);
+                    } else {
+                        cellBtn.setText(shortCode);
+                        cellBtn.addThemeVariants(ButtonVariant.LUMO_SUCCESS, ButtonVariant.LUMO_TERTIARY);
+                    }
+
+                    if (!cell.getDate().isAfter(LocalDate.now())) {
+                        cellBtn.addClickListener(e -> showNotification("Locked: Cannot edit past or current day shifts.", NotificationVariant.LUMO_ERROR));
+                    } else {
+                        cellBtn.addClickListener(e -> openEditDialog(cell.getAssignment(), cell.getDate()));
+                    }
+                    return cellBtn;
+                }
+
+                cellBtn.setIcon(new Icon(VaadinIcon.PLUS));
+                cellBtn.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
+                if (!cell.getDate().isAfter(LocalDate.now())) {
+                    cellBtn.setEnabled(false);
+                } else {
+                    cellBtn.addClickListener(e -> handleEmptyCellClick(cell));
+                }
+
+                return cellBtn;
             })).setHeader(dayName).setAutoWidth(true);
         }
     }
-
     private void refreshPivotGrid() {
         LocalDate selectedDate = weekSelector.getValue() != null
                 ? weekSelector.getValue()
@@ -306,28 +355,27 @@ public class ShiftAssignmentView extends VerticalLayout {
 
         setupPivotColumns(startOfWeek);
 
-        List<ShiftAssignmentDTO> flatAssignments =
-                assignmentService.fetchAssignmentsForCalendar(startOfWeek, endOfWeek);
+        // Call the new Engine!
+        List<DailyCellDTO> resolvedCells = assignmentService.getResolvedCalendarData(startOfWeek, endOfWeek);
 
-        Map<String,RowDTO> pivotData = new HashMap<>();
+        Map<String, RowDTO> pivotData = new HashMap<>();
 
-        for (ShiftAssignmentDTO dto : flatAssignments) {
+        for (DailyCellDTO cell : resolvedCells) {
             RowDTO row = pivotData.computeIfAbsent(
-                    dto.getEmployeeName(),
-                    k -> new RowDTO(dto.getEmployeeName())
+                    cell.getEmployeeName(),
+                    k -> new RowDTO(cell.getEmployeeName())
             );
-
-            row.addShift(dto.getAssignmentDate(), dto);
+            // Map data day-by-day directly
+            row.addCell(cell.getDate(), cell);
         }
 
         pivotGrid.setItems(pivotData.values());
     }
 
-
     private void buildAssignmentDialog() {
         assignmentDialog.setHeaderTitle("Assign Shifts");
         dialogTabs.add(singleTab, bulkTab);
-        LocalDate minDate = LocalDate.now();
+        LocalDate minDate = LocalDate.now().plusDays(1);
         singleDatePicker.setMin(minDate);
         startDatePicker.setMin(minDate);
         endDatePicker.setMin(minDate);
@@ -422,7 +470,7 @@ public class ShiftAssignmentView extends VerticalLayout {
             assignmentDialog.close();
 
             // 4. Evaluate Results
-            if (currentBatchPreview.getHardConflicts().isEmpty() && currentBatchPreview.getPartialConflicts().isEmpty()) {
+            if (currentBatchPreview.getHardConflicts().isEmpty()) {
                 // No conflicts! Save cleanly.
                 executeFinalSave();
             } else {
@@ -477,35 +525,79 @@ public class ShiftAssignmentView extends VerticalLayout {
 
     private void setupMonthlyColumns() {
         monthlyGrid.removeAllColumns();
-
         monthlyGrid.addColumn(MonthlyRowDTO::getEmployeeName)
-                .setHeader("Employee")
-                .setFrozen(true)
-                .setWidth("180px")
-                .setFlexGrow(0);
+                .setHeader("Employee").setFrozen(true).setWidth("180px").setFlexGrow(0);
 
         int daysInMonth = currentMonth.lengthOfMonth();
         for (int i = 1; i <= daysInMonth; i++) {
             final int day = i;
 
             monthlyGrid.addColumn(new ComponentRenderer<>(row -> {
-                ShiftAssignmentDTO assignment = row.getAssignmentForDay(day);
+                DailyCellDTO cell = row.getCellForDay(day);
+                Button cellBtn = new Button();
+                cellBtn.addThemeVariants(ButtonVariant.LUMO_SMALL);
+                cellBtn.getStyle().set("padding", "0").set("margin", "0").set("width", "100%");
 
-                if (assignment != null && assignment.getShiftName() != null) {
-                    String shortCode = assignment.getShiftName().length() > 4
-                            ? assignment.getShiftName().substring(0, 4)
-                            : assignment.getShiftName();
+                if (cell == null) return new Span(); // Failsafe
 
-                    Button cellBtn = new Button(shortCode);
-                    cellBtn.addThemeVariants(ButtonVariant.LUMO_TERTIARY, ButtonVariant.LUMO_SMALL);
-                    cellBtn.getStyle().set("padding", "0").set("margin", "0");
-
-                    cellBtn.addClickListener(e -> openEditDialog(assignment));
-
+                // 1. FULL DAY LEAVE
+                if (cell.isOnLeave() && cell.getLeaveSession() == LeaveSession.FULL_DAY) {
+                    cellBtn.setText("Leave");
+                    cellBtn.addThemeVariants(ButtonVariant.LUMO_ERROR, ButtonVariant.LUMO_PRIMARY);
+                    cellBtn.addClickListener(e -> showNotification("Employee on Full Day Leave", NotificationVariant.LUMO_WARNING));
                     return cellBtn;
-                } else {
-                    return new Span("H");
                 }
+
+                // 2. HOLIDAY
+                if (cell.isHoliday()) {
+                    cellBtn.setText("Holiday");
+                    cellBtn.addThemeVariants(ButtonVariant.LUMO_ERROR, ButtonVariant.LUMO_TERTIARY);
+                    cellBtn.addClickListener(e -> handleEmptyCellClick(cell)); // Allow overtime assignment
+                    return cellBtn;
+                }
+
+                // 3. OFF DAY
+                if (cell.isOffDay()) {
+                    cellBtn.setText("Off");
+                    cellBtn.addThemeVariants(ButtonVariant.LUMO_CONTRAST, ButtonVariant.LUMO_TERTIARY);
+                    cellBtn.addClickListener(e -> handleEmptyCellClick(cell)); // Allow overtime assignment
+                    return cellBtn;
+                }
+
+                // 4. WORKING SHIFT (with possible Half-Day Leave)
+                if (cell.getAssignment() != null) {
+                    String shiftName = cell.getAssignment().getShiftName();
+                    String shortCode = shiftName.length() > 4 ? shiftName.substring(0, 4) : shiftName;
+
+                    if (cell.isOnLeave()) {
+                        // HALF DAY LEAVE Logic
+                        String sessionStr = cell.getLeaveSession() == LeaveSession.FIRST_HALF ? "L(1st)" : "L(2nd)";
+                        cellBtn.setText(sessionStr + " / " + shortCode);
+                        cellBtn.addThemeVariants(ButtonVariant.LUMO_WARNING, ButtonVariant.LUMO_PRIMARY);
+                    } else {
+                        // NORMAL SHIFT
+                        cellBtn.setText(shortCode);
+                        cellBtn.addThemeVariants(ButtonVariant.LUMO_SUCCESS, ButtonVariant.LUMO_TERTIARY);
+                    }
+
+                    if (!cell.getDate().isAfter(LocalDate.now())) {
+                        cellBtn.addClickListener(e -> showNotification("Locked: Cannot edit past or current day shifts.", NotificationVariant.LUMO_ERROR));
+                    } else {
+                        cellBtn.addClickListener(e -> openEditDialog(cell.getAssignment(), cell.getDate()));
+                    }
+                    return cellBtn;
+                }
+
+                // 5. COMPLETELY EMPTY (No Shift Assigned)
+                cellBtn.setIcon(new Icon(VaadinIcon.PLUS));
+                cellBtn.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
+                if (!cell.getDate().isAfter(LocalDate.now())) {
+                    cellBtn.setEnabled(false);
+                } else {
+                    cellBtn.addClickListener(e -> handleEmptyCellClick(cell));
+                }
+
+                return cellBtn;
             })).setHeader(String.valueOf(day)).setAutoWidth(true);
         }
     }
@@ -516,21 +608,27 @@ public class ShiftAssignmentView extends VerticalLayout {
         LocalDate startOfMonth = currentMonth.withDayOfMonth(1);
         LocalDate endOfMonth = currentMonth.withDayOfMonth(currentMonth.lengthOfMonth());
 
-        List<ShiftAssignmentDTO> flatAssignments = assignmentService.fetchAssignmentsForCalendar(startOfMonth, endOfMonth);
+        // Call the new Engine!
+        List<DailyCellDTO> resolvedCells = assignmentService.getResolvedCalendarData(startOfMonth, endOfMonth);
 
-        java.util.Map<String, MonthlyRowDTO> pivotData = new java.util.HashMap<>();
+        Map<String, MonthlyRowDTO> pivotData = new HashMap<>();
 
-        for (ShiftAssignmentDTO dto : flatAssignments) {
+        for (DailyCellDTO cell : resolvedCells) {
             MonthlyRowDTO row = pivotData.computeIfAbsent(
-                    dto.getEmployeeName(),
-                    k -> new MonthlyRowDTO(dto.getEmployeeName())
+                    cell.getEmployeeName(),
+                    k -> new MonthlyRowDTO(cell.getEmployeeName())
             );
 
-            int dayOfMonth = dto.getAssignmentDate().getDayOfMonth();
-            row.addShift(dayOfMonth, dto);
+            // Ensure we only draw cells for the month currently being viewed
+            if (cell.getDate().getMonthValue() == currentMonth.getMonthValue() &&
+                    cell.getDate().getYear() == currentMonth.getYear()) {
+                row.addCell(cell.getDate().getDayOfMonth(), cell);
+            }
         }
+
         monthlyGrid.setItems(pivotData.values());
     }
+
     private void buildBatchSetupDialog() {
         batchSetupDialog.setHeaderTitle("Advanced Batch Planning");
         batchStartDate.setMin(LocalDate.now());
@@ -572,15 +670,26 @@ public class ShiftAssignmentView extends VerticalLayout {
         // Extract IDs
         List<Long> empIds = batchEmployees.getValue().stream().map(Employee::getId).toList();
 
-        // Call Service
+        // Calculate End Date from String Duration
+        LocalDate start = batchStartDate.getValue();
+        LocalDate end = start;
+        switch (batchDuration.getValue()) {
+            case "1 Week" -> end = start.plusWeeks(1).minusDays(1);
+            case "2 Weeks" -> end = start.plusWeeks(2).minusDays(1);
+            case "1 Month" -> end = start.plusMonths(1).minusDays(1);
+            case "3 Months" -> end = start.plusMonths(3).minusDays(1);
+            case "6 Months" -> end = start.plusMonths(6).minusDays(1);
+        }
+
+        // Call Service with calculated End Date
         currentBatchPreview = assignmentService.previewBatchAssignments(
-                empIds, batchShift.getValue().getId(), batchStartDate.getValue(), batchDuration.getValue()
+                empIds, batchShift.getValue().getId(), start, end
         );
 
         batchSetupDialog.close();
 
-        // If no conflicts, save immediately!
-        if (currentBatchPreview.getHardConflicts().isEmpty() && currentBatchPreview.getPartialConflicts().isEmpty()) {
+        // If no hard conflicts, save immediately!
+        if (currentBatchPreview.getHardConflicts().isEmpty()) {
             executeFinalSave();
         } else {
             // Conflicts found, open resolution UI
@@ -626,22 +735,6 @@ public class ShiftAssignmentView extends VerticalLayout {
         }
 
 
-        // --- PARTIAL CONFLICTS GRID (Half-Day Leaves) ---
-        if (!currentBatchPreview.getPartialConflicts().isEmpty()) {
-            layout.add(new H4("Partial Conflicts (Auto-Resolved)"));
-
-            partialConflictGrid.removeAllColumns();
-            partialConflictGrid.setItems(currentBatchPreview.getPartialConflicts());
-            partialConflictGrid.addColumn(ShiftConflictDTO::getEmployeeName).setHeader("Employee");
-            partialConflictGrid.addColumn(ShiftConflictDTO::getConflictDate).setHeader("Date");
-
-            partialConflictGrid.addColumn(ShiftConflictDTO::getSystemResolution)
-                    .setHeader("System Action")
-                    .setAutoWidth(true);
-
-            layout.add(partialConflictGrid);
-        }
-
         Button proceedBtn = new Button("Proceed with Valid Assignments", e -> executeFinalSave());
         proceedBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
 
@@ -654,19 +747,6 @@ public class ShiftAssignmentView extends VerticalLayout {
     private void executeFinalSave() {
         List<ShiftAssignmentDTO> finalToSave = new ArrayList<>(currentBatchPreview.getReadyToSave());
 
-        // Convert the adjusted Partial Conflicts into valid assignments
-        for (ShiftConflictDTO partial : currentBatchPreview.getPartialConflicts()) {
-            ShiftAssignmentDTO dto = new ShiftAssignmentDTO();
-            dto.setEmployeeId(partial.getEmployeeId());
-            dto.setShiftId(partial.getShiftId());
-            dto.setAssignmentDate(partial.getConflictDate());
-
-            dto.setOverrideStartTime(partial.getSuggestedOverrideStart());
-            dto.setOverrideEndTime(partial.getSuggestedOverrideEnd());
-
-            finalToSave.add(dto);
-        }
-
         if (finalToSave.isEmpty()) {
             showNotification(
                     "No valid assignments available. All selected dates are conflicts/holidays.",
@@ -677,7 +757,8 @@ public class ShiftAssignmentView extends VerticalLayout {
         }
 
         try {
-            assignmentService.saveResolvedBatch(finalToSave);
+            // Passing 'true' ensures this manual batch overrides automated ShiftRotationPolicies
+            assignmentService.saveResolvedBatch(finalToSave, true);
             showNotification("Batch Scheduled Successfully", NotificationVariant.LUMO_SUCCESS);
             conflictDialog.close();
             refreshListGrid();
@@ -687,7 +768,8 @@ public class ShiftAssignmentView extends VerticalLayout {
         }
     }
 
-    private void openEditDialog(ShiftAssignmentDTO assignment) {
+    // FIX: Added 'clickedDate' parameter to track the exact cell opened
+    private void openEditDialog(ShiftAssignmentDTO assignment, LocalDate clickedDate) {
         Dialog editDialog = new Dialog();
         editDialog.setHeaderTitle("Edit Shift for " + assignment.getEmployeeName());
 
@@ -697,39 +779,40 @@ public class ShiftAssignmentView extends VerticalLayout {
         shiftService.getShiftById(assignment.getShiftId()).ifPresent(shiftCombo::setValue);
 
         DatePicker datePicker = new DatePicker("Assignment Date");
-        datePicker.setValue(assignment.getAssignmentDate());
+        // FIX: Set value to the exact day clicked, not the start of the whole month block
+        datePicker.setValue(clickedDate);
+        // FIX: Prevent moving the shift to today or the past
+        datePicker.setMin(LocalDate.now().plusDays(1));
 
-        TimePicker overrideStart = new TimePicker("Override Start Time");
-        overrideStart.setValue(assignment.getOverrideStartTime());
-        overrideStart.setClearButtonVisible(true);
-
-        TimePicker overrideEnd = new TimePicker("Override End Time");
-        overrideEnd.setValue(assignment.getOverrideEndTime());
-        overrideEnd.setClearButtonVisible(true);
+        // Store the original date so we know if they changed it
+        final LocalDate originalDate = clickedDate;
 
         Button saveBtn = new Button("Save Changes", e -> {
             if (shiftCombo.getValue() == null || datePicker.getValue() == null) {
-                Notification.show("Shift and Date are required.", 3000, Notification.Position.TOP_CENTER)
-                        .addThemeVariants(NotificationVariant.LUMO_ERROR);
+                showNotification("Shift and Date are required.", NotificationVariant.LUMO_ERROR);
                 return;
             }
 
-            assignment.setShiftId(shiftCombo.getValue().getId());
-            assignment.setAssignmentDate(datePicker.getValue());
-            assignment.setOverrideStartTime(overrideStart.getValue());
-            assignment.setOverrideEndTime(overrideEnd.getValue());
+            LocalDate newDate = datePicker.getValue();
+            Long shiftId = shiftCombo.getValue().getId();
 
             try {
-                assignmentService.updateSingleAssignment(assignment);
+                // Route to our new Smart Move method
+                assignmentService.editOrMoveShiftSegment(
+                        assignment.getEmployeeId(),
+                        originalDate,
+                        newDate,
+                        shiftId
+                );
 
-                Notification.show("Assignment Updated", 3000, Notification.Position.TOP_CENTER)
-                        .addThemeVariants(NotificationVariant.LUMO_SUCCESS);
+                showNotification("Assignment Updated successfully.", NotificationVariant.LUMO_SUCCESS);
                 editDialog.close();
                 refreshListGrid();
+                refreshPivotGrid();
+                refreshMonthlyGrid();
 
             } catch (Exception ex) {
-                Notification.show("Conflict: " + ex.getMessage(), 5000, Notification.Position.MIDDLE)
-                        .addThemeVariants(NotificationVariant.LUMO_ERROR);
+                showNotification("Error: " + ex.getMessage(), NotificationVariant.LUMO_ERROR);
             }
         });
         saveBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
@@ -738,54 +821,109 @@ public class ShiftAssignmentView extends VerticalLayout {
 
         Button deleteBtn = new Button("Delete", new Icon(VaadinIcon.TRASH));
         deleteBtn.addThemeVariants(ButtonVariant.LUMO_ERROR);
-        deleteBtn.addClickListener(e -> {
-            confirmDelete(assignment);
-            editDialog.close();
-        });
 
-        FormLayout form = new FormLayout(shiftCombo, datePicker, overrideStart, overrideEnd);
+        // Disable delete if the original date is in the past/today
+        if (!originalDate.isAfter(LocalDate.now())) {
+            deleteBtn.setEnabled(false);
+        } else {
+            deleteBtn.addClickListener(e -> {
+                // Safely delete just this single day
+                openPartialDeleteDialog(assignment, originalDate, originalDate);
+                editDialog.close();
+            });
+        }
+
+        FormLayout form = new FormLayout(shiftCombo, datePicker);
         editDialog.add(form);
         HorizontalLayout footerLayout = new HorizontalLayout(deleteBtn, cancelBtn, saveBtn);
         footerLayout.setWidthFull();
         footerLayout.setJustifyContentMode(FlexComponent.JustifyContentMode.BETWEEN);
 
         editDialog.getFooter().add(footerLayout);
-
         editDialog.open();
     }
+    // --- Replace confirmDelete with this ---
 
-    private void confirmDelete(ShiftAssignmentDTO assignment) {
-        Dialog confirmDialog = new Dialog();
-        confirmDialog.setHeaderTitle("Confirm Deletion");
-        String message = String.format("Are you sure you want to remove the shift for %s on %s?",
-                assignment.getEmployeeName(),
-                assignment.getAssignmentDate());
+    private void openPartialDeleteDialog(ShiftAssignmentDTO assignment, LocalDate defaultStart, LocalDate defaultEnd) {
+        if (assignment.getEndDate().isBefore(LocalDate.now())) {
+            showNotification("Cannot modify shifts entirely in the past.", NotificationVariant.LUMO_ERROR);
+            return;
+        }
+        Dialog deleteDialog = new Dialog();
+        deleteDialog.setHeaderTitle("Remove Shift Segment");
 
-        confirmDialog.add(new Text(message));
+        Text infoText = new Text(String.format("Original Range: %s to %s",
+                assignment.getStartDate(), assignment.getEndDate()));
 
-        Button cancelBtn = new Button("Cancel", e -> confirmDialog.close());
+        LocalDate today = LocalDate.now();
+        LocalDate minSelectableDate = assignment.getStartDate().isBefore(today) ? today : assignment.getStartDate();
+
+
+        DatePicker startPicker = new DatePicker("Start Date to Remove");
+        startPicker.setMin(minSelectableDate);
+        startPicker.setMax(assignment.getEndDate());
+        startPicker.setValue(defaultStart != null && !defaultStart.isBefore(minSelectableDate) ? defaultStart : minSelectableDate);
+
+        DatePicker endPicker = new DatePicker("End Date to Remove");
+        endPicker.setValue(defaultEnd != null && !defaultEnd.isBefore(minSelectableDate) ? defaultEnd : assignment.getEndDate());
+        endPicker.setMin(assignment.getStartDate());
+        endPicker.setMax(assignment.getEndDate());
+
+        Button cancelBtn = new Button("Cancel", e -> deleteDialog.close());
         cancelBtn.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
 
-        Button deleteConfirmBtn = new Button("Delete", e -> {
+        Button deleteConfirmBtn = new Button("Remove Segment", e -> {
+            LocalDate delStart = startPicker.getValue();
+            LocalDate delEnd = endPicker.getValue();
+
+            if (delStart == null || delEnd == null || delStart.isAfter(delEnd)) {
+                showNotification("Please select a valid date range.", NotificationVariant.LUMO_ERROR);
+                return;
+            }
+
             try {
-                assignmentService.deleteAssignment(assignment.getId());
+                // If the user selected the exact full boundaries, delete the entire record normally
+                if (delStart.equals(assignment.getStartDate()) && delEnd.equals(assignment.getEndDate())) {
+                    assignmentService.deleteAssignment(assignment.getId());
+                } else {
+                    // Otherwise, punch a hole to remove just the segment
+                    assignmentService.deleteAssignmentRange(assignment.getEmployeeId(), delStart, delEnd);
+                }
 
-                Notification.show("Assignment Removed", 3000, Notification.Position.TOP_CENTER)
-                        .addThemeVariants(NotificationVariant.LUMO_SUCCESS);
-
+                showNotification("Shift segment removed successfully.", NotificationVariant.LUMO_SUCCESS);
                 refreshListGrid();
                 refreshMonthlyGrid();
                 refreshPivotGrid();
+                deleteDialog.close();
 
             } catch (Exception ex) {
-                Notification.show("Error deleting assignment: " + ex.getMessage(), 4000, Notification.Position.TOP_CENTER)
-                        .addThemeVariants(NotificationVariant.LUMO_ERROR);
-            } finally {
-                confirmDialog.close();
+                showNotification("Error: " + ex.getMessage(), NotificationVariant.LUMO_ERROR);
             }
         });
+
         deleteConfirmBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY, ButtonVariant.LUMO_ERROR);
-        confirmDialog.getFooter().add(cancelBtn, deleteConfirmBtn);
-        confirmDialog.open();
+
+        FormLayout form = new FormLayout(startPicker, endPicker);
+        VerticalLayout layout = new VerticalLayout(infoText, form);
+        layout.setPadding(false);
+
+        deleteDialog.add(layout);
+        deleteDialog.getFooter().add(cancelBtn, deleteConfirmBtn);
+        deleteDialog.open();
+    }
+
+    private void handleEmptyCellClick(DailyCellDTO cell) {
+        // Re-use your existing assignment dialog, but pre-fill it for a 1-day assignment
+        employeeCombo.setValue(employeeService.findById(cell.getEmployeeId()).get());
+        employeeCombo.setReadOnly(true); // Lock it to this specific employee
+
+        dialogTabs.setSelectedTab(singleTab);
+        singleDatePicker.setValue(cell.getDate());
+        singleDatePicker.setReadOnly(true); // Lock it to this specific date
+
+        assignmentDialog.open();
+
+        // When saved, because start and end dates are the exact same day,
+        // the backend will treat it as an Overtime Override and it will beat the Holiday/Off-day flag!
     }
 }

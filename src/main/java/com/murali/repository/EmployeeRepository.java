@@ -76,4 +76,12 @@ public interface EmployeeRepository extends JpaRepository<Employee, Long> {
     WHERE e.user.id = :userId
 """)
     Optional<Employee> findByUserId(@Param("userId") Long userId);
+
+    boolean existsByDepartmentId(Long deptId);
+
+    @Query("SELECT e FROM Employee e " +
+            "LEFT JOIN FETCH e.department " +
+            "LEFT JOIN FETCH e.manager " +
+            "WHERE e.id = :id")
+    Optional<Employee> findByIdWithDepartmentAndManager(@Param("id") Long id);
 }

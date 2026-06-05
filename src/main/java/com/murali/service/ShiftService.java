@@ -1,32 +1,36 @@
 package com.murali.service;
 
 import com.murali.entity.Shift;
-import com.murali.exception.UserNotFoundException;
+import com.murali.repository.ShiftAssignmentRepository;
 import com.murali.repository.ShiftRepository;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Optional;
 
 @Slf4j
 @Service
+@RequiredArgsConstructor
 public class ShiftService {
 
     private final ShiftRepository shiftRepository;
+    private final ShiftAssignmentRepository shiftAssignmentRepository;
     private final AuditLogService auditLoggingService;
-
-    public ShiftService(ShiftRepository shiftRepository,
-                        AuditLogService auditLoggingService) {
-        this.shiftRepository = shiftRepository;
-        this.auditLoggingService = auditLoggingService;
-    }
 
     public List<Shift> getShifts(){
         return shiftRepository.findAll();
     }
 
+    @Transactional
     public void deleteShift(Long id){
+        // 1. Foreign Key Constraint Check (Prevents 500 DB Crash)
+        if (shiftAssignmentRepository.existsByShiftId(id)) {
+            throw new IllegalStateException("Cannot delete this shift because it is currently assigned to one or more employees. Please reassign them first.");
+        }
+
         String oldState = null;
         Optional<Shift> existingOpt = shiftRepository.findById(id);
         if (existingOpt.isPresent()) {
@@ -41,6 +45,7 @@ public class ShiftService {
         auditLoggingService.saveAuditLog(id, "DELETED", "shifts", oldState, null);
     }
 
+    @Transactional
     public void addShift(Shift shift) {
         boolean isNew = (shift.getId() == null);
         String oldState = null;
@@ -53,26 +58,36 @@ public class ShiftService {
                         existing.getName(), existing.getStartTime(), existing.getEndTime());
             }
         }
+        validateAndPrepareShift(shift);
 
-        validateShift(shift);
         Shift savedShift = shiftRepository.save(shift);
 
-        String newState = String.format("{ \"name\": \"%s\", \"startTime\": \"%s\", \"endTime\": \"%s\" }",
-                savedShift.getName(), savedShift.getStartTime(), savedShift.getEndTime());
+        String newState = String.format("{ \"name\": \"%s\", \"startTime\": \"%s\", \"endTime\": \"%s\", \"crossesMidnight\": %b }",
+                savedShift.getName(), savedShift.getStartTime(), savedShift.getEndTime(), savedShift.getCrossesMidnight());
         String action = isNew ? "CREATED" : "UPDATED";
 
         log.info("Shift {} successfully. ID: {}", action, savedShift.getId());
         auditLoggingService.saveAuditLog(savedShift.getId(), action, "shifts", oldState, newState);
     }
 
-    private void validateShift(Shift shift) {
+    private void validateAndPrepareShift(Shift shift) {
         if (shift.getWorkingDays() == null || shift.getWorkingDays().isEmpty()) {
-            throw new IllegalArgumentException("At least one working day is required");
+            throw new IllegalArgumentException("At least one working day is required.");
         }
 
         if (shift.getStartTime().equals(shift.getEndTime())) {
-            throw new IllegalArgumentException("Start time and end time cannot be same");
+            throw new IllegalArgumentException("Start time and end time cannot be the same.");
         }
+
+        shiftRepository.findByNameIgnoreCase(shift.getName()).ifPresent(existingShift -> {
+            if (shift.getId() == null || !existingShift.getId().equals(shift.getId())) {
+                throw new IllegalArgumentException("A shift with the name '" + shift.getName() + "' already exists.");
+            }
+        });
+
+        boolean crosses = shift.getEndTime().isBefore(shift.getStartTime());
+        shift.setCrossesMidnight(crosses);
+
     }
 
     public Optional<Shift> getShiftById(Long id){

@@ -1,16 +1,8 @@
 package com.murali.service;
 
-import com.murali.entity.Attendance;
-import com.murali.entity.AttendanceCorrection;
-import com.murali.entity.LeaveType;
-import com.murali.entity.User;
-import com.murali.entity.AuditLog;
-import com.murali.repository.AttendanceCorrectionRepository;
-import com.murali.repository.AttendanceRepository;
-import com.murali.repository.LeaveTypeRepository;
-import com.murali.repository.UserRepository;
-import com.murali.repository.AuditLogRepository;
-import com.murali.security.SecurityService;
+import com.murali.entity.*;
+import com.murali.repository.*;
+import com.murali.util.SecurityService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -27,16 +19,42 @@ public class AttendanceCorrectionService {
 
     private final AttendanceCorrectionRepository correctionRepository;
     private final AttendanceRepository attendanceRepository;
+    private final TimeLogRepository timeLogRepository;
     private final LeaveBalanceService leaveBalanceService;
     private final LeaveTypeRepository leaveTypeRepository;
     private final UserRepository userRepository;
-    private final AuditLogRepository auditLogRepository;
+    private final AuditLogService auditLogService;
     private final SecurityService securityService;
 
+    // INJECTED TO ENABLE CENTRALIZED TIMELINE RECALCULATION
+    private final AttendanceProcessService attendanceProcessService;
+    private final LeaveRequestRepository leaveRequestRepository;
+
+    @Transactional
+    public void evaluateAndRouteAnomaly(Attendance attendance) {
+        LeaveRequest leaveRequest = leaveRequestRepository.findApprovedLeaveForEmployeeOnDate(
+                attendance.getEmployee().getId(), attendance.getAttendanceDate()
+        ).orElse(null);
+
+        // FIRE THE ENGINE: Let the centralized process calculate minutes and evaluate the status
+        attendanceProcessService.recalculateTimeline(attendance, attendance.getShiftAssignment().getShift(), leaveRequest);
+
+        // Check if the engine natively resolved it (e.g., they actually met the required hours)
+        String currentStatus = attendance.getStatus() != null ? attendance.getStatus().toString() : "";
+        if ("PRESENT".equals(currentStatus) || "HALF_DAY_LEAVE".equals(currentStatus)) {
+            log.info("Missing punch ignored for Employee {}. Worked {} mins, met requirement.",
+                    attendance.getEmployee().getId(), attendance.getTotalWorkedMinutes());
+        } else {
+            autoCreateCorrection(attendance);
+        }
+    }
 
     @Transactional
     public void autoCreateCorrection(Attendance attendance) {
         User approver = resolveManagerForEmployee(attendance.getEmployee());
+
+        attendance.setStatus("PENDING_RESOLUTION");
+        attendanceRepository.save(attendance);
 
         AttendanceCorrection correction = new AttendanceCorrection();
         correction.setAttendance(attendance);
@@ -49,7 +67,8 @@ public class AttendanceCorrectionService {
 
         String newState = String.format("{ \"status\": \"PENDING\", \"attendanceId\": %d, \"approverId\": %d }",
                 attendance.getId(), approver.getId());
-        saveAuditLog(correction.getId(), "CREATED", "attendance_corrections", null, newState);
+
+        auditLogService.saveAuditLog(correction.getId(), "CREATE", "AttendanceCorrection", null, newState);
     }
 
     @Transactional
@@ -62,17 +81,27 @@ public class AttendanceCorrectionService {
         }
 
         Attendance attendance = correction.getAttendance();
-
         String oldStatus = correction.getStatus();
-        String safeComments = (comments != null) ? comments.replace("\"", "\\\"") : ""; // Escape quotes for JSON
+        String safeComments = (comments != null) ? comments.replace("\"", "\\\"") : "";
+
+        LeaveRequest leaveRequest = leaveRequestRepository.findApprovedLeaveForEmployeeOnDate(
+                attendance.getEmployee().getId(), attendance.getAttendanceDate()
+        ).orElse(null);
 
         if ("APPROVED".equalsIgnoreCase(action)) {
             if (manualCheckOutTime == null) {
                 throw new IllegalArgumentException("A manual check-out time must be provided for approval.");
             }
 
-            attendance.setCheckOut(manualCheckOutTime);
-            attendance.setStatus("PRESENT");
+            TimeLog manualOut = new TimeLog();
+            manualOut.setAttendance(attendance);
+            manualOut.setPunchTime(manualCheckOutTime);
+            manualOut.setPunchType("OUT");
+            manualOut.setSource("MANAGER_OVERRIDE");
+            timeLogRepository.save(manualOut);
+
+            // FIRE THE ENGINE: Let it calculate the final metrics natively now that the missing punch exists
+            attendanceProcessService.recalculateTimeline(attendance, attendance.getShiftAssignment().getShift(), leaveRequest);
 
             correction.setResolvedCheckOutTime(manualCheckOutTime);
             correction.setStatus("APPROVED");
@@ -81,10 +110,19 @@ public class AttendanceCorrectionService {
             String newState = String.format("{ \"status\": \"APPROVED\", \"checkOut\": \"%s\", \"comments\": \"%s\" }",
                     manualCheckOutTime.toString(), safeComments);
 
-            saveAuditLog(correction.getId(), "APPROVED", "attendance_corrections", oldState, newState);
+            auditLogService.saveAuditLog(correction.getId(), "UPDATE", "AttendanceCorrection", oldState, newState);
 
         } else if ("REJECTED".equalsIgnoreCase(action)) {
-            attendance.setStatus("ABSENT");
+
+            // FIRE THE ENGINE: Ensure timeline totals are strictly updated before applying penalty overrides
+            attendanceProcessService.recalculateTimeline(attendance, attendance.getShiftAssignment().getShift(), leaveRequest);
+
+            // Override the engine's standard status with the penalty statuses
+            if (attendance.getTotalWorkedMinutes() > 0) {
+                attendance.setStatus("PRESENT_PENALIZED");
+            } else {
+                attendance.setStatus("ABSENT");
+            }
 
             LeaveType halfDayLeave = leaveTypeRepository.findByNameContainingIgnoreCaseOrCodeContainingIgnoreCase("Half Day Leave", "HDL-001").getFirst();
             leaveBalanceService.deductPenalty(
@@ -100,26 +138,27 @@ public class AttendanceCorrectionService {
             String oldState = String.format("{ \"status\": \"%s\" }", oldStatus);
             String newState = String.format("{ \"status\": \"REJECTED\", \"comments\": \"%s\" }", safeComments);
 
-            saveAuditLog(correction.getId(), "REJECTED", "attendance_corrections", oldState, newState);
+            auditLogService.saveAuditLog(correction.getId(), "UPDATE", "AttendanceCorrection", oldState, newState);
 
         } else {
             throw new IllegalArgumentException("Invalid action.");
         }
 
         correction.setManagerComments(comments);
-
         attendanceRepository.save(attendance);
         correctionRepository.save(correction);
     }
 
-    private User resolveManagerForEmployee(com.murali.entity.Employee employee) {
+    private User resolveManagerForEmployee(Employee employee) {
         if (employee.getManager() != null && employee.getManager().getUser() != null) {
             return employee.getManager().getUser();
         }
-        // Fallback to HR Admin if no manager exists
-        return userRepository.findFirstByRoleName("ROLE_HR_ADMIN")
-                .stream().findFirst()
-                .orElseThrow(() -> new IllegalStateException("No Manager or HR Admin available to route anomaly."));
+
+        List<User> hrAdmins = userRepository.findByRoleName("ROLE_HR_ADMIN");
+        if (hrAdmins.isEmpty()) {
+            throw new IllegalStateException("No Manager or HR Admin available to route anomaly.");
+        }
+        return hrAdmins.getFirst();
     }
 
     @Transactional(readOnly = true)
@@ -135,33 +174,5 @@ public class AttendanceCorrectionService {
     @Transactional(readOnly = true)
     public long getGlobalPendingCorrectionsCount() {
         return correctionRepository.countByStatus("PENDING");
-    }
-
-    private void saveAuditLog(Long recordId, String action, String entityName, String oldState, String newState) {
-        try {
-            String performedBy = "SYSTEM";
-
-            if (securityService.getPrincipal() != null) {
-                String username = securityService.getPrincipal().getUsername();
-                String role = "USER";
-
-                if (securityService.getAuthentication() != null && !securityService.getAuthentication().getAuthorities().isEmpty()) {
-                    role = securityService.getAuthentication().getAuthorities().iterator().next().getAuthority();
-                }
-                performedBy = username + " (" + role + ")";
-            }
-
-            AuditLog auditLog = new AuditLog();
-            auditLog.setRecordId(recordId);
-            auditLog.setAction(action);
-            auditLog.setEntityName(entityName);
-            auditLog.setPerformedBy(performedBy);
-            auditLog.setOldState(oldState);
-            auditLog.setNewState(newState);
-
-            auditLogRepository.save(auditLog);
-        } catch (Exception e) {
-            log.error("Failed to save database audit log for record {}: {}", recordId, e.getMessage());
-        }
     }
 }

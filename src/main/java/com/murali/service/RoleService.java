@@ -22,7 +22,6 @@ public class RoleService {
         this.auditLoggingService = auditLoggingService;
     }
 
-    @PreAuthorize("hasRole('ROLE_SUPER_ADMIN')")
     public Role addRole(Role role){
         boolean isNew = (role.getId() == null);
         String oldState = null;
@@ -46,17 +45,14 @@ public class RoleService {
         return savedRole;
     }
 
-    @PreAuthorize("hasAnyRole('ROLE_SUPER_ADMIN', 'ROLE_AUDITOR','ROLE_HR_ADMIN')")
     public List<Role> getRoles(){
         return roleRepository.findAll();
     }
 
-    @PreAuthorize("hasAnyRole('ROLE_SUPER_ADMIN', 'ROLE_AUDITOR', 'ROLE_HR_ADMIN')")
     public List<Role> findAll() {
         return roleRepository.findAll();
     }
 
-    @PreAuthorize("hasRole('ROLE_SUPER_ADMIN')")
     public Role save(Role role) {
         boolean isNew = (role.getId() == null);
         String oldState = null;
@@ -83,7 +79,6 @@ public class RoleService {
         return savedRole;
     }
 
-    @PreAuthorize("hasRole('ROLE_SUPER_ADMIN')")
     public void delete(Role role) {
         Long roleId = role.getId();
         String roleName = role.getName();

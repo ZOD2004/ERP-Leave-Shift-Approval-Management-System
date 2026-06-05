@@ -12,13 +12,11 @@ import java.time.LocalDateTime;
 @Entity
 @Getter
 @Setter
-@NoArgsConstructor
-@AllArgsConstructor
 @Table(name = "attendance_corrections")
 public class AttendanceCorrection {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @GeneratedValue(strategy = GenerationType.SEQUENCE)
     private Long id;
 
     @OneToOne(fetch = FetchType.LAZY)
@@ -30,13 +28,14 @@ public class AttendanceCorrection {
     private User approver;
 
     @Column(nullable = false, length = 20)
-    private String status; // PENDING, APPROVED, REJECTED
+    private String status; // to see if PENDING, APPROVED, REJECTED
 
     @Column(name = "resolved_check_out_time")
     private LocalDateTime resolvedCheckOutTime;
 
     @Column(length = 500)
     private String managerComments;
+
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt = LocalDateTime.now();
 }

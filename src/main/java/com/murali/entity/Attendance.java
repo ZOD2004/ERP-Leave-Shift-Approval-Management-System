@@ -8,9 +8,9 @@ import lombok.Setter;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
-@AllArgsConstructor
-@NoArgsConstructor
 @Getter
 @Setter
 @Entity
@@ -20,7 +20,7 @@ import java.time.LocalDateTime;
 public class Attendance {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @GeneratedValue(strategy = GenerationType.SEQUENCE)
     private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY)
@@ -34,16 +34,21 @@ public class Attendance {
     @Column(name = "attendance_date", nullable = false)
     private LocalDate attendanceDate;
 
-    @Column(name = "check_in")
-    private LocalDateTime checkIn;
+    private LocalDateTime firstCheckIn; // changed from LocalDateTime checkIn;
 
-    @Column(name = "check_out")
-    private LocalDateTime checkOut;
+    private LocalDateTime lastCheckOut; // changed from LocalDateTime checkIn; since multiple
+    // in and out is possible and maintained via time log
+
+    // newly added to see and compare with gracePeriod in shift
+    private Integer totalWorkedMinutes;
+
+    //added newly to cover multi in and out
+    @OneToMany(mappedBy = "attendance", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    private List<TimeLog> timeLogs = new ArrayList<>();
 
     @Column(length = 20)
     private String status;
 
-    @Column(name = "is_late")
-    private Boolean isLate = false;
+    // removed private Boolean isLate = false;
 }
 

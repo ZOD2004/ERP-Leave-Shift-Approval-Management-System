@@ -4,7 +4,8 @@ package com.murali.views;
 import com.murali.dto.ShiftAssignmentDTO;
 import com.murali.dto.TeamAttendanceSummaryDTO;
 import com.murali.entity.*;
-import com.murali.security.SecurityService;
+import com.murali.entity.enums.LeaveSession;
+import com.murali.util.SecurityService;
 import com.murali.service.*;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.UI;
@@ -165,34 +166,32 @@ public class DashboardView extends VerticalLayout {
         Button punchBtn = new Button();
         Optional<Attendance> todayOpt = attendanceProcessService.getTodayAttendance(employeeId);
 
-        boolean hasCheckedIn = todayOpt.isPresent() && todayOpt.get().getCheckIn() != null;
-        boolean hasCheckedOut = todayOpt.isPresent() && todayOpt.get().getCheckOut() != null;
-        boolean isOnLeave = todayOpt.isPresent() && "ON_LEAVE".equals(todayOpt.get().getStatus());
+        boolean isOnLeave = todayOpt.isPresent() &&
+                ("ON_LEAVE".equals(todayOpt.get().getStatus()) || "FULL_LEAVE".equals(todayOpt.get().getStatus()));
 
         if (isOnLeave) {
             punchBtn.setText("On Leave Today");
             punchBtn.setIcon(VaadinIcon.UMBRELLA.create());
             punchBtn.setEnabled(false);
-        } else if (!hasCheckedIn) {
+            return punchBtn;
+        }
+
+        boolean isClockedIn = attendanceProcessService.isCurrentlyClockedIn(employeeId);
+
+        if (!isClockedIn) {
             punchBtn.setText("Clock In");
             punchBtn.setIcon(VaadinIcon.SIGN_IN.create());
             punchBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
             punchBtn.addClickListener(e -> handlePunch(employeeId, true));
-        } else if (!hasCheckedOut) {
+        } else {
             punchBtn.setText("Clock Out");
             punchBtn.setIcon(VaadinIcon.SIGN_OUT.create());
             punchBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY, ButtonVariant.LUMO_ERROR);
             punchBtn.addClickListener(e -> handlePunch(employeeId, false));
-        } else {
-            punchBtn.setText("Punched for Today");
-            punchBtn.setIcon(VaadinIcon.CHECK_CIRCLE.create());
-            punchBtn.addThemeVariants(ButtonVariant.LUMO_SUCCESS);
-            punchBtn.setEnabled(false);
         }
 
         return punchBtn;
     }
-
     private void handlePunch(Long employeeId, boolean isCheckIn) {
         try {
             attendanceProcessService.processDailyPunch(employeeId, LocalDateTime.now(), isCheckIn);
@@ -278,17 +277,9 @@ public class DashboardView extends VerticalLayout {
         grid.addThemeVariants(GridVariant.LUMO_ROW_STRIPES, GridVariant.LUMO_COMPACT);
         grid.setHeight("250px");
 
-        grid.addColumn(ShiftAssignmentDTO::getAssignmentDate).setHeader("Date").setAutoWidth(true);
+        grid.addColumn(dto -> dto.getStartDate() + " to " + dto.getEndDate()).setHeader("Date").setAutoWidth(true);
         grid.addColumn(ShiftAssignmentDTO::getShiftName).setHeader("Shift").setAutoWidth(true);
         grid.addColumn(dto -> dto.getStartTime() + " - " + dto.getEndTime()).setHeader("Hours").setAutoWidth(true);
-        grid.addComponentColumn(dto -> {
-            if (Boolean.TRUE.equals(dto.getIsOverride())) {
-                Span badge = new Span("Adjusted");
-                badge.getElement().getThemeList().add("badge warning small");
-                return badge;
-            }
-            return new Span("-");
-        }).setHeader("Note").setAutoWidth(true);
 
         LocalDate today = LocalDate.now();
         List<ShiftAssignmentDTO> myShifts = shiftAssignmentService
@@ -371,8 +362,8 @@ public class DashboardView extends VerticalLayout {
         grid.setHeight("300px");
 
         grid.addColumn(Attendance::getAttendanceDate).setHeader("Date").setAutoWidth(true);
-        grid.addColumn(a -> a.getCheckIn() != null ? a.getCheckIn().toLocalTime() : "-").setHeader("In").setAutoWidth(true);
-        grid.addColumn(a -> a.getCheckOut() != null ? a.getCheckOut().toLocalTime() : "-").setHeader("Out").setAutoWidth(true);
+        grid.addColumn(a -> a.getFirstCheckIn() != null ? a.getFirstCheckIn().toLocalTime() : "-").setHeader("In").setAutoWidth(true);
+        grid.addColumn(a -> a.getLastCheckOut() != null ? a.getLastCheckOut().toLocalTime() : "-").setHeader("Out").setAutoWidth(true);
         grid.addComponentColumn(a -> {
             Span badge = new Span(a.getStatus() != null ? a.getStatus() : "PENDING");
             badge.getElement().getThemeList().add("badge");
@@ -530,8 +521,8 @@ public class DashboardView extends VerticalLayout {
 
         summaryCards.add(
                 createStatCard("Present", summary.getPresentCount(), "var(--lumo-success-color)"),
-                createStatCard("Late", summary.getLateCount(), "var(--lumo-warning-color)"),
-                createStatCard("Absent", summary.getAbsentCount(), "var(--lumo-error-color)")
+                createStatCard("Late", summary.getExpectedCount(), "var(--lumo-warning-color)"),
+                createStatCard("Absent", summary.getAbsentOrLeaveCount(), "var(--lumo-error-color)")
         );
 
         Grid<Attendance> teamGrid = new Grid<>(Attendance.class, false);
@@ -539,7 +530,7 @@ public class DashboardView extends VerticalLayout {
         teamGrid.setHeight("250px");
 
         teamGrid.addColumn(a -> a.getEmployee().getFirstName()).setHeader("Employee").setAutoWidth(true);
-        teamGrid.addColumn(a -> a.getCheckIn() != null ? a.getCheckIn().toLocalTime().toString() : "-").setHeader("Clock In").setAutoWidth(true);
+        teamGrid.addColumn(a -> a.getFirstCheckIn() != null ? a.getFirstCheckIn().toLocalTime().toString() : "-").setHeader("Clock In").setAutoWidth(true);
         teamGrid.addComponentColumn(a -> {
             Span badge = new Span(a.getStatus() != null ? a.getStatus() : "PENDING");
             badge.getElement().getThemeList().add("badge");
@@ -586,7 +577,7 @@ public class DashboardView extends VerticalLayout {
         grid.setHeight("250px");
 
         grid.addColumn(ShiftAssignmentDTO::getEmployeeName).setHeader("Employee").setAutoWidth(true);
-        grid.addColumn(ShiftAssignmentDTO::getAssignmentDate).setHeader("Date").setAutoWidth(true);
+        grid.addColumn(dto -> dto.getStartDate() + " to " + dto.getEndDate()).setHeader("Date").setAutoWidth(true);
         grid.addColumn(ShiftAssignmentDTO::getShiftName).setHeader("Shift").setAutoWidth(true);
         grid.addColumn(dto -> dto.getStartTime() + " - " + dto.getEndTime()).setHeader("Hours").setAutoWidth(true);
 
@@ -697,37 +688,69 @@ public class DashboardView extends VerticalLayout {
         for (int i = 1; i <= daysInMonth; i++) {
             final int day = i;
             monthlyGrid.addComponentColumn(row -> {
-                com.murali.dto.ShiftAssignmentDTO assignment = row.getAssignmentForDay(day);
-                if (assignment != null && assignment.getShiftName() != null) {
-                    String shortCode = assignment.getShiftName().length() > 4
-                            ? assignment.getShiftName().substring(0, 4)
-                            : assignment.getShiftName();
-                    Span badge = new Span(shortCode);
-                    badge.getElement().getThemeList().add("badge small contrast");
-                    return badge;
+                // 1. Fetch the new DailyCellDTO
+                com.murali.dto.DailyCellDTO cell = row.getCellForDay(day);
+
+                if (cell == null) return new Span("-");
+
+                Span badge = new Span();
+                badge.getElement().getThemeList().add("badge small");
+
+                // 2. Render based on the resolved daily state
+                if (cell.isOnLeave() && cell.getLeaveSession() == LeaveSession.FULL_DAY) {
+                    badge.setText("L");
+                    badge.getElement().getThemeList().add("error");
+                } else if (cell.isHoliday()) {
+                    badge.setText("H");
+                    badge.getElement().getThemeList().add("error");
+                } else if (cell.isOffDay()) {
+                    badge.setText("Off");
+                    badge.getElement().getThemeList().add("contrast");
+                } else if (cell.getAssignment() != null) {
+                    String shiftName = cell.getAssignment().getShiftName();
+                    String shortCode = shiftName.length() > 3 ? shiftName.substring(0, 3) : shiftName;
+
+                    if (cell.isOnLeave()) {
+                        // Half-day leave
+                        badge.setText("L/" + shortCode);
+                        badge.getElement().getThemeList().add("warning");
+                    } else {
+                        // Normal shift
+                        badge.setText(shortCode);
+                        badge.getElement().getThemeList().add("success");
+                    }
+                } else {
+                    return new Span("-");
                 }
-                return new Span("-");
+                return badge;
             }).setHeader(String.valueOf(day)).setAutoWidth(true);
         }
 
         LocalDate startOfMonth = today.withDayOfMonth(1);
         LocalDate endOfMonth = today.withDayOfMonth(daysInMonth);
 
-        List<com.murali.dto.ShiftAssignmentDTO> flatAssignments = shiftAssignmentService.fetchAssignmentsForCalendar(startOfMonth, endOfMonth);
+        // 3. Call the new Engine instead of fetchAssignmentsForCalendar
+        List<com.murali.dto.DailyCellDTO> resolvedCells = shiftAssignmentService.getResolvedCalendarData(startOfMonth, endOfMonth);
+
         java.util.Map<String, com.murali.dto.MonthlyRowDTO> pivotData = new java.util.HashMap<>();
 
-        for (com.murali.dto.ShiftAssignmentDTO dto : flatAssignments) {
+        // 4. Map the data cleanly without the internal while-loop (since it's already resolved day-by-day)
+        for (com.murali.dto.DailyCellDTO cell : resolvedCells) {
             com.murali.dto.MonthlyRowDTO row = pivotData.computeIfAbsent(
-                    dto.getEmployeeName(),
-                    k -> new com.murali.dto.MonthlyRowDTO(dto.getEmployeeName())
+                    cell.getEmployeeName(),
+                    k -> new com.murali.dto.MonthlyRowDTO(cell.getEmployeeName())
             );
-            row.addShift(dto.getAssignmentDate().getDayOfMonth(), dto);
+
+            if (cell.getDate().getMonthValue() == today.getMonthValue() && cell.getDate().getYear() == today.getYear()) {
+                row.addCell(cell.getDate().getDayOfMonth(), cell);
+            }
         }
 
         monthlyGrid.setItems(pivotData.values());
         section.add(title, monthlyGrid);
         return section;
     }
+
     private void buildSuperAdminUI() {
         HorizontalLayout header = new HorizontalLayout(
                 new H2("System Administrator Console")

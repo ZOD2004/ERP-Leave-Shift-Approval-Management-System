@@ -16,34 +16,32 @@ import java.util.Optional;
 @Repository
 public interface ShiftAssignmentRepository extends JpaRepository<ShiftAssignment, Long> {
 
-    @Query(
-            value = """
-            SELECT EXISTS (
-                SELECT 1
-                FROM shift_assignments sa
-                WHERE sa.employee_id = :employeeId
-                  AND sa.assignment_date = :assignmentDate
-            )
-            """,
-            nativeQuery = true
-    )
-    boolean existsByEmployeeIdAndAssignmentDate(@Param("employeeId") Long employeeId,
-            @Param("assignmentDate") LocalDate assignmentDate);
+    // 1. Check for ANY overlap for a specific employee and date range
+    @Query("""
+        SELECT COUNT(sa) > 0 FROM ShiftAssignment sa 
+        WHERE sa.employee.id = :employeeId 
+        AND sa.startDate <= :endDate AND sa.endDate >= :startDate 
+        AND (:excludeAssignmentId IS NULL OR sa.id <> :excludeAssignmentId)
+    """)
+    boolean existsConflictExcludingAssignment(
+            @Param("employeeId") Long employeeId,
+            @Param("startDate") LocalDate startDate,
+            @Param("endDate") LocalDate endDate,
+            @Param("excludeAssignmentId") Long excludeAssignmentId
+    );
 
     @EntityGraph(attributePaths = {"employee", "shift"})
     @Query("""
-        SELECT sa
-        FROM ShiftAssignment sa
-        WHERE sa.assignmentDate >= CURRENT_DATE
-          AND sa.assignmentDate = :filterDate
+        SELECT sa FROM ShiftAssignment sa
+        WHERE :filterDate BETWEEN sa.startDate AND sa.endDate
+        """)
+    Page<ShiftAssignment> findByDate(@Param("filterDate") LocalDate filterDate, Pageable pageable);
+
+    @EntityGraph(attributePaths = {"employee", "shift"})
+    @Query("""
+        SELECT sa FROM ShiftAssignment sa
+        WHERE :filterDate BETWEEN sa.startDate AND sa.endDate
           AND LOWER(sa.employee.firstName) LIKE LOWER(CONCAT('%', :employeeName, '%'))
-          AND NOT EXISTS (
-              SELECT 1 FROM LeaveRequest lr
-              WHERE lr.employee.id = sa.employee.id
-                AND lr.status = 'APPROVED'
-                AND lr.durationDays > 0.5
-                AND sa.assignmentDate BETWEEN lr.startDate AND lr.endDate
-          )
         """)
     Page<ShiftAssignment> findFilteredAssignments(
             @Param("filterDate") LocalDate filterDate,
@@ -51,114 +49,63 @@ public interface ShiftAssignmentRepository extends JpaRepository<ShiftAssignment
             Pageable pageable
     );
 
-    @EntityGraph(attributePaths = {"employee", "shift"})
     @Query("""
-        SELECT sa
-        FROM ShiftAssignment sa
-        WHERE sa.assignmentDate >= CURRENT_DATE
-          AND sa.assignmentDate = :filterDate
-          AND NOT EXISTS (
-              SELECT 1 FROM LeaveRequest lr
-              WHERE lr.employee.id = sa.employee.id
-                AND lr.status = 'APPROVED'
-                AND lr.durationDays > 0.5
-                AND sa.assignmentDate BETWEEN lr.startDate AND lr.endDate
-          )
-        """)
-    Page<ShiftAssignment> findByDate(
-            @Param("filterDate") LocalDate filterDate,
-            Pageable pageable
+        SELECT sa FROM ShiftAssignment sa
+        JOIN FETCH sa.employee
+        JOIN FETCH sa.shift
+        WHERE sa.startDate <= :endDate AND sa.endDate >= :startDate
+    """)
+    List<ShiftAssignment> findOverlappingAssignmentsInRange(
+            @Param("startDate") LocalDate startDate,
+            @Param("endDate") LocalDate endDate
     );
 
+    @EntityGraph(attributePaths = {"employee", "shift","shift.workingDays"})
     @Query("""
-    SELECT sa
-    FROM ShiftAssignment sa
-    JOIN FETCH sa.employee
-    JOIN FETCH sa.shift
-    WHERE sa.assignmentDate BETWEEN :startDate AND :endDate
-""")
-    List<ShiftAssignment> findByAssignmentDateBetween(@Param("startDate") LocalDate startDate,@Param("endDate") LocalDate endDate);
-
-    @EntityGraph(attributePaths = {"employee", "shift"})
-    @Query("""
-        SELECT sa
-        FROM ShiftAssignment sa
-        WHERE sa.assignmentDate >= CURRENT_DATE
-          AND LOWER(sa.employee.firstName) LIKE LOWER(CONCAT('%', :employeeName, '%'))
-          AND NOT EXISTS (
-              SELECT 1 FROM LeaveRequest lr
-              WHERE lr.employee.id = sa.employee.id
-                AND lr.status = 'APPROVED'
-                AND lr.durationDays > 0.5
-                AND sa.assignmentDate BETWEEN lr.startDate AND lr.endDate
-          )
-        """)
-    Page<ShiftAssignment> findByEmployeeName(
-            @Param("employeeName") String employeeName,
-            Pageable pageable
-    );
-    @Query("""
-    SELECT sa
-    FROM ShiftAssignment sa
-    JOIN FETCH sa.employee
-    JOIN FETCH sa.shift
-    WHERE sa.assignmentDate = :date
-""")
-    List<ShiftAssignment> findByAssignmentDate(@Param("date") LocalDate date);
-
-    @EntityGraph(attributePaths = {"employee", "shift"})
-    @Query("""
-        SELECT sa
-        FROM ShiftAssignment sa
-        WHERE sa.assignmentDate >= CURRENT_DATE
-          AND NOT EXISTS (
-              SELECT 1 FROM LeaveRequest lr
-              WHERE lr.employee.id = sa.employee.id
-                AND lr.status = 'APPROVED'
-                AND lr.durationDays > 0.5
-                AND sa.assignmentDate BETWEEN lr.startDate AND lr.endDate
-          )
-        """)
-    Page<ShiftAssignment> findAllAssignments(Pageable pageable);
-
-    @Query("SELECT sa FROM ShiftAssignment sa WHERE sa.employee.id IN :employeeIds " +
-            "AND sa.assignmentDate BETWEEN :startDate AND :endDate")
-    List<ShiftAssignment> findByEmployeeIdInAndAssignmentDateBetween(
+        SELECT sa FROM ShiftAssignment sa 
+        WHERE sa.employee.id IN :employeeIds 
+        AND sa.startDate <= :endDate AND sa.endDate >= :startDate
+    """)
+    List<ShiftAssignment> findByEmployeeIdInAndDateRange(
             @Param("employeeIds") List<Long> employeeIds,
             @Param("startDate") LocalDate startDate,
-            @Param("endDate") LocalDate endDate);
-
-    @Query("SELECT COUNT(sa) > 0 FROM ShiftAssignment sa " +
-            "WHERE sa.employee.id = :employeeId " +
-            "AND sa.assignmentDate = :assignmentDate " +
-            "AND (:excludeAssignmentId IS NULL OR sa.id <> :excludeAssignmentId)")
-    boolean existsConflictExcludingAssignment(
-            @Param("employeeId") Long employeeId,
-            @Param("assignmentDate") LocalDate assignmentDate,
-            @Param("excludeAssignmentId") Long excludeAssignmentId
+            @Param("endDate") LocalDate endDate
     );
 
-    @Query("SELECT sa FROM ShiftAssignment sa JOIN FETCH sa.shift WHERE sa.employee.id = :employeeId AND sa.assignmentDate = :date")
-    Optional<ShiftAssignment> findByEmployeeIdAndAssignmentDate(@Param("employeeId") Long employeeId, @Param("date") LocalDate date);
+    boolean existsByShiftId(Long id);
 
-    @Query("SELECT sa FROM ShiftAssignment sa JOIN FETCH sa.shift WHERE sa.assignmentDate = :date")
-    List<ShiftAssignment> findAllByAssignmentDate(@Param("date") LocalDate date);
+    @Query("SELECT sa.shift.name, COUNT(sa) FROM ShiftAssignment sa WHERE :date BETWEEN sa.startDate AND sa.endDate GROUP BY sa.shift.name")
+    List<Object[]> countShiftsByDate(@Param("date") LocalDate date);
 
-    @Query("""
-        SELECT sa
-        FROM ShiftAssignment sa
-        LEFT JOIN FETCH sa.employee e
-        LEFT JOIN FETCH e.user
-        LEFT JOIN FETCH sa.shift
-        WHERE sa.employee.id IN :employeeIds
-        AND sa.assignmentDate = :assignmentDate
-    """)
-    List<ShiftAssignment> findTodayAssignmentsForEmployees(
-            @Param("employeeIds") List<Long> employeeIds,
-            @Param("assignmentDate") LocalDate assignmentDate
-    );
+    // A clever way to detect manual overrides without the old flag:
+    // Find assignments where startDate equals endDate (a 1-day hole punch) inside the month
+    @Query("SELECT COUNT(sa) FROM ShiftAssignment sa WHERE sa.startDate = sa.endDate AND sa.startDate >= :start AND sa.endDate <= :end")
+    long countSingleDayHolePunches(@Param("start") LocalDate start, @Param("end") LocalDate end);
 
-    @Query("SELECT COUNT(sa) FROM ShiftAssignment sa WHERE " +
-            "sa.assignmentDate BETWEEN :startDate AND :endDate AND sa.overrideApplied = true")
-    long countByOverrideAppliedTrue(@Param("startDate") LocalDate startDate, @Param("endDate") LocalDate endDate);
+    @Query("SELECT sa FROM ShiftAssignment sa WHERE :targetDate BETWEEN sa.startDate AND sa.endDate")
+    List<ShiftAssignment> findOverlappingAssignmentsForDate(@Param("targetDate") LocalDate targetDate);
+
+    @Query("SELECT sa FROM ShiftAssignment sa WHERE sa.employee.id = :employeeId AND :targetDate BETWEEN sa.startDate AND sa.endDate")
+    Optional<ShiftAssignment> findAssignmentByEmployeeAndDate(@Param("employeeId") Long employeeId, @Param("targetDate") LocalDate targetDate);
+
+    // Fixes the getTodayTeamAttendanceSummary error
+    @Query("SELECT sa FROM ShiftAssignment sa WHERE sa.employee.id IN :employeeIds AND :targetDate BETWEEN sa.startDate AND sa.endDate")
+    List<ShiftAssignment> findTodayAssignmentsForEmployees(@Param("employeeIds") List<Long> employeeIds, @Param("targetDate") LocalDate targetDate);
+
+    // Fixes the processDailyPunch error you are about to hit next
+    @Query("SELECT sa FROM ShiftAssignment sa WHERE sa.employee.id = :employeeId AND :targetDate BETWEEN sa.startDate AND sa.endDate")
+    Optional<ShiftAssignment> findByEmployeeIdAndAssignmentDate(@Param("employeeId") Long employeeId, @Param("targetDate") LocalDate targetDate);
+
+    @Query("SELECT MAX(sa.endDate) FROM ShiftAssignment sa WHERE sa.employee.id = :employeeId")
+    Optional<LocalDate> findMaxEndDateByEmployeeId(@Param("employeeId") Long employeeId);
+
+    // Update this method
+    @EntityGraph(attributePaths = {"employee", "shift"})
+    @Query("SELECT sa FROM ShiftAssignment sa WHERE LOWER(sa.employee.firstName) LIKE LOWER(CONCAT('%', :employeeName, '%')) AND sa.endDate >= CURRENT_DATE")
+    Page<ShiftAssignment> findByEmployeeName(@Param("employeeName") String employeeName, Pageable pageable);
+
+    // Update this method
+    @EntityGraph(attributePaths = {"employee", "shift"})
+    @Query("SELECT sa FROM ShiftAssignment sa WHERE sa.endDate >= CURRENT_DATE")
+    Page<ShiftAssignment> findAllAssignments(Pageable pageable);
 }

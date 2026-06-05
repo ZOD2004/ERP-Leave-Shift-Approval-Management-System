@@ -15,16 +15,15 @@ import java.util.Set;
 @Entity
 @Getter
 @Setter
-@NoArgsConstructor
-@AllArgsConstructor
 @Table(name = "employees")
 public class Employee{
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @GeneratedValue(strategy = GenerationType.SEQUENCE)
     private Long id;
 
+    // cascade all coz whatever chages to user should reflect on employee
     @OneToOne(fetch = FetchType.LAZY,cascade = CascadeType.ALL)
-    @JoinColumn(name = "user_id", nullable = true, unique = true)
+    @JoinColumn(name = "user_id", unique = true)
     private User user;
 
     @ManyToOne(fetch = FetchType.LAZY)
@@ -36,20 +35,14 @@ public class Employee{
     @JoinColumn(name = "manager_id")
     private Employee manager;
 
-    @OneToMany(mappedBy = "manager", fetch = FetchType.LAZY)
-    private List<Employee> subordinates = new ArrayList<>();
-
     @Column(name = "employee_code", nullable = false, unique = true, length = 50)
     private String employeeCode;
 
     @Column(name = "first_name", nullable = false, length = 100)
     private String firstName;
 
-    @ManyToMany(fetch = FetchType.EAGER)
-    @JoinTable(
-            name = "employee_applicable_leaves",
-            joinColumns = @JoinColumn(name = "employee_id"),
-            inverseJoinColumns = @JoinColumn(name = "leave_type_id")
-    )
-    private Set<LeaveType> applicableLeaveTypes = new HashSet<>();
+    //removed Set<LeaveType> applicableLeaveTypes since leave Balance already has this data in it
+
+    // more data can be added like address and phone etc but dint do
+
 }

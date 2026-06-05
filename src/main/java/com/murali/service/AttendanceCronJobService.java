@@ -1,15 +1,8 @@
 package com.murali.service;
 
-import com.murali.entity.Attendance;
-import com.murali.entity.LeaveType;
-import com.murali.entity.ShiftAssignment;
-import com.murali.entity.AuditLog;
-import com.murali.repository.AttendanceRepository;
-import com.murali.repository.EmployeeRepository;
-import com.murali.repository.HolidayRepository;
-import com.murali.repository.LeaveTypeRepository;
-import com.murali.repository.ShiftAssignmentRepository;
-import com.murali.repository.AuditLogRepository;
+import com.murali.entity.*;
+import com.murali.entity.enums.LeaveSession;
+import com.murali.repository.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -19,6 +12,8 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -29,126 +24,180 @@ import java.util.stream.Collectors;
 public class AttendanceCronJobService {
 
     private final AttendanceRepository attendanceRepository;
-    private final HolidayRepository holidayRepository;
-    private final EmployeeRepository employeeRepository;
-    private final LeaveBalanceService leaveBalanceService;
-    private final LeaveTypeRepository leaveTypeRepository;
+    private final TimeLogRepository timeLogRepository;
+    private final LeaveRequestRepository leaveRequestRepository;
     private final ShiftAssignmentRepository shiftAssignmentRepository;
     private final AttendanceCorrectionService attendanceCorrectionService;
+    private final LeaveBalanceService leaveBalanceService;
+    private final LeaveTypeRepository leaveTypeRepository;
     private final AuditLogRepository auditLogRepository;
+    private final AttendanceProcessService attendanceProcessService;
+    private LocalDateTime lastRunTime;
+    private String lastRunStatus = "WAITING";
 
-    private static final int MINIMUM_HOURS_FOR_FULL_DAY = 4;
 
-    @Scheduled(cron = "0 0 1 * * ?")
+    private void handleAbsence(Employee employee, ShiftAssignment assignment, LocalDate targetDate, LeaveRequest leaveRequest, LeaveSession todaySession) {
+        Attendance attendance = getOrCreateAttendance(employee, assignment, targetDate);
+
+        if (leaveRequest != null && todaySession != LeaveSession.FULL_DAY) {
+            attendance.setStatus("HALF_DAY_ABSENT");
+            deductPenalty(employee, "Emergency Leave", 0.5, targetDate.getYear(), "Missed shift on half-day leave");
+        } else {
+            attendance.setStatus("ABSENT");
+            deductPenalty(employee, "Emergency Leave", 1.0, targetDate.getYear(), "Absent without notice");
+        }
+        attendanceRepository.save(attendance);
+    }
+
+    private Attendance getOrCreateAttendance(Employee employee, ShiftAssignment assignment, LocalDate targetDate) {
+        return attendanceRepository.findByEmployeeIdAndAttendanceDate(employee.getId(), targetDate)
+                .orElseGet(() -> {
+                    Attendance newAtt = new Attendance();
+                    newAtt.setEmployee(employee);
+                    newAtt.setShiftAssignment(assignment);
+                    newAtt.setAttendanceDate(targetDate);
+                    return newAtt;
+                });
+    }
+
+    private void saveEmptyAttendance(Employee employee, ShiftAssignment assignment, LocalDate targetDate, String status) {
+        Attendance attendance = getOrCreateAttendance(employee, assignment, targetDate);
+        attendance.setStatus(status);
+        attendanceRepository.save(attendance);
+    }
+
+    private void deductPenalty(Employee employee, String leaveTypeName, double days, int year, String desc) {
+        LeaveType type = leaveTypeRepository.findByNameContainingIgnoreCaseOrCodeContainingIgnoreCase(leaveTypeName, "UPL-001")
+                .stream().findFirst().orElseThrow(() -> new IllegalStateException("Leave type not found!"));
+        leaveBalanceService.deductPenalty(employee, type, BigDecimal.valueOf(days), year, desc);
+    }
+
     @Transactional
-    public void reconcileDailyAttendance() {
-        LocalDate targetDate = LocalDate.now().minusDays(1);
-        log.info("Starting Daily Attendance Reconciliation for target date: {}", targetDate);
-
-        if (holidayRepository.existsByHolidayDate(targetDate)) {
-            log.info("Target date {} was a system-wide holiday. Halting automated absence penalties.", targetDate);
+    public void recalculateAttendanceForDate(Long employeeId, LocalDate targetDate) {
+        Attendance attendance = attendanceRepository.findByEmployeeIdAndAttendanceDate(employeeId, targetDate).orElse(null);
+        if (attendance == null) {
+            log.warn("Cannot recalculate: No attendance record found for Employee {} on {}", employeeId, targetDate);
             return;
         }
 
-        List<Long> activeEmployeeIds = employeeRepository.findAllActiveEmployeeIds();
+        ShiftAssignment assignment = shiftAssignmentRepository.findAssignmentByEmployeeAndDate(employeeId, targetDate).orElse(null);
+        if (assignment == null) return;
 
-        Map<Long, ShiftAssignment> targetDateAssignmentsMap = shiftAssignmentRepository.findAllByAssignmentDate(targetDate)
-                .stream()
-                .collect(Collectors.toMap(sa -> sa.getEmployee().getId(), sa -> sa));
+        LeaveRequest leaveRequest = leaveRequestRepository.findApprovedLeaveForEmployeeOnDate(employeeId, targetDate).orElse(null);
 
-        Map<Long, Attendance> targetDateAttendanceMap = attendanceRepository.findAllByAttendanceDate(targetDate)
-                .stream()
-                .collect(Collectors.toMap(a -> a.getEmployee().getId(), a -> a));
+        // Fire the centralized Engine!
+        attendanceProcessService.recalculateTimeline(attendance, assignment.getShift(), leaveRequest);
 
-        LeaveType emergencyLeave = leaveTypeRepository.findByNameContainingIgnoreCaseOrCodeContainingIgnoreCase("Emergency Leave", "EMG-001")
-                .stream().findFirst().orElseThrow(() -> new IllegalStateException("Emergency Leave type not found!"));
+        log.info("Successfully recalculated attendance for Employee {} on {}", employeeId, targetDate);
+    }
 
-        LeaveType halfDayLeave = leaveTypeRepository.findByNameContainingIgnoreCaseOrCodeContainingIgnoreCase("Half Day Leave", "HDL-001")
-                .stream().findFirst().orElseThrow(() -> new IllegalStateException("Half Day Leave type not found!"));
+    private LeaveSession getSessionForDate(LeaveRequest request, LocalDate targetDate) {
+        if (request == null) return null;
 
-        for (Long employeeId : activeEmployeeIds) {
+        // If the leave is just one single day, the startSession dictates the leave type
+        if (targetDate.equals(request.getStartDate()) && targetDate.equals(request.getEndDate())) {
+            return request.getStartSession();
+        }
 
-            if (!targetDateAssignmentsMap.containsKey(employeeId)) {
-                continue;
-            }
+        // If it's the first day of a multi-day leave
+        if (targetDate.equals(request.getStartDate())) {
+            return request.getStartSession();
+        }
 
-            boolean isNewRecord = !targetDateAttendanceMap.containsKey(employeeId);
-            Attendance attendance = targetDateAttendanceMap.getOrDefault(
-                    employeeId,
-                    initializeEmptyAttendance(employeeId, targetDate, targetDateAssignmentsMap.get(employeeId))
-            );
+        // If it's the last day of a multi-day leave
+        if (targetDate.equals(request.getEndDate())) {
+            return request.getEndSession();
+        }
 
-            String oldStatus = attendance.getStatus();
+        // Any day in the middle of a multi-day leave is ALWAYS a full day
+        return LeaveSession.FULL_DAY;
+    }
 
-            if ("ON_LEAVE".equals(oldStatus) || "FULL_LEAVE".equals(oldStatus)) {
-                continue;
-            }
+    public LocalDateTime getLastRunTime() {
+        return lastRunTime;
+    }
 
-            if (attendance.getCheckIn() == null) {
-                if (!"HALF_DAY_LEAVE".equals(oldStatus)) {
-                    attendance.setStatus("ABSENT");
-                    leaveBalanceService.deductPenalty(attendance.getEmployee(), emergencyLeave, BigDecimal.valueOf(1.0), targetDate.getYear(), "Absent without notice");
-                } else {
-                    attendance.setStatus("HALF_DAY_ABSENT");
-                    leaveBalanceService.deductPenalty(attendance.getEmployee(), emergencyLeave, BigDecimal.valueOf(0.5), targetDate.getYear(), "Missed shift on half-day leave");
+    public String getLastRunStatus() {
+        return lastRunStatus;
+    }
+
+    // Runs at 12:00 PM (Noon) every day safely AFTER all night shifts have finished
+    @Scheduled(cron = "0 0 12 * * ?")
+    @Transactional
+    public void dailyMiddaySweeper() {
+        LocalDate yesterday = LocalDate.now().minusDays(1);
+
+        try {
+            this.lastRunStatus = "RUNNING";
+            log.info("Starting Midday Sweeper for target date: {}", yesterday);
+
+            // --- PHASE 1: Close Incomplete Records ---
+            List<Attendance> incompleteAttendances = attendanceRepository.findIncompleteAttendancesForDate(yesterday);
+            for (Attendance att : incompleteAttendances) {
+                if (AttendanceStatus.WORKING.equals(att.getStatus())) {
+                    // They forgot to check out. Let the anomaly engine evaluate it.
+                    attendanceCorrectionService.evaluateAndRouteAnomaly(att);
+
+                } else if (AttendanceStatus.PARTIAL_DAY.equals(att.getStatus())) {
+                    // They checked out early. Let the anomaly engine evaluate if grace periods cover it.
+                    attendanceCorrectionService.evaluateAndRouteAnomaly(att);
+
+                } else if (AttendanceStatus.PENDING.equals(att.getStatus())) {
+                    // Created, but never actually punched
+                    att.setStatus(AttendanceStatus.ABSENT);
+                    deductPenalty(att.getEmployee(), "Emergency Leave", 1.0, yesterday.getYear(), "Absent without notice");
+                    attendanceRepository.save(att);
                 }
             }
-            else {
-                if (attendance.getCheckOut() == null) {
-                    attendance.setStatus("MISSING_CHECKOUT");
-                    attendance = attendanceRepository.save(attendance);
 
-                    attendanceCorrectionService.autoCreateCorrection(attendance);
-                    log.info("Employee {} missing checkout on {}. Sent to manager.", employeeId, targetDate);
-                } else {
-                    long hoursWorked = Duration.between(attendance.getCheckIn(), attendance.getCheckOut()).toHours();
+            // --- PHASE 2: Catch Complete Absences ---
+            // Find all people who were supposed to work yesterday but didn't even trigger a PENDING record
+            List<ShiftAssignment> assignments = shiftAssignmentRepository.findOverlappingAssignmentsForDate(yesterday);
+            List<Long> empIds = assignments.stream().map(sa -> sa.getEmployee().getId()).toList();
 
-                    if (hoursWorked < MINIMUM_HOURS_FOR_FULL_DAY) {
-                        attendance.setStatus("HALF_DAY_ABSENT");
-                        String desc = "Worked less than " + MINIMUM_HOURS_FOR_FULL_DAY + " hours";
-                        leaveBalanceService.deductPenalty(attendance.getEmployee(), halfDayLeave, BigDecimal.valueOf(0.5),
-                                targetDate.getYear(), desc);
+            // Get records that DO exist
+            List<Long> employeesWithRecords = attendanceRepository.findAllByAttendanceDate(yesterday)
+                    .stream().map(a -> a.getEmployee().getId()).toList();
+
+            List<LeaveRequest> approvedLeaves = leaveRequestRepository.findApprovedLeavesForEmployeesInRange(
+                    empIds, "APPROVED", yesterday, yesterday);
+
+            for (ShiftAssignment assignment : assignments) {
+                Employee emp = assignment.getEmployee();
+
+                // If they have NO record at all
+                if (!employeesWithRecords.contains(emp.getId())) {
+                    LeaveRequest leave = getActiveLeaveForDate(approvedLeaves, yesterday);
+                    LeaveSession session = getSessionForDate(leave, yesterday);
+
+                    String dayOfWeek = yesterday.getDayOfWeek().name();
+                    boolean isWorkingDay = assignment.getShift().getWorkingDays().stream().anyMatch(wd -> wd.name().equals(dayOfWeek));
+
+                    if (!isWorkingDay) {
+                        saveEmptyAttendance(emp, assignment, yesterday, "OFF_DAY");
+                    } else if (leave != null && session == LeaveSession.FULL_DAY) {
+                        saveEmptyAttendance(emp, assignment, yesterday, AttendanceStatus.ON_LEAVE);
+                    } else {
+                        // They completely missed a working day
+                        handleAbsence(emp, assignment, yesterday, leave, session);
                     }
                 }
             }
-            Attendance savedAttendance = attendanceRepository.save(attendance);
-            String newStatus = savedAttendance.getStatus();
-            if (!newStatus.equals(oldStatus)) {
-                String oldState = isNewRecord ? null : String.format("{ \"status\": \"%s\" }", oldStatus);
-                String newState = String.format("{ \"status\": \"%s\", \"automated\": true }", newStatus);
 
-                saveCronAuditLog(savedAttendance.getId(), isNewRecord ? "CREATED" : "UPDATED", "attendance", oldState, newState);
-            }
-        }
+            this.lastRunStatus = "SUCCESS";
+            this.lastRunTime = LocalDateTime.now();
+            log.info("Midday Sweeper completed successfully for {}", yesterday);
 
-        log.info("Daily Attendance Reconciliation for {} completed successfully.", targetDate);
-    }
-
-    private Attendance initializeEmptyAttendance(Long employeeId, LocalDate date, ShiftAssignment assignment) {
-        Attendance attendance = new Attendance();
-        attendance.setEmployee(employeeRepository.getReferenceById(employeeId));
-        attendance.setShiftAssignment(assignment);
-        attendance.setAttendanceDate(date);
-        attendance.setStatus("PENDING");
-        return attendance;
-    }
-
-    public String getLastRunStatus() { return "SUCCESS"; }
-    public java.time.LocalDateTime getLastRunTime() { return java.time.LocalDateTime.now().minusHours(2); }
-
-    private void saveCronAuditLog(Long recordId, String action, String entityName, String oldState, String newState) {
-        try {
-            AuditLog auditLog = new AuditLog();
-            auditLog.setRecordId(recordId);
-            auditLog.setAction(action);
-            auditLog.setEntityName(entityName);
-            auditLog.setPerformedBy("SYSTEM (CRON)");
-            auditLog.setOldState(oldState);
-            auditLog.setNewState(newState);
-
-            auditLogRepository.save(auditLog);
         } catch (Exception e) {
-            log.error("Failed to save audit log for cron job record {}: {}", recordId, e.getMessage());
+            this.lastRunStatus = "FAILED";
+            this.lastRunTime = LocalDateTime.now();
+            log.error("Midday Sweeper failed for target date: {}", yesterday, e);
         }
+    }
+    private LeaveRequest getActiveLeaveForDate(List<LeaveRequest> leaves, LocalDate targetDate) {
+        if (leaves == null || leaves.isEmpty()) return null;
+        return leaves.stream()
+                .filter(l -> !targetDate.isBefore(l.getStartDate()) && !targetDate.isAfter(l.getEndDate()))
+                .findFirst().orElse(null);
     }
 }

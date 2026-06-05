@@ -24,7 +24,7 @@ public class SecurityConfig {
         http.authorizeHttpRequests(auth -> auth
                 .requestMatchers("/logout").permitAll()
                 .requestMatchers("/login").permitAll()
-                .requestMatchers("/api/**").permitAll()
+//                .requestMatchers("/api/**").permitAll()
         );
 
         http.with(VaadinSecurityConfigurer.vaadin(), config -> {

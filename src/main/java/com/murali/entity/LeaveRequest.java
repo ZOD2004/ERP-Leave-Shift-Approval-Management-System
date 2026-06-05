@@ -6,12 +6,11 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.hibernate.annotations.CreationTimestamp;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
 
-@AllArgsConstructor
-@NoArgsConstructor
 @Getter
 @Setter
 @Entity
@@ -48,9 +47,19 @@ public class LeaveRequest {
     @Column(name = "current_level")
     private Integer currentLevel = 1;
 
+    @Column(name = "created_at")
+    @CreationTimestamp
     private LocalDate createdAt;
 
+    //It was there like private LeaveSession leaveSession; now it can handle half day leave in multiple type
     @Enumerated(EnumType.STRING)
-    @Column(name = "leave_session", length = 20)
-    private LeaveSession leaveSession;
+    @Column(name = "start_session", length = 20)
+    private LeaveSession startSession = LeaveSession.FULL_DAY;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "end_session", length = 20)
+    private LeaveSession endSession = LeaveSession.FULL_DAY;
+
+    // added new suggested feature
+    private Boolean isSandwichLeave;
 }

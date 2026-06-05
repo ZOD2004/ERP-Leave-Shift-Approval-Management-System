@@ -39,7 +39,6 @@ public class LeaveBalanceTransaction {
     @Column(name = "reference_id")
     private Long referenceId;
 
-    @Column(length = 255)
     private String description;
 
     @Column(name = "created_at")

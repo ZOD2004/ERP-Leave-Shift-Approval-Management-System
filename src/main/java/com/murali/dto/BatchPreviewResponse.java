@@ -7,15 +7,13 @@ import lombok.NoArgsConstructor;
 import java.util.ArrayList;
 import java.util.List;
 
-@AllArgsConstructor
-@NoArgsConstructor
 @Data
+@NoArgsConstructor
+@AllArgsConstructor
 public class BatchPreviewResponse {
 
     private List<ShiftAssignmentDTO> readyToSave = new ArrayList<>();
 
     private List<ShiftConflictDTO> hardConflicts = new ArrayList<>();
-
-    private List<ShiftConflictDTO> partialConflicts = new ArrayList<>();
 
 }

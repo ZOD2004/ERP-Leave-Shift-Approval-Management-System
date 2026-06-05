@@ -9,8 +9,6 @@ import org.hibernate.annotations.CreationTimestamp;
 
 import java.time.LocalDateTime;
 
-@AllArgsConstructor
-@NoArgsConstructor
 @Getter
 @Setter
 @Entity
@@ -25,10 +23,12 @@ public class LeaveApproval {
     @JoinColumn(name = "leave_request_id", nullable = false)
     private LeaveRequest leaveRequest;
 
+    // if leaveRequest change this should also change
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "approver_id", nullable = false)
     private User approver;
 
+    // needed if to go step by step
     @Column(name = "approval_level", nullable = false)
     private Integer approvalLevel;
 

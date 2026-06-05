@@ -4,9 +4,8 @@ import com.murali.entity.Employee;
 import com.murali.entity.LeaveType;
 import com.murali.entity.User;
 import com.murali.repository.EmployeeRepository;
-import com.murali.repository.LeaveTypeRepository;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -14,29 +13,18 @@ import java.time.LocalDate;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 @Slf4j
 @Service
+@RequiredArgsConstructor
 public class EmployeeService {
 
     private final UserService userService;
     private final EmployeeRepository employeeRepository;
     private final LeaveBalanceService leaveBalanceService;
-    private final LeaveTypeRepository leaveTypeRepository;
+    private final AuditLogService auditLoggingService;
 
-   private final AuditLogService auditLoggingService;
-
-    public EmployeeService(UserService userService,
-                           EmployeeRepository employeeRepository,
-                           LeaveBalanceService leaveBalanceService,
-                           LeaveTypeRepository leaveTypeRepository,
-                           AuditLogService auditLoggingService) {
-        this.userService = userService;
-        this.employeeRepository = employeeRepository;
-        this.leaveBalanceService = leaveBalanceService;
-        this.leaveTypeRepository = leaveTypeRepository;
-        this.auditLoggingService = auditLoggingService;
-    }
     public List<Employee> findAvailableManagers(Long departmentId) {
         if (departmentId == null) {
             return Collections.emptyList();
@@ -46,11 +34,11 @@ public class EmployeeService {
 
     @Transactional
     public void createOrUpdateEmployeeWithUser(Employee currentEmployee, User currentUser,
-                                               boolean isExistingUserLinked, java.util.Set<LeaveType> selectedLeaves) {
+                                               boolean isExistingUserLinked, Set<LeaveType> selectedLeaves) {
 
         boolean isNew = (currentEmployee.getId() == null);
-
         String oldState = null;
+
         if (!isNew) {
             Optional<Employee> existingOpt = employeeRepository.findById(currentEmployee.getId());
             if (existingOpt.isPresent()) {
@@ -61,48 +49,47 @@ public class EmployeeService {
                         existing.getUser() != null ? existing.getUser().getId() : null);
             }
         }
-        User finalUser = currentUser;
 
+        // Handle User Logic
+        User finalUser = currentUser;
         if (isExistingUserLinked && currentUser != null && currentUser.getUsername() != null) {
             finalUser = userService.findByUsername(currentUser.getUsername());
-        }
-        else if (!isExistingUserLinked && currentUser != null) {
+        } else if (!isExistingUserLinked && currentUser != null) {
             finalUser = userService.save(currentUser);
         }
         currentEmployee.setUser(finalUser);
 
-        if (selectedLeaves == null || selectedLeaves.isEmpty()) {
-            java.util.List<LeaveType> allLeaves = leaveTypeRepository.findAll();
-            currentEmployee.setApplicableLeaveTypes(new java.util.HashSet<>(allLeaves));
-        } else {
-            currentEmployee.setApplicableLeaveTypes(selectedLeaves);
-        }
+        // Save Employee (No more setApplicableLeaveTypes!)
+        Employee savedEmployee = employeeRepository.save(currentEmployee);
 
+        // Directly delegate leave initialization to the Balance service
         Integer currentYear = LocalDate.now().getYear();
-        employeeRepository.save(currentEmployee);
-        leaveBalanceService.initializeBalancesForEmployee(currentEmployee, currentYear);
+        leaveBalanceService.initializeBalancesForEmployee(savedEmployee, currentYear, selectedLeaves);
 
         String newState = String.format("{ \"firstName\": \"%s\", \"employeeCode\": \"%s\", \"userId\": %d }",
-                currentEmployee.getFirstName(),
-                currentEmployee.getEmployeeCode(),
+                savedEmployee.getFirstName(),
+                savedEmployee.getEmployeeCode(),
                 finalUser != null ? finalUser.getId() : null);
 
         String action = isNew ? "CREATED" : "UPDATED";
-        log.info("Employee {} successfully. Employee ID: {}", action, currentEmployee.getId());
-        auditLoggingService.saveAuditLog(currentEmployee.getId(), action, "employees", oldState, newState);
+        log.info("Employee {} successfully. Employee ID: {}", action, savedEmployee.getId());
+        auditLoggingService.saveAuditLog(savedEmployee.getId(), action, "employees", oldState, newState);
     }
 
     @Transactional
     public void deactivateEmployee(Employee employee) {
-
         boolean wasActive = employee.getUser() != null && employee.getUser().getActive();
         String oldState = String.format("{ \"userActive\": %b }", wasActive);
 
         User currUser = employee.getUser();
         if (currUser != null) {
             currUser.setActive(false);
+            // We rely on cascade or user service to save the user state,
+            // but saving the employee here triggers the cascade update safely.
         }
+
         employeeRepository.save(employee);
+
         boolean isNowActive = employee.getUser() != null && employee.getUser().getActive();
         String newState = String.format("{ \"userActive\": %b }", isNowActive);
 
@@ -120,5 +107,10 @@ public class EmployeeService {
 
     public Optional<Employee> findById(Long id){
         return employeeRepository.findById(id);
+    }
+
+    @Transactional(readOnly = true)
+    public Optional<Employee> findByIdWithDetails(Long id) {
+        return employeeRepository.findByIdWithDepartmentAndManager(id);
     }
 }

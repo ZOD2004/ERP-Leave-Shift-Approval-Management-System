@@ -5,7 +5,6 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import java.time.LocalDate;
-
 import java.time.LocalTime;
 
 @Data
@@ -18,12 +17,9 @@ public class ShiftAssignmentDTO {
     private Long shiftId;
     private String shiftName;
     private Shifts shiftType;
-    private LocalDate assignmentDate;
 
+    private LocalDate startDate;
+    private LocalDate endDate;
     private LocalTime startTime;
     private LocalTime endTime;
-    private Boolean isOverride;
-
-    private LocalTime overrideStartTime;
-    private LocalTime overrideEndTime;
 }

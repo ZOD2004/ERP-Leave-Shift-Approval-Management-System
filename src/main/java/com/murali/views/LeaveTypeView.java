@@ -25,6 +25,8 @@ import com.vaadin.flow.data.value.ValueChangeMode;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
 import jakarta.annotation.security.RolesAllowed;
+import org.springframework.dao.DataIntegrityViolationException;
+
 import java.util.Set;
 
 @Route(value = "add-leave-types", layout = MainLayout.class)
@@ -34,7 +36,7 @@ public class LeaveTypeView extends VerticalLayout {
 
     private final LeaveTypeService leaveTypeService;
 
-    private static final Set<String> SYSTEM_CODES = Set.of("HDL-001", "EMG-001", "SL-001","CL-001","EL-001","WFH-001");
+    private static final Set<String> SYSTEM_CODES = Set.of("HDL-001", "EMG-001", "SL-001","CL-001","EL-001","WFH-001", "UPL-001");
 
     private final Grid<LeaveType> grid = new Grid<>(LeaveType.class, false);
     private final TextField searchField = new TextField();
@@ -49,7 +51,7 @@ public class LeaveTypeView extends VerticalLayout {
     private final Button saveBtn = new Button("Save");
     private final Button cancelBtn = new Button("Cancel");
 
-    private final Binder<LeaveType> binder = new BeanValidationBinder<>(LeaveType.class);
+    private final Binder<LeaveType> binder = new Binder<>(LeaveType.class);
     private LeaveType currentLeaveType;
 
     public LeaveTypeView(LeaveTypeService leaveTypeService) {
@@ -124,8 +126,12 @@ public class LeaveTypeView extends VerticalLayout {
 
         binder.forField(codeField)
                 .asRequired("Code is required")
-                .withValidator(code -> code == null || !SYSTEM_CODES.contains(code.toUpperCase()),
-                        "This code is reserved for system use")
+                .withValidator(code -> {
+                    if (currentLeaveType != null && currentLeaveType.getId() != null) {
+                        return true;
+                    }
+                    return code == null || !SYSTEM_CODES.contains(code.toUpperCase());
+                }, "This code is reserved for system use")
                 .bind(LeaveType::getCode, LeaveType::setCode);
 
         binder.forField(maxDaysField)
@@ -159,12 +165,12 @@ public class LeaveTypeView extends VerticalLayout {
         try {
             binder.writeBean(currentLeaveType);
 
-            if (currentLeaveType.getCode() != null && SYSTEM_CODES.contains(currentLeaveType.getCode().toUpperCase()) && currentLeaveType.getId() == null) {
-                showNotification("Cannot create a leave type with a reserved system code.", NotificationVariant.LUMO_ERROR);
-                return;
+            // Route to correct service method based on ID
+            if (currentLeaveType.getId() == null) {
+                leaveTypeService.addLeaveType(currentLeaveType);
+            } else {
+                leaveTypeService.editLeaveType(currentLeaveType.getId(), currentLeaveType);
             }
-
-            leaveTypeService.addLeaveType(currentLeaveType);
 
             showNotification("Leave Type saved successfully", NotificationVariant.LUMO_SUCCESS);
             updateList();
@@ -172,8 +178,10 @@ public class LeaveTypeView extends VerticalLayout {
 
         } catch (ValidationException e) {
             showNotification("Please check the form for errors", NotificationVariant.LUMO_ERROR);
+        } catch (DataIntegrityViolationException e) {
+            showNotification("Failed to save. Leave code or name already exists.", NotificationVariant.LUMO_ERROR);
         } catch (Exception e) {
-            showNotification("Failed to save. Code or Name might already exist.", NotificationVariant.LUMO_ERROR);
+            showNotification("An unexpected error occurred: " + e.getMessage(), NotificationVariant.LUMO_ERROR);
         }
     }
 
@@ -187,11 +195,12 @@ public class LeaveTypeView extends VerticalLayout {
             leaveTypeService.deleteLeaveType(leaveType.getId());
             showNotification("Leave Type deleted", NotificationVariant.LUMO_SUCCESS);
             updateList();
+        } catch (DataIntegrityViolationException e) {
+            showNotification("Cannot delete this type as it is already assigned to employees or leave requests.", NotificationVariant.LUMO_ERROR);
         } catch (Exception e) {
-            showNotification("Cannot delete this type as it is already in use.", NotificationVariant.LUMO_ERROR);
+            showNotification("An unexpected error occurred: " + e.getMessage(), NotificationVariant.LUMO_ERROR);
         }
     }
-
     private void confirmAndDelete(LeaveType leaveType) {
         ConfirmDialog dialog = new ConfirmDialog();
         dialog.setHeader("Delete Leave Type?");

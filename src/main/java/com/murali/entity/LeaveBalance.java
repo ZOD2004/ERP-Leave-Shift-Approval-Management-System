@@ -9,8 +9,6 @@ import lombok.Setter;
 import java.math.BigDecimal;
 
 @Entity
-@AllArgsConstructor
-@NoArgsConstructor
 @Getter
 @Setter
 @Table(
@@ -43,12 +41,12 @@ public class LeaveBalance {
     @Column(nullable = false)
     private Integer year;
 
-    @Column(name = "used_days", precision = 5, scale = 1)
+    @Column(name = "used_days", precision = 4, scale = 1)
     private BigDecimal used = BigDecimal.ZERO;
 
-    @Column(name = "total_entitled", nullable = false, precision = 5, scale = 1)
+    @Column(name = "total_entitled", nullable = false, precision = 4, scale = 1)
     private BigDecimal totalEntitled;
 
-    @Column(name = "pending_days", precision = 5, scale = 1)
+    @Column(name = "pending_days", precision = 4, scale = 1)
     private BigDecimal pendingDays = BigDecimal.ZERO;
 }

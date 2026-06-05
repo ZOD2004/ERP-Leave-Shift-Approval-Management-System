@@ -9,15 +9,12 @@ import java.time.LocalDate;
 @Table(name = "holidays")
 @Getter
 @Setter
-@NoArgsConstructor
-@AllArgsConstructor
-@Builder
 public class Holiday {
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @GeneratedValue(strategy = GenerationType.SEQUENCE)
     private Long id;
 
-    @Column(nullable = false, length = 100)
+    @Column(nullable = false, length = 30)
     private String name;
 
     @Column(name = "holiday_date", nullable = false, unique = true)

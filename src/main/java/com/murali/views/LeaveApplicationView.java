@@ -1,8 +1,9 @@
 package com.murali.views;
 
+import com.murali.dto.LeaveDurationResultDTO;
 import com.murali.entity.*;
 import com.murali.entity.enums.LeaveSession;
-import com.murali.security.SecurityService;
+import com.murali.util.SecurityService;
 import com.murali.service.*;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.button.Button;
@@ -44,7 +45,6 @@ public class LeaveApplicationView extends VerticalLayout {
 
     // Services
     private final LeaveRequestService leaveRequestService;
-    private final AttendanceSyncService attendanceSyncService;
     private final LeaveTypeService leaveTypeService;
     private final EmployeeService employeeService;
     private final DurationEngineService durationEngineService;
@@ -62,6 +62,9 @@ public class LeaveApplicationView extends VerticalLayout {
     private final NumberField durationDays = new NumberField("Net Duration (Days)");
     private final TextArea reason = new TextArea("Reason for Leave");
     private final RadioButtonGroup<LeaveSession> leaveSessionGroup = new RadioButtonGroup<>("Session");
+    private final ComboBox<LeaveSession> startSessionBox = new ComboBox<>("Start Date Session");
+    private final ComboBox<LeaveSession> endSessionBox = new ComboBox<>("End Date Session");
+    private final boolean applySandwichRule = true;
 
     private final Grid<LeaveRequest> historyGrid = new Grid<>(LeaveRequest.class, false);
     private final HorizontalLayout balanceLayout = new HorizontalLayout();
@@ -71,7 +74,6 @@ public class LeaveApplicationView extends VerticalLayout {
     private LeaveRequest currentDraft = null;
 
     public LeaveApplicationView(LeaveRequestService leaveRequestService,
-                                AttendanceSyncService attendanceSyncService,
                                 LeaveTypeService leaveTypeService,
                                 EmployeeService employeeService,
                                 DurationEngineService durationEngineService,
@@ -79,7 +81,6 @@ public class LeaveApplicationView extends VerticalLayout {
                                 LeaveBalanceService leaveBalanceService, ApprovalRoutingService approvalRoutingService) {
 
         this.leaveRequestService = leaveRequestService;
-        this.attendanceSyncService = attendanceSyncService;
         this.leaveTypeService = leaveTypeService;
         this.employeeService = employeeService;
         this.durationEngineService = durationEngineService;
@@ -89,6 +90,9 @@ public class LeaveApplicationView extends VerticalLayout {
         this.approvalRoutingService = approvalRoutingService;
 
         buildMainView();
+        startSessionBox.setItems(LeaveSession.values());
+        endSessionBox.setItems(LeaveSession.values());
+        leaveType.setItems(leaveTypeService.getAvailableLeaveTypes());
         setupBinder();
         setupDateCalculations();
         refreshBalanceAndHistory();
@@ -310,11 +314,12 @@ public class LeaveApplicationView extends VerticalLayout {
         durationDays.setHelperText("Excludes weekends/holidays");
         reason.setMinHeight("100px");
 
-        leaveSessionGroup.setItems(LeaveSession.FIRST_HALF, LeaveSession.SECOND_HALF,LeaveSession.FULL_DAY);
-        leaveSessionGroup.setItemLabelGenerator(session ->
-                session == LeaveSession.FIRST_HALF ? "1st Half (Morning off)" : "2nd Half (Afternoon off)"
-        );
-        leaveSessionGroup.setVisible(false);
+        startSessionBox.setItemLabelGenerator(session -> formatSessionName(session));
+        endSessionBox.setItemLabelGenerator(session -> formatSessionName(session));
+
+        // Defaults
+        startSessionBox.setValue(LeaveSession.FULL_DAY);
+        endSessionBox.setValue(LeaveSession.FULL_DAY);
 
         // 2. If resuming a draft, populate the fields
         if (draftToEdit != null) {
@@ -322,25 +327,24 @@ public class LeaveApplicationView extends VerticalLayout {
             startDate.setValue(draftToEdit.getStartDate());
             endDate.setValue(draftToEdit.getEndDate());
             reason.setValue(draftToEdit.getReason());
-            leaveSessionGroup.setValue(draftToEdit.getLeaveSession());
 
-            // Re-trigger visibility logic for half days
-            if (isHalfDayType(draftToEdit.getLeaveType())) {
-                leaveSessionGroup.setVisible(true);
-                endDate.setVisible(false);
-            }
+            // Setting session values will automatically trigger the UI sync via the listeners we setup
+            startSessionBox.setValue(draftToEdit.getStartSession() != null ? draftToEdit.getStartSession() : LeaveSession.FULL_DAY);
+            endSessionBox.setValue(draftToEdit.getEndSession() != null ? draftToEdit.getEndSession() : LeaveSession.FULL_DAY);
+
+            syncSessionUI();
             calculateDuration();
         } else {
-            // Ensure form is fresh for new requests
             clearForm();
         }
 
         // 3. Build Form Layout
         FormLayout formLayout = new FormLayout();
         formLayout.add(leaveType, 2);
-        formLayout.add(leaveSessionGroup, 2);
         formLayout.add(startDate, 1);
         formLayout.add(endDate, 1);
+        formLayout.add(startSessionBox, 1);
+        formLayout.add(endSessionBox, 1);
         formLayout.add(durationDays, 2);
         formLayout.add(reason, 2);
         formLayout.setResponsiveSteps(new FormLayout.ResponsiveStep("0", 2));
@@ -367,7 +371,7 @@ public class LeaveApplicationView extends VerticalLayout {
                 leaveRequestService.saveOrUpdateDraft(
                         draftId, currentEmployee, leaveType.getValue(),
                         startDate.getValue(), endDate.getValue(),
-                        reason.getValue(), leaveSessionGroup.getValue()
+                        reason.getValue(), startSessionBox.getValue(), endSessionBox.getValue(), applySandwichRule
                 );
                 Notification.show("Draft saved successfully.", 3000, Notification.Position.TOP_END)
                         .addThemeVariants(NotificationVariant.LUMO_SUCCESS);
@@ -408,9 +412,7 @@ public class LeaveApplicationView extends VerticalLayout {
     }
 
     private void setupBinder() {
-        binder.forField(leaveType)
-                .asRequired("Please select a leave type")
-                .bind(LeaveRequest::getLeaveType, LeaveRequest::setLeaveType);
+        binder.forField(leaveType).asRequired("Please select a leave type").bind(LeaveRequest::getLeaveType, LeaveRequest::setLeaveType);
 
         binder.forField(startDate)
                 .asRequired("Start date is required")
@@ -419,8 +421,7 @@ public class LeaveApplicationView extends VerticalLayout {
 
         binder.forField(endDate)
                 .asRequired("End date is required")
-                .withValidator(date -> startDate.getValue() == null || !date.isBefore(startDate.getValue()),
-                        "End date cannot be before start date")
+                .withValidator(date -> startDate.getValue() == null || !date.isBefore(startDate.getValue()), "End date cannot be before start date")
                 .bind(LeaveRequest::getEndDate, LeaveRequest::setEndDate);
 
         binder.forField(reason)
@@ -428,68 +429,76 @@ public class LeaveApplicationView extends VerticalLayout {
                 .withValidator(text -> text.length() >= 5, "Reason must be at least 5 characters")
                 .bind(LeaveRequest::getReason, LeaveRequest::setReason);
 
-        binder.forField(leaveSessionGroup)
-                .withValidator(session -> !leaveSessionGroup.isVisible() || session != null,
-                        "Please select which half of the day you are taking off")
-                .bind(LeaveRequest::getLeaveSession, LeaveRequest::setLeaveSession);
+        binder.forField(startSessionBox).asRequired("Start session is required").bind(LeaveRequest::getStartSession, LeaveRequest::setStartSession);
+        binder.forField(endSessionBox).bind(LeaveRequest::getEndSession, LeaveRequest::setEndSession);
 
         binder.readBean(currentRequest);
     }
-
     private void setupDateCalculations() {
-        leaveType.addValueChangeListener(e -> {
-            LeaveType type = e.getValue();
-            boolean isHalfDay = isHalfDayType(type);
-
-            if (isHalfDay) {
-                leaveSessionGroup.setVisible(true);
-                endDate.setVisible(false); // Hide End Date from UI
-
-                // Auto-sync end date with start date
-                if (startDate.getValue() != null) {
-                    endDate.setValue(startDate.getValue());
-                }
-            } else {
-                leaveSessionGroup.setVisible(false);
-                leaveSessionGroup.clear(); // Clear value if they switch back to a full day
-                endDate.setVisible(true);  // Show End Date again
-            }
-            calculateDuration();
-        });
-
-        endDate.addValueChangeListener(e -> calculateDuration());
-
         startDate.addValueChangeListener(e -> {
-            if (isHalfDayType(leaveType.getValue())) {
-                endDate.setValue(e.getValue()); // Keep synced behind the scenes
-            } else {
+            if (e.getValue() != null) {
                 endDate.setMin(e.getValue());
+                if (endDate.getValue() != null && endDate.getValue().isBefore(e.getValue())) {
+                    endDate.setValue(e.getValue());
+                }
             }
-            calculateDuration();
+            syncSessionUI();
         });
-    }
 
+        endDate.addValueChangeListener(e -> syncSessionUI());
+        startSessionBox.addValueChangeListener(e -> calculateDuration());
+        endSessionBox.addValueChangeListener(e -> calculateDuration());
+        leaveType.addValueChangeListener(e -> calculateDuration());
+    }
     private void calculateDuration() {
         LeaveType type = leaveType.getValue();
         LocalDate start = startDate.getValue();
         LocalDate end = endDate.getValue();
+        LeaveSession startSess = startSessionBox.getValue();
+        LeaveSession endSess = endSessionBox.getValue();
 
-        if (type != null && start != null && end != null && !end.isBefore(start)) {
+        if (type != null && start != null && end != null && !end.isBefore(start) && startSess != null) {
             try {
-                BigDecimal netDays = durationEngineService.calculateNetLeaveDays(
-                        start, end, currentEmployee, type, false
+                if (endSess == null) endSess = LeaveSession.FULL_DAY;
+
+                LeaveDurationResultDTO result = durationEngineService.calculateLeaveDuration(
+                        start, end, currentEmployee, startSess, endSess, applySandwichRule
                 );
-                durationDays.setValue(netDays.doubleValue());
+                durationDays.setValue(result.getNetLeaveDays().doubleValue());
             } catch (Exception ex) {
                 durationDays.clear();
-                Notification.show("Error calculating days: " + ex.getMessage(), 3000, Notification.Position.MIDDLE)
+                Notification.show("Calculation Error: " + ex.getMessage(), 4000, Notification.Position.MIDDLE)
                         .addThemeVariants(NotificationVariant.LUMO_ERROR);
             }
         } else {
             durationDays.clear();
         }
     }
+    private void syncSessionUI() {
+        LocalDate start = startDate.getValue();
+        LocalDate end = endDate.getValue();
 
+        if (start != null && end != null) {
+            if (start.equals(end)) {
+                // Single day leave: Only show one dropdown
+                endSessionBox.setVisible(false);
+                endSessionBox.setValue(LeaveSession.FULL_DAY); // Reset invisible box
+
+                startSessionBox.setLabel("Day Session");
+                startSessionBox.setItems(LeaveSession.FULL_DAY, LeaveSession.FIRST_HALF, LeaveSession.SECOND_HALF);
+            } else {
+                // Multi-day leave: Show both dropdowns with restricted options
+                endSessionBox.setVisible(true);
+
+                startSessionBox.setLabel("Start Date Session");
+                startSessionBox.setItems(LeaveSession.FULL_DAY, LeaveSession.SECOND_HALF);
+
+                endSessionBox.setLabel("End Date Session");
+                endSessionBox.setItems(LeaveSession.FULL_DAY, LeaveSession.FIRST_HALF);
+            }
+        }
+        calculateDuration();
+    }
     private boolean attemptSubmit() {
         try {
             binder.writeBean(currentRequest);
@@ -502,20 +511,17 @@ public class LeaveApplicationView extends VerticalLayout {
 
             Long draftId = this.currentDraft != null ? this.currentDraft.getId() : null;
 
-            LocalDate finalEndDate = endDate.getValue();
-            if (isHalfDayType(leaveType.getValue()) && startDate.getValue() != null) {
-                finalEndDate = startDate.getValue(); // Force end date to match start date for half days
-            }
-
             leaveRequestService.submitLeaveRequest(
                     draftId,
                     currentEmployee,
                     leaveType.getValue(),
                     startDate.getValue(),
-                    finalEndDate,
+                    endDate.getValue(),
                     reason.getValue(),
                     LocalDate.now().getYear(),
-                    leaveSessionGroup.getValue()
+                    startSessionBox.getValue(),
+                    endSessionBox.getValue() != null ? endSessionBox.getValue() : LeaveSession.FULL_DAY,
+                    applySandwichRule
             );
 
             Notification.show("Leave request submitted successfully!", 4000, Notification.Position.TOP_END)
@@ -703,10 +709,13 @@ public class LeaveApplicationView extends VerticalLayout {
             default: return "Approver Level " + level;
         }
     }
-    private boolean isHalfDayType(LeaveType type) {
-        return type != null && (
-                "HDL-001".equalsIgnoreCase(type.getCode()) ||
-                        (type.getName() != null && type.getName().toLowerCase().contains("half day"))
-        );
+    private String formatSessionName(LeaveSession session) {
+        if (session == null) return "";
+        switch (session) {
+            case FIRST_HALF: return "1st Half (Morning off)";
+            case SECOND_HALF: return "2nd Half (Afternoon off)";
+            case FULL_DAY: return "Full Day";
+            default: return session.name();
+        }
     }
 }

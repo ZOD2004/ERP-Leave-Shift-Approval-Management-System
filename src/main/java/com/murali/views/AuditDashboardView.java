@@ -81,13 +81,12 @@ public class AuditDashboardView extends VerticalLayout {
         long escalatedApprovals = dashboardService.getEscalatedApprovalsCount();
 
         // FAST: Executes a single SELECT COUNT(...) query in the DB!
-        long negativeBalances = dashboardService.getNegativeBalancesCount();
+//        long negativeBalances = dashboardService.getNegativeBalancesCount();
 
         kpiLayout.add(
                 createCard("Manual Overrides", String.valueOf(manualOverrides), "Shifts with override_applied"),
                 createCard("Missing Punches", String.valueOf(missingPunches), "Records with MISSING_CHECKOUT"),
-                createCard("Escalated Approvals", String.valueOf(escalatedApprovals), "Level 3+ Leave Requests"),
-                createCard("Negative Balances", String.valueOf(negativeBalances), "Effective balance < 0")
+                createCard("Escalated Approvals", String.valueOf(escalatedApprovals), "Level 3+ Leave Requests")
         );
 
         return kpiLayout;
@@ -142,9 +141,9 @@ public class AuditDashboardView extends VerticalLayout {
 
         grid.addColumn(tx -> tx.getCreatedAt().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")))
                 .setHeader("Date").setSortable(true).setAutoWidth(true);
-        grid.addColumn(tx -> tx.getEmployee().getId() + " - " + tx.getEmployee().getFirstName()) // Adjust to your Employee fields
+        grid.addColumn(tx -> tx.getEmployee().getId() + " - " + tx.getEmployee().getFirstName())
                 .setHeader("Employee").setAutoWidth(true);
-        grid.addColumn(tx -> tx.getLeaveType().getCode()) // Adjust to your LeaveType fields
+        grid.addColumn(tx -> tx.getLeaveType().getCode())
                 .setHeader("Leave Type").setAutoWidth(true);
         grid.addColumn(LeaveBalanceTransaction::getTransactionType)
                 .setHeader("Transaction Type").setAutoWidth(true);
@@ -165,19 +164,40 @@ public class AuditDashboardView extends VerticalLayout {
         ListDataProvider<LeaveBalanceTransaction> dataProvider = new ListDataProvider<>(transactions);
         grid.setDataProvider(dataProvider);
 
-        // Quick in-memory filtering logic
-        empFilter.addValueChangeListener(e -> dataProvider.addFilter(tx ->
-                String.valueOf(tx.getEmployee().getId()).contains(e.getValue()) ||
-                        tx.getEmployee().getFirstName().toLowerCase().contains(e.getValue().toLowerCase())));
-        typeFilter.addValueChangeListener(e -> dataProvider.addFilter(tx ->
-                e.getValue() == null || tx.getTransactionType().equals(e.getValue())));
+        empFilter.addValueChangeListener(e -> applyFilters(dataProvider, empFilter, typeFilter));
+        typeFilter.addValueChangeListener(e -> applyFilters(dataProvider, empFilter, typeFilter));
 
         ledgerLayout.add(title, filters, grid);
         return ledgerLayout;
     }
 
+    private void applyFilters(
+            ListDataProvider<LeaveBalanceTransaction> dataProvider,
+            TextField empFilter,
+            ComboBox<String> typeFilter) {
+
+        String empValue = empFilter.getValue();
+        String typeValue = typeFilter.getValue();
+
+        dataProvider.setFilter(tx -> {
+
+            boolean employeeMatches =
+                    empValue == null || empValue.isBlank() ||
+                            String.valueOf(tx.getEmployee().getId()).contains(empValue) ||
+                            tx.getEmployee().getFirstName()
+                                    .toLowerCase()
+                                    .contains(empValue.toLowerCase());
+
+            boolean typeMatches =
+                    typeValue == null ||
+                            tx.getTransactionType().equals(typeValue);
+
+            return employeeMatches && typeMatches;
+        });
+    }
+
     private void openLeaveRequestDialog(Long requestId) {
-        LeaveRequest request = leaveRequestService.findById(requestId); // Ensure null check in real impl
+        LeaveRequest request = leaveRequestService.findById(requestId);
         Dialog dialog = new Dialog();
         dialog.setHeaderTitle("Leave Request Details (ID: " + requestId + ")");
 

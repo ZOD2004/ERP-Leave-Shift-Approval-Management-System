@@ -22,6 +22,7 @@ public class DataInitializer implements CommandLineRunner {
     private final PasswordEncoder passwordEncoder;
     private final NavMenuItemRepository navMenuItemRepository;
     private final LeaveApprovalRuleRepository leaveApprovalRuleRepository;
+    private final NavMenuRoleRepository navMenuRoleRepository;
 
     public DataInitializer(RoleRepository roleRepository,
                            UserRepository userRepository,
@@ -29,7 +30,7 @@ public class DataInitializer implements CommandLineRunner {
                            EmployeeRepository employeeRepository,
                            LeaveTypeRepository leaveTypeRepository,
                            PasswordEncoder passwordEncoder,
-                           NavMenuItemRepository navMenuItemRepository, LeaveApprovalRuleRepository leaveApprovalRuleRepository) {
+                           NavMenuItemRepository navMenuItemRepository, LeaveApprovalRuleRepository leaveApprovalRuleRepository, NavMenuRoleRepository navMenuRoleRepository) {
         this.roleRepository = roleRepository;
         this.userRepository = userRepository;
         this.departmentRepository = departmentRepository;
@@ -38,6 +39,7 @@ public class DataInitializer implements CommandLineRunner {
         this.passwordEncoder = passwordEncoder;
         this.navMenuItemRepository = navMenuItemRepository;
         this.leaveApprovalRuleRepository = leaveApprovalRuleRepository;
+        this.navMenuRoleRepository = navMenuRoleRepository;
     }
 
     @Override
@@ -65,6 +67,7 @@ public class DataInitializer implements CommandLineRunner {
         createLeaveTypeIfNotFound("Work From Home", "WFH-001", 60, true);
         createLeaveTypeIfNotFound("Half Day Leave", "HDL-001", 12, true);
         createLeaveTypeIfNotFound("Emergency Leave", "EMG-001", 10, true);
+        createLeaveTypeIfNotFound("Unpaid Leave", "UPL-001", 365, false);
 
         // 3. Initialize Dummy Department (No HOD yet)
         Department adminDept = departmentRepository.findByName("Administration");
@@ -97,9 +100,6 @@ public class DataInitializer implements CommandLineRunner {
             superEmployee.setUser(superUser);
             superEmployee.setDepartment(adminDept);
 
-            // Assign all default leave types to the super employee
-            superEmployee.getApplicableLeaveTypes().addAll(leaveTypeRepository.findAll());
-
             superEmployee = employeeRepository.save(superEmployee);
 
             // 6. Resolve Circular Dependency: Set HOD to Department
@@ -127,63 +127,89 @@ public class DataInitializer implements CommandLineRunner {
     }
 
     private void initializeNavigationMenus() {
+        // 1. Define and Upsert all unique Menu Items
+        NavMenuItem departments = getOrCreateNewMenuItem("Departments", "add-departments", "BUILDING");
+        NavMenuItem employees = getOrCreateNewMenuItem("Employees", "add-employees", "USER_CARD");
+        NavMenuItem leaveTypes = getOrCreateNewMenuItem("Leave Types", "add-leave-types", "CALENDAR_USER");
+        NavMenuItem roles = getOrCreateNewMenuItem("Roles", "add-role", "SAFE");
+        NavMenuItem shifts = getOrCreateNewMenuItem("Shifts", "add-shifts", "CLOCK");
+        NavMenuItem users = getOrCreateNewMenuItem("Users", "add-user", "USER");
+        NavMenuItem shiftMgmt = getOrCreateNewMenuItem("Shift Management", "shift-assignments", "CALENDAR");
+        NavMenuItem sysConfig = getOrCreateNewMenuItem("System Configuration", "admin-config", "COG");
+        NavMenuItem applyLeave = getOrCreateNewMenuItem("Apply Leave", "apply-leave", "FLIGHT_TAKEOFF");
+        NavMenuItem approvals = getOrCreateNewMenuItem("Approval Inbox", "approvals", "CHECK_SQUARE_O");
+        NavMenuItem audit = getOrCreateNewMenuItem("Audit & Compliance", "audit-dashboard", "CLIPBOARD_CHECK");
+
         // =============================================
         // ROLE_SUPER_ADMIN
         // =============================================
-        createNavMenuIfNotFound("ROLE_SUPER_ADMIN", "Departments", "add-departments", "BUILDING");
-        createNavMenuIfNotFound("ROLE_SUPER_ADMIN", "Employees", "add-employees", "USER_CARD");
-        createNavMenuIfNotFound("ROLE_SUPER_ADMIN", "Leave Types", "add-leave-types", "CALENDAR_USER");
-        createNavMenuIfNotFound("ROLE_SUPER_ADMIN", "Roles", "add-role", "SAFE");
-        createNavMenuIfNotFound("ROLE_SUPER_ADMIN", "Shifts", "add-shifts", "CLOCK");
-        createNavMenuIfNotFound("ROLE_SUPER_ADMIN", "Users", "add-user", "USER");
-        createNavMenuIfNotFound("ROLE_SUPER_ADMIN", "Shift Management", "shift-assignments", "CALENDAR");
-        createNavMenuIfNotFound("ROLE_SUPER_ADMIN", "System Configuration", "admin-config", "COG");
-        createNavMenuIfNotFound("ROLE_SUPER_ADMIN", "Apply Leave", "apply-leave", "FLIGHT_TAKEOFF");
-        createNavMenuIfNotFound("ROLE_SUPER_ADMIN", "Approval Inbox", "approvals", "CHECK_SQUARE_O");
-        createNavMenuIfNotFound("ROLE_SUPER_ADMIN", "Audit & Compliance", "audit-dashboard", "CLIPBOARD_CHECK");
+        assignMenuToRole("ROLE_SUPER_ADMIN", departments);
+        assignMenuToRole("ROLE_SUPER_ADMIN", employees);
+        assignMenuToRole("ROLE_SUPER_ADMIN", leaveTypes);
+        assignMenuToRole("ROLE_SUPER_ADMIN", roles);
+        assignMenuToRole("ROLE_SUPER_ADMIN", shifts);
+        assignMenuToRole("ROLE_SUPER_ADMIN", users);
+        assignMenuToRole("ROLE_SUPER_ADMIN", shiftMgmt);
+        assignMenuToRole("ROLE_SUPER_ADMIN", sysConfig);
+        assignMenuToRole("ROLE_SUPER_ADMIN", applyLeave);
+        assignMenuToRole("ROLE_SUPER_ADMIN", approvals);
+        assignMenuToRole("ROLE_SUPER_ADMIN", audit);
 
         // =============================================
         // ROLE_HR_ADMIN
         // =============================================
-        createNavMenuIfNotFound("ROLE_HR_ADMIN", "Shift Management", "shift-assignments", "CALENDAR");
-        createNavMenuIfNotFound("ROLE_HR_ADMIN", "Approval Inbox", "approvals", "CHECK_SQUARE_O");
-        createNavMenuIfNotFound("ROLE_HR_ADMIN", "Apply Leave", "apply-leave", "FLIGHT_TAKEOFF");
-        createNavMenuIfNotFound("ROLE_HR_ADMIN", "System Configuration", "admin-config", "COG");
-        createNavMenuIfNotFound("ROLE_HR_ADMIN", "Employees", "add-employees", "USER_CARD");
+        assignMenuToRole("ROLE_HR_ADMIN", shiftMgmt);
+        assignMenuToRole("ROLE_HR_ADMIN", approvals);
+        assignMenuToRole("ROLE_HR_ADMIN", applyLeave);
+        assignMenuToRole("ROLE_HR_ADMIN", sysConfig);
+        assignMenuToRole("ROLE_HR_ADMIN", employees);
 
         // =============================================
         // ROLE_MANAGER
         // =============================================
-        createNavMenuIfNotFound("ROLE_MANAGER", "Approval Inbox", "approvals", "CHECK_SQUARE_O");
-        createNavMenuIfNotFound("ROLE_MANAGER", "Apply Leave", "apply-leave", "FLIGHT_TAKEOFF");
+        assignMenuToRole("ROLE_MANAGER", approvals);
+        assignMenuToRole("ROLE_MANAGER", applyLeave);
 
         // =============================================
         // ROLE_DEPT_HEAD
         // =============================================
-        createNavMenuIfNotFound("ROLE_DEPT_HEAD", "Approval Inbox", "approvals", "CHECK_SQUARE_O");
-        createNavMenuIfNotFound("ROLE_DEPT_HEAD", "Apply Leave", "apply-leave", "FLIGHT_TAKEOFF");
+        assignMenuToRole("ROLE_DEPT_HEAD", approvals);
+        assignMenuToRole("ROLE_DEPT_HEAD", applyLeave);
 
         // =============================================
         // ROLE_EMPLOYEE
         // =============================================
-        createNavMenuIfNotFound("ROLE_EMPLOYEE", "Apply Leave", "apply-leave", "FLIGHT_TAKEOFF");
+        assignMenuToRole("ROLE_EMPLOYEE", applyLeave);
 
         // =============================================
         // ROLE_AUDITOR
         // =============================================
-        createNavMenuIfNotFound("ROLE_AUDITOR", "Apply Leave", "apply-leave", "FLIGHT_TAKEOFF");
-        createNavMenuIfNotFound("ROLE_AUDITOR", "Audit & Compliance", "audit-dashboard", "CLIPBOARD_CHECK");
+        assignMenuToRole("ROLE_AUDITOR", applyLeave);
+        assignMenuToRole("ROLE_AUDITOR", audit);
     }
 
-    private void createNavMenuIfNotFound(String roleName, String label, String path, String iconName) {
-        if (!navMenuItemRepository.existsByRoleNameAndPath(roleName, path)) {
-            NavMenuItem navMenuItem = NavMenuItem.builder()
+    // Helper 1: Ensures the unique menu item exists and updates it if labels/icons changed
+    private NavMenuItem getOrCreateNewMenuItem(String label, String path, String iconName) {
+        return navMenuItemRepository.findByPath(path)
+                .map(existingItem -> {
+                    // Optional: Update label or icon if they changed in code
+                    existingItem.setLabel(label);
+                    existingItem.setIconName(iconName);
+                    return navMenuItemRepository.save(existingItem);
+                })
+                .orElseGet(() -> navMenuItemRepository.save(
+                        NavMenuItem.builder().label(label).path(path).iconName(iconName).build()
+                ));
+    }
+
+    // Helper 2: Maps the menu item to the role safely without duplicates
+    private void assignMenuToRole(String roleName, NavMenuItem menuItem) {
+        if (!navMenuRoleRepository.existsByRoleNameAndNavMenuItem(roleName, menuItem)) {
+            NavMenuRole mapping = NavMenuRole.builder()
                     .roleName(roleName)
-                    .label(label)
-                    .path(path)
-                    .iconName(iconName)
+                    .navMenuItem(menuItem)
                     .build();
-            navMenuItemRepository.save(navMenuItem);
+            navMenuRoleRepository.save(mapping);
         }
     }
     private void createApprovalRuleIfNotFound(String leaveTypeCode, double minDays, double maxDays, int level, String roleName) {

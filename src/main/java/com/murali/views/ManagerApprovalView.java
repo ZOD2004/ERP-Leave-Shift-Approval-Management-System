@@ -3,7 +3,7 @@ package com.murali.views;
 import com.murali.entity.*;
 import com.murali.service.ApprovalRoutingService;
 import com.murali.service.AttendanceCorrectionService;
-import com.murali.security.SecurityService;
+import com.murali.util.SecurityService;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.avatar.Avatar;
 import com.vaadin.flow.component.button.Button;
@@ -254,7 +254,7 @@ public class ManagerApprovalView extends VerticalLayout {
         }).setHeader("Issue Type").setAutoWidth(true);
 
         correctionGrid.addColumn(correction -> {
-            LocalDateTime in = correction.getAttendance().getCheckIn();
+            LocalDateTime in = correction.getAttendance().getFirstCheckIn();
             return in != null ? in.toLocalTime().toString() : "Missing";
         }).setHeader("Check-In").setAutoWidth(true);
 
@@ -297,7 +297,7 @@ public class ManagerApprovalView extends VerticalLayout {
         infoBanner.add(infoTitle, infoApprove, infoReject);
         detailsLayout.add(infoBanner);
 
-        LocalTime effectiveEnd = (assignment != null) ? assignment.getEffectiveEndTime() : null;
+        LocalTime effectiveEnd = (assignment != null) ? assignment.getShift().getEndTime(): null;
         if (effectiveEnd != null) {
             detailsLayout.add(createDetailRow("Expected Shift End:", effectiveEnd.toString()));
         }

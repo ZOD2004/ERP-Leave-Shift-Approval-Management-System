@@ -25,6 +25,7 @@ import com.vaadin.flow.data.binder.ValidationException;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
 import jakarta.annotation.security.RolesAllowed;
+import org.springframework.dao.DataIntegrityViolationException;
 
 @Route(value = "add-departments", layout = MainLayout.class)
 @PageTitle("Manage Departments")
@@ -141,11 +142,12 @@ public class DepartmentView extends VerticalLayout {
 
         } catch (ValidationException e) {
             showNotification("Please check the form for errors", NotificationVariant.LUMO_ERROR);
+        } catch (DataIntegrityViolationException e) {
+            showNotification("A department with this name already exists.", NotificationVariant.LUMO_ERROR);
         } catch (Exception e) {
-            showNotification("Failed to save. Duplicate name or database error.", NotificationVariant.LUMO_ERROR);
+            showNotification("An unexpected error occurred: " + e.getMessage(), NotificationVariant.LUMO_ERROR);
         }
     }
-
     private void confirmAndDelete(Department department) {
         ConfirmDialog dialog = new ConfirmDialog();
         dialog.setHeader("Delete Department?");

@@ -2,10 +2,7 @@ package com.murali.views;
 
 import com.murali.entity.*;
 import com.murali.repository.LeaveTypeRepository;
-import com.murali.service.DepartmentService;
-import com.murali.service.EmployeeService;
-import com.murali.service.RoleService;
-import com.murali.service.UserService;
+import com.murali.service.*;
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
@@ -26,12 +23,17 @@ import com.vaadin.flow.component.textfield.PasswordField;
 import com.vaadin.flow.component.textfield.TextField;
 import com.vaadin.flow.data.binder.BeanValidationBinder;
 import com.vaadin.flow.data.binder.Binder;
+import com.vaadin.flow.data.binder.ValidationException;
 import com.vaadin.flow.data.value.ValueChangeMode;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
 import jakarta.annotation.security.RolesAllowed;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
+
+import java.time.LocalDate;
+import java.util.stream.Collectors;
 
 @Route(value = "add-employees",layout = MainLayout.class)
 @PageTitle("Employee Directory")
@@ -43,6 +45,7 @@ public class EmployeeView extends VerticalLayout {
     private final RoleService roleService;
     private final UserService userService;
     private final LeaveTypeRepository leaveTypeRepository;
+    private final LeaveBalanceService leaveBalanceService;
 
     private final Grid<Employee> grid = new Grid<>(Employee.class, false);
     private final TextField searchField = new TextField();
@@ -62,8 +65,8 @@ public class EmployeeView extends VerticalLayout {
     private final Button saveBtn = new Button("Save Employee");
     private final Button cancelBtn = new Button("Cancel");
 
-    private final Binder<User> userBinder = new BeanValidationBinder<>(User.class);
-    private final Binder<Employee> employeeBinder = new BeanValidationBinder<>(Employee.class);
+    private final Binder<User> userBinder = new Binder<>(User.class);
+    private final Binder<Employee> employeeBinder = new Binder<>(Employee.class);
 
     MultiSelectComboBox<LeaveType> applicableLeavesField = new MultiSelectComboBox<>("Applicable Leave Types");
 
@@ -72,12 +75,13 @@ public class EmployeeView extends VerticalLayout {
     private boolean isExistingUserLinked = false;
 
     public EmployeeView(EmployeeService employeeService, DepartmentService deptService,
-                        RoleService roleService, UserService userService, LeaveTypeRepository leaveTypeRepository) {
+                        RoleService roleService, UserService userService, LeaveTypeRepository leaveTypeRepository, LeaveBalanceService leaveBalanceService) {
         this.employeeService = employeeService;
         this.deptService = deptService;
         this.roleService = roleService;
         this.userService = userService;
         this.leaveTypeRepository = leaveTypeRepository;
+        this.leaveBalanceService = leaveBalanceService;
 
         setSizeFull();
         configureGrid();
@@ -255,8 +259,13 @@ public class EmployeeView extends VerticalLayout {
         employeeBinder.readBean(currentEmployee);
         userBinder.readBean(currentUser);
 
-        if (currentEmployee.getApplicableLeaveTypes() != null) {
-            applicableLeavesField.setValue(currentEmployee.getApplicableLeaveTypes());
+        if (currentEmployee.getId() != null) {
+            int currentYear = LocalDate.now().getYear();
+            java.util.Set<LeaveType> existingLeaves = leaveBalanceService.getBalancesForEmployee(currentEmployee.getId(), currentYear)
+                    .stream()
+                    .map(LeaveBalance::getLeaveType)
+                    .collect(Collectors.toSet());
+            applicableLeavesField.setValue(existingLeaves);
         } else {
             applicableLeavesField.clear();
         }
@@ -277,8 +286,12 @@ public class EmployeeView extends VerticalLayout {
             showNotification("Saved successfully!", NotificationVariant.LUMO_SUCCESS);
             updateList();
             formDialog.close();
+        } catch (ValidationException ex) {
+                showNotification("Please fill in all required fields correctly.", NotificationVariant.LUMO_ERROR);
+        } catch (DataIntegrityViolationException ex) {
+                showNotification("Save failed: Username, Email, or Employee Code already exists.", NotificationVariant.LUMO_ERROR);
         } catch (Exception ex) {
-            showNotification("Please check the form for errors.", NotificationVariant.LUMO_ERROR);
+                showNotification("An unexpected error occurred: " + ex.getMessage(), NotificationVariant.LUMO_ERROR);
         }
     }
 

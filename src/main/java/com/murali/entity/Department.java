@@ -1,5 +1,6 @@
 package com.murali.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonManagedReference;
 import jakarta.persistence.*;
 import java.util.ArrayList;
@@ -12,14 +13,12 @@ import lombok.Setter;
 
 @Getter
 @Setter
-@NoArgsConstructor
-@AllArgsConstructor
 @Entity
 @Table(name = "departments")
 public class Department {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @GeneratedValue(strategy = GenerationType.SEQUENCE)
     private Long id;
 
     @Column(nullable = false, unique = true, length = 100)
@@ -27,10 +26,9 @@ public class Department {
 
     @OneToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "hod_id")
+    @JsonIgnoreProperties({"department", "manager", "user"})
     private Employee hod;
 
-    @OneToMany(mappedBy = "department", fetch = FetchType.LAZY)
-    @JsonManagedReference
-    private List<Employee> employees = new ArrayList<>();
+    // removed List<Employee> one to many mapping
 
 }

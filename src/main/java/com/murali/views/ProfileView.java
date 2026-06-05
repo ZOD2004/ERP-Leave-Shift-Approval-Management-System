@@ -6,6 +6,7 @@ import com.murali.entity.Employee;
 import com.murali.entity.User;
 import com.murali.repository.EmployeeRepository;
 import com.murali.service.UserService;
+import com.murali.util.SecurityService;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.formlayout.FormLayout;
@@ -19,11 +20,8 @@ import com.vaadin.flow.component.textfield.PasswordField;
 import com.vaadin.flow.component.textfield.TextField;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
+import com.vaadin.flow.theme.lumo.LumoUtility;
 import jakarta.annotation.security.PermitAll;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
-
-import java.util.Optional;
 
 @Route(value = "profile", layout = MainLayout.class)
 @PageTitle("My Profile")
@@ -31,58 +29,67 @@ import java.util.Optional;
 public class ProfileView extends VerticalLayout {
 
     private final UserService userService;
-    private final EmployeeRepository employeeRepository;
+    private final SecurityService securityService;
 
-    public ProfileView(UserService userService, EmployeeRepository employeeRepository) {
+    public ProfileView(UserService userService, SecurityService securityService) {
         this.userService = userService;
-        this.employeeRepository = employeeRepository;
+        this.securityService = securityService;
 
-        setSpacing(true);
-        setPadding(true);
+        setSizeFull();
+        addClassNames(LumoUtility.Padding.LARGE);
 
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        String username = auth.getName();
-        User user = userService.findByUsername(username);
+        // Limit the width so the form doesn't stretch across massive monitors
+        setMaxWidth("800px");
 
-        add(new H2("My Profile"));
+        User currentUser = securityService.getAuthenticatedUser();
+        Employee currentEmployee = securityService.getCurrentEmployee();
 
-        // 1. Display User & Employee Details
-        createDetailsSection(user);
+        H2 title = new H2("My Profile");
+        title.addClassNames(LumoUtility.Margin.Top.NONE, LumoUtility.Margin.Bottom.LARGE);
 
-        add(new Hr());
-
-        // 2. Change Password Section
-        createPasswordSection(username);
+        add(title, createDetailsCard(currentUser, currentEmployee), createPasswordCard(currentUser.getUsername()));
     }
 
-    private void createDetailsSection(User user) {
-        FormLayout detailsLayout = new FormLayout();
+    private VerticalLayout createDetailsCard(User user, Employee emp) {
+        VerticalLayout card = new VerticalLayout();
+        card.addClassNames(
+                LumoUtility.Background.BASE,
+                LumoUtility.Border.ALL, LumoUtility.BorderColor.CONTRAST_10,
+                LumoUtility.BorderRadius.LARGE,
+                LumoUtility.Padding.LARGE,
+                LumoUtility.Margin.Bottom.LARGE,
+                LumoUtility.BoxShadow.SMALL
+        );
 
+        H3 sectionTitle = new H3("Account Details");
+        sectionTitle.addClassNames(LumoUtility.Margin.Top.NONE);
+
+        FormLayout detailsLayout = new FormLayout();
+        detailsLayout.setResponsiveSteps(new FormLayout.ResponsiveStep("0", 1), new FormLayout.ResponsiveStep("500px", 2));
+
+        // User Fields
         TextField usernameField = new TextField("Username");
-        usernameField.setValue(user.getUsername());
+        usernameField.setValue(user.getUsername() != null ? user.getUsername() : "");
         usernameField.setReadOnly(true);
 
         TextField emailField = new TextField("Email");
-        emailField.setValue(user.getEmail());
+        emailField.setValue(user.getEmail() != null ? user.getEmail() : "");
         emailField.setReadOnly(true);
 
         TextField roleField = new TextField("Role");
-        roleField.setValue(user.getRole().getName());
+        roleField.setValue(user.getRole() != null ? user.getRole().getName() : "N/A");
         roleField.setReadOnly(true);
 
         detailsLayout.add(usernameField, emailField, roleField);
 
-        // Fetch Employee details if they exist
-        Optional<Employee> empOpt = employeeRepository.findByUserId(user.getId());
-        if (empOpt.isPresent()) {
-            Employee emp = empOpt.get();
-
+        // Employee Fields (if linked)
+        if (emp != null) {
             TextField empCode = new TextField("Employee Code");
-            empCode.setValue(emp.getEmployeeCode());
+            empCode.setValue(emp.getEmployeeCode() != null ? emp.getEmployeeCode() : "");
             empCode.setReadOnly(true);
 
             TextField firstName = new TextField("First Name");
-            firstName.setValue(emp.getFirstName());
+            firstName.setValue(emp.getFirstName() != null ? emp.getFirstName() : "");
             firstName.setReadOnly(true);
 
             TextField dept = new TextField("Department");
@@ -96,19 +103,38 @@ public class ProfileView extends VerticalLayout {
             detailsLayout.add(empCode, firstName, dept, manager);
         }
 
-        add(new H3("Account Details"), detailsLayout);
+        card.add(sectionTitle, new Hr(), detailsLayout);
+        return card;
     }
 
-    private void createPasswordSection(String username) {
+    private VerticalLayout createPasswordCard(String username) {
+        VerticalLayout card = new VerticalLayout();
+        card.addClassNames(
+                LumoUtility.Background.BASE,
+                LumoUtility.Border.ALL, LumoUtility.BorderColor.CONTRAST_10,
+                LumoUtility.BorderRadius.LARGE,
+                LumoUtility.Padding.LARGE,
+                LumoUtility.BoxShadow.SMALL
+        );
+
+        H3 sectionTitle = new H3("Security Details");
+        sectionTitle.addClassNames(LumoUtility.Margin.Top.NONE);
+
         FormLayout passwordLayout = new FormLayout();
+        passwordLayout.setResponsiveSteps(new FormLayout.ResponsiveStep("0", 1), new FormLayout.ResponsiveStep("500px", 2));
 
         PasswordField oldPassword = new PasswordField("Current Password");
         PasswordField newPassword = new PasswordField("New Password");
         PasswordField confirmPassword = new PasswordField("Confirm New Password");
 
         Button saveButton = new Button("Update Password", e -> {
-            if (newPassword.getValue().isEmpty() || !newPassword.getValue().equals(confirmPassword.getValue())) {
-                Notification.show("New passwords do not match or are empty")
+            if (newPassword.getValue().isEmpty()) {
+                Notification.show("New password cannot be empty.", 3000, Notification.Position.MIDDLE)
+                        .addThemeVariants(NotificationVariant.LUMO_ERROR);
+                return;
+            }
+            if (!newPassword.getValue().equals(confirmPassword.getValue())) {
+                Notification.show("New passwords do not match.", 3000, Notification.Position.MIDDLE)
                         .addThemeVariants(NotificationVariant.LUMO_ERROR);
                 return;
             }
@@ -116,20 +142,23 @@ public class ProfileView extends VerticalLayout {
             boolean success = userService.changePassword(username, oldPassword.getValue(), newPassword.getValue());
 
             if (success) {
-                Notification.show("Password updated successfully!")
+                Notification.show("Password updated successfully!", 3000, Notification.Position.TOP_END)
                         .addThemeVariants(NotificationVariant.LUMO_SUCCESS);
                 oldPassword.clear();
                 newPassword.clear();
                 confirmPassword.clear();
             } else {
-                Notification.show("Incorrect current password")
+                Notification.show("Incorrect current password.", 3000, Notification.Position.MIDDLE)
                         .addThemeVariants(NotificationVariant.LUMO_ERROR);
             }
         });
         saveButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
 
+        // Make the save button span full width or align nicely
         passwordLayout.add(oldPassword, newPassword, confirmPassword);
+        passwordLayout.setColspan(oldPassword, 2); // Put old password on its own row
 
-        add(new H3("Change Password"), passwordLayout, saveButton);
+        card.add(sectionTitle, new Hr(), passwordLayout, saveButton);
+        return card;
     }
 }

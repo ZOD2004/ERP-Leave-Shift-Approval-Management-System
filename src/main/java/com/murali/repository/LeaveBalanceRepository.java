@@ -25,5 +25,8 @@ public interface LeaveBalanceRepository extends JpaRepository<LeaveBalance, Long
     @Query("SELECT COUNT(lb) FROM LeaveBalance lb WHERE " +
             "(lb.totalEntitled - lb.used - lb.pendingDays) < 0 AND lb.year = :year")
     long countNegativeBalances(@Param("year") int year);
+
+    @Query("SELECT COUNT(lb) FROM LeaveBalance lb WHERE lb.leaveType.code = 'UPL-001' AND lb.used > 0 AND lb.year = :year")
+    long countUsersWithUnpaidLeave(@Param("year") int year);
 }
 

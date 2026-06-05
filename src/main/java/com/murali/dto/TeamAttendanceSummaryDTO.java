@@ -10,6 +10,6 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class TeamAttendanceSummaryDTO {
     private int presentCount;
-    private int lateCount;
-    private int absentCount;
+    private int expectedCount;
+    private int absentOrLeaveCount;
 }

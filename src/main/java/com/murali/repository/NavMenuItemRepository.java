@@ -6,12 +6,15 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
-import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
+
 
 @Repository
 public interface NavMenuItemRepository extends JpaRepository<NavMenuItem, Long> {
 
-    List<NavMenuItem> findByRoleName(String roleName);
-    boolean existsByRoleNameAndPath(String roleName, String path);
+    Optional<NavMenuItem> findByPath(String path);
+
+    @Query("SELECT nmr.navMenuItem FROM NavMenuRole nmr WHERE nmr.roleName = :roleName")
+    List<NavMenuItem> findByRoleName(@Param("roleName") String roleName);
 }

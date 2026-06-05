@@ -13,7 +13,8 @@ public interface UserRepository extends JpaRepository<User,Long> {
 
     User findByUsername(String username);
 
-    List<User> findFirstByRoleName(String roleHr);
-
     long countByActiveTrue();
+
+    List<User> findByRoleName(String roleName);
+
 }
