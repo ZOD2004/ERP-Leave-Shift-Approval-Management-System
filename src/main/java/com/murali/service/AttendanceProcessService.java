@@ -1,6 +1,7 @@
 package com.murali.service;
 
 import com.murali.entity.*;
+import com.murali.entity.enums.AttendanceStatus;
 import com.murali.entity.enums.LeaveSession;
 import com.murali.repository.*;
 import com.murali.dto.TeamAttendanceSummaryDTO;
@@ -33,13 +34,11 @@ public class AttendanceProcessService {
         LocalDate today = punchTime.toLocalDate();
         LocalDate yesterday = today.minusDays(1);
 
-        // 1. NIGHT SHIFT LOOK-BACK: Check if this punch belongs to yesterday's night shift
         Optional<ShiftAssignment> yesterdayAssignment = shiftAssignmentRepository.findByEmployeeIdAndAssignmentDate(employeeId, yesterday);
 
         if (yesterdayAssignment.isPresent()) {
             Shift yShift = yesterdayAssignment.get().getShift();
             if (yShift.getCrossesMidnight()) {
-                // Window: from yesterday's start time (-2 hours) to today's end time (+4 hours)
                 LocalDateTime shiftStart = yesterday.atTime(yShift.getStartTime()).minusHours(2);
                 LocalDateTime shiftEnd = today.atTime(yShift.getEndTime()).plusHours(4);
 
@@ -50,7 +49,6 @@ public class AttendanceProcessService {
             }
         }
 
-        // 2. STANDARD SHIFT: If it's not a night shift checkout, it belongs to today
         ShiftAssignment todayAssignment = shiftAssignmentRepository.findByEmployeeIdAndAssignmentDate(employeeId, today)
                 .orElseThrow(() -> new IllegalArgumentException("No shift assigned for employee ID " + employeeId + " on " + today));
 
@@ -70,14 +68,13 @@ public class AttendanceProcessService {
             attendance.setShiftAssignment(assignment);
             attendance.setAttendanceDate(targetDate);
             attendance.setStatus(AttendanceStatus.PENDING);
-            attendance = attendanceRepository.save(attendance); // Save to get an ID for the TimeLog
+            attendance = attendanceRepository.save(attendance);
         }
 
         if (AttendanceStatus.ON_LEAVE.equals(attendance.getStatus())) {
             throw new IllegalStateException("Punch denied: You are marked as ON LEAVE. Cancel your leave request first.");
         }
 
-        // 1. Save the actual TimeLog row
         TimeLog timeLog = new TimeLog();
         timeLog.setAttendance(attendance);
         timeLog.setPunchTime(punchTime);
@@ -85,13 +82,10 @@ public class AttendanceProcessService {
         timeLog.setSource("MANUAL");
         timeLogRepository.save(timeLog);
 
-        // 2. Fetch Leaves (Optional, if you want real-time half-day recognition)
         LeaveRequest leave = leaveRequestRepository.findApprovedLeaveForEmployeeOnDate(employeeId, targetDate).orElse(null);
 
-        // 3. FIRE THE ENGINE!
         recalculateTimeline(attendance, assignment.getShift(), leave);
 
-        // 4. Audit Logging
         String oldState = isNewRecord ? null : String.format("{ \"logs\": \"Added new punch\" }");
         String newState = String.format("{ \"punchTime\": \"%s\", \"type\": \"%s\" }", punchTime, isCheckIn ? "IN" : "OUT");
         auditLoggingService.saveAuditLog(attendance.getId(), isCheckIn ? "PUNCH_IN" : "PUNCH_OUT", "attendance", oldState, newState);
@@ -105,8 +99,6 @@ public class AttendanceProcessService {
     public List<Attendance> getEmployeeAttendanceHistory(Long employeeId, LocalDate startDate, LocalDate endDate) {
         return attendanceRepository.findAttendanceHistoryByEmployee(employeeId, startDate, endDate);
     }
-
-    // --- DASHBOARD METHODS ---
 
     public TeamAttendanceSummaryDTO getTodayTeamAttendanceSummary(Long managerEmployeeId) {
         LocalDate today = LocalDate.now();
@@ -133,14 +125,14 @@ public class AttendanceProcessService {
                     .orElse(null);
 
             if (att == null) {
-                expectedCount++; // No record yet, they are expected
+                expectedCount++;
             } else {
                 if (att.getFirstCheckIn() != null) {
-                    presentCount++; // They have punched in
+                    presentCount++;
                 } else if ("ON_LEAVE".equals(att.getStatus()) || "ABSENT".equals(att.getStatus())) {
                     absentOrLeaveCount++;
                 } else {
-                    expectedCount++; // Record exists but no check-in yet (e.g., PENDING)
+                    expectedCount++;
                 }
             }
         }
@@ -175,7 +167,6 @@ public class AttendanceProcessService {
         LocalDateTime lastOut = null;
         boolean currentlyWorking = false;
 
-        // Loop chronologically to reconstruct IN -> OUT segments
         for (int i = 0; i < logs.size(); i++) {
             TimeLog log = logs.get(i);
 
@@ -183,13 +174,12 @@ public class AttendanceProcessService {
                 if (firstIn == null) firstIn = log.getPunchTime();
                 currentlyWorking = true;
 
-                // Look ahead to see if there is a matching OUT punch
                 if (i + 1 < logs.size() && "OUT".equalsIgnoreCase(logs.get(i + 1).getPunchType())) {
                     TimeLog outLog = logs.get(i + 1);
                     totalMinutes += (int) Duration.between(log.getPunchTime(), outLog.getPunchTime()).toMinutes();
                     lastOut = outLog.getPunchTime();
                     currentlyWorking = false;
-                    i++; // Skip the OUT punch in the loop since we just processed it
+                    i++;
                 }
             }
         }
@@ -198,17 +188,15 @@ public class AttendanceProcessService {
         attendance.setLastCheckOut(lastOut);
         attendance.setTotalWorkedMinutes(totalMinutes);
 
-        // --- Evaluate Final Status ---
         if (currentlyWorking) {
             attendance.setStatus(AttendanceStatus.WORKING);
         } else if (logs.isEmpty()) {
             attendance.setStatus(AttendanceStatus.PENDING);
         } else {
-            // Check if they met the required hours
             long expectedMinutes = calculateExpectedMinutes(shift, leaveRequest, attendance.getAttendanceDate());
             long graceMinutes = (shift.getRequiredWorkTime() != null) ? shift.getRequiredWorkTime() : 0;
 
-            if (leaveRequest != null) graceMinutes = graceMinutes / 2; // Half-day leave cuts grace in half
+            if (leaveRequest != null) graceMinutes = graceMinutes / 2;
 
             if (totalMinutes >= (expectedMinutes - graceMinutes)) {
                 attendance.setStatus(leaveRequest != null ? AttendanceStatus.HALF_DAY_LEAVE : AttendanceStatus.PRESENT);
@@ -227,10 +215,8 @@ public class AttendanceProcessService {
 
         if (todaySession != null) {
             if (todaySession == LeaveSession.FIRST_HALF) {
-                // Took 1st half off, expect them to work 2nd half
                 start = shift.getSecondHalfStartTime();
             } else if (todaySession == LeaveSession.SECOND_HALF) {
-                // Took 2nd half off, expect them to work 1st half
                 end = shift.getFirstHalfEndTime();
             }
 

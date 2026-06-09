@@ -4,6 +4,7 @@ package com.murali.views;
 import com.murali.dto.ShiftAssignmentDTO;
 import com.murali.dto.TeamAttendanceSummaryDTO;
 import com.murali.entity.*;
+import com.murali.entity.enums.AttendanceStatus;
 import com.murali.entity.enums.LeaveSession;
 import com.murali.util.SecurityService;
 import com.murali.service.*;
@@ -365,7 +366,7 @@ public class DashboardView extends VerticalLayout {
         grid.addColumn(a -> a.getFirstCheckIn() != null ? a.getFirstCheckIn().toLocalTime() : "-").setHeader("In").setAutoWidth(true);
         grid.addColumn(a -> a.getLastCheckOut() != null ? a.getLastCheckOut().toLocalTime() : "-").setHeader("Out").setAutoWidth(true);
         grid.addComponentColumn(a -> {
-            Span badge = new Span(a.getStatus() != null ? a.getStatus() : "PENDING");
+            Span badge = new Span(a.getStatus() != null ? a.getStatus().name() : AttendanceStatus.PENDING.name());
             badge.getElement().getThemeList().add("badge");
             if ("PRESENT".equals(a.getStatus())) badge.getElement().getThemeList().add("success");
             else if ("ABSENT".equals(a.getStatus())) badge.getElement().getThemeList().add("error");
@@ -532,7 +533,7 @@ public class DashboardView extends VerticalLayout {
         teamGrid.addColumn(a -> a.getEmployee().getFirstName()).setHeader("Employee").setAutoWidth(true);
         teamGrid.addColumn(a -> a.getFirstCheckIn() != null ? a.getFirstCheckIn().toLocalTime().toString() : "-").setHeader("Clock In").setAutoWidth(true);
         teamGrid.addComponentColumn(a -> {
-            Span badge = new Span(a.getStatus() != null ? a.getStatus() : "PENDING");
+            Span badge = new Span(a.getStatus() != null ? a.getStatus().name() : AttendanceStatus.PENDING.name());
             badge.getElement().getThemeList().add("badge");
             if ("PRESENT".equals(a.getStatus())) badge.getElement().getThemeList().add("success");
             else if ("ABSENT".equals(a.getStatus())) badge.getElement().getThemeList().add("error");

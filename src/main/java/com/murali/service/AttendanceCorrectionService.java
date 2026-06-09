@@ -1,6 +1,7 @@
 package com.murali.service;
 
 import com.murali.entity.*;
+import com.murali.entity.enums.AttendanceStatus;
 import com.murali.repository.*;
 import com.murali.util.SecurityService;
 import lombok.RequiredArgsConstructor;
@@ -25,21 +26,16 @@ public class AttendanceCorrectionService {
     private final UserRepository userRepository;
     private final AuditLogService auditLogService;
     private final SecurityService securityService;
-
-    // INJECTED TO ENABLE CENTRALIZED TIMELINE RECALCULATION
     private final AttendanceProcessService attendanceProcessService;
     private final LeaveRequestRepository leaveRequestRepository;
 
     @Transactional
     public void evaluateAndRouteAnomaly(Attendance attendance) {
         LeaveRequest leaveRequest = leaveRequestRepository.findApprovedLeaveForEmployeeOnDate(
-                attendance.getEmployee().getId(), attendance.getAttendanceDate()
-        ).orElse(null);
+                attendance.getEmployee().getId(), attendance.getAttendanceDate()).orElse(null);
 
-        // FIRE THE ENGINE: Let the centralized process calculate minutes and evaluate the status
         attendanceProcessService.recalculateTimeline(attendance, attendance.getShiftAssignment().getShift(), leaveRequest);
 
-        // Check if the engine natively resolved it (e.g., they actually met the required hours)
         String currentStatus = attendance.getStatus() != null ? attendance.getStatus().toString() : "";
         if ("PRESENT".equals(currentStatus) || "HALF_DAY_LEAVE".equals(currentStatus)) {
             log.info("Missing punch ignored for Employee {}. Worked {} mins, met requirement.",
@@ -51,9 +47,9 @@ public class AttendanceCorrectionService {
 
     @Transactional
     public void autoCreateCorrection(Attendance attendance) {
-        User approver = resolveManagerForEmployee(attendance.getEmployee());
+        User approver = getManagerForEmployee(attendance.getEmployee());
 
-        attendance.setStatus("PENDING_RESOLUTION");
+        attendance.setStatus(AttendanceStatus.PENDING_RESOLUTION);
         attendanceRepository.save(attendance);
 
         AttendanceCorrection correction = new AttendanceCorrection();
@@ -99,8 +95,6 @@ public class AttendanceCorrectionService {
             manualOut.setPunchType("OUT");
             manualOut.setSource("MANAGER_OVERRIDE");
             timeLogRepository.save(manualOut);
-
-            // FIRE THE ENGINE: Let it calculate the final metrics natively now that the missing punch exists
             attendanceProcessService.recalculateTimeline(attendance, attendance.getShiftAssignment().getShift(), leaveRequest);
 
             correction.setResolvedCheckOutTime(manualCheckOutTime);
@@ -114,24 +108,17 @@ public class AttendanceCorrectionService {
 
         } else if ("REJECTED".equalsIgnoreCase(action)) {
 
-            // FIRE THE ENGINE: Ensure timeline totals are strictly updated before applying penalty overrides
             attendanceProcessService.recalculateTimeline(attendance, attendance.getShiftAssignment().getShift(), leaveRequest);
 
-            // Override the engine's standard status with the penalty statuses
             if (attendance.getTotalWorkedMinutes() > 0) {
-                attendance.setStatus("PRESENT_PENALIZED");
+                attendance.setStatus(AttendanceStatus.PRESENT_PENALIZED);
             } else {
-                attendance.setStatus("ABSENT");
+                attendance.setStatus(AttendanceStatus.ABSENT);
             }
 
             LeaveType halfDayLeave = leaveTypeRepository.findByNameContainingIgnoreCaseOrCodeContainingIgnoreCase("Half Day Leave", "HDL-001").getFirst();
-            leaveBalanceService.deductPenalty(
-                    attendance.getEmployee(),
-                    halfDayLeave,
-                    BigDecimal.valueOf(0.5),
-                    attendance.getAttendanceDate().getYear(),
-                    "Missing Check-out Rejected by Manager"
-            );
+            leaveBalanceService.deductPenalty(attendance.getEmployee(),halfDayLeave,
+                    BigDecimal.valueOf(0.5),attendance.getAttendanceDate().getYear(),"Missing Check-out Rejected by Manager");
 
             correction.setStatus("REJECTED");
 
@@ -149,7 +136,7 @@ public class AttendanceCorrectionService {
         correctionRepository.save(correction);
     }
 
-    private User resolveManagerForEmployee(Employee employee) {
+    private User getManagerForEmployee(Employee employee) {
         if (employee.getManager() != null && employee.getManager().getUser() != null) {
             return employee.getManager().getUser();
         }

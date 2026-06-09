@@ -1,7 +1,7 @@
 package com.murali.repository;
 
 import com.murali.entity.Attendance;
-import com.murali.entity.AuditLog;
+import com.murali.entity.enums.AttendanceStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.Optional;
 
 public interface AttendanceRepository extends JpaRepository<Attendance, Long> {
+
     Optional<Attendance> findByEmployeeIdAndAttendanceDate(Long employeeId, LocalDate attendanceDate);
 
     List<Attendance> findByEmployeeIdAndAttendanceDateBetween(Long employeeId, LocalDate startDate, LocalDate endDate);
@@ -18,6 +19,8 @@ public interface AttendanceRepository extends JpaRepository<Attendance, Long> {
     @Query("SELECT a FROM Attendance a WHERE a.attendanceDate = :date")
     List<Attendance> findAllByAttendanceDate(@Param("date") LocalDate date);
 
+    // Note: You can technically remove this line since findByEmployeeIdAndAttendanceDate
+    // above does the exact same thing via Spring Data's property traversal.
     Optional<Attendance> findByEmployee_IdAndAttendanceDate(Long employeeId, LocalDate attendanceDate);
 
     @Query("SELECT a FROM Attendance a " +
@@ -49,11 +52,19 @@ public interface AttendanceRepository extends JpaRepository<Attendance, Long> {
 
     @Query("SELECT COUNT(a) FROM Attendance a WHERE " +
             "(a.attendanceDate BETWEEN :startDate AND :endDate) AND " +
-            "(a.status = 'MISSING_CHECKOUT' OR (a.firstCheckIn IS NOT NULL AND a.lastCheckOut IS NULL))")
-    long countMissingPunches(@Param("startDate") LocalDate startDate, @Param("endDate") LocalDate endDate);
+            "(a.status = com.murali.entity.enums.AttendanceStatus.MISSING_CHECKOUT OR " +
+            "(a.firstCheckIn IS NOT NULL AND a.lastCheckOut IS NULL))")
+    long countMissingPunches(@Param("startDate") LocalDate startDate,
+                             @Param("endDate") LocalDate endDate);
 
-    @Query("SELECT a FROM Attendance a WHERE a.attendanceDate = :date AND a.status IN ('WORKING', 'PARTIAL_DAY', 'PENDING')")
+    @Query("""
+        SELECT a FROM Attendance a 
+        WHERE a.attendanceDate = :date 
+        AND a.status IN (
+            com.murali.entity.enums.AttendanceStatus.WORKING, 
+            com.murali.entity.enums.AttendanceStatus.PARTIAL_DAY, 
+            com.murali.entity.enums.AttendanceStatus.PENDING
+        )
+    """)
     List<Attendance> findIncompleteAttendancesForDate(@Param("date") LocalDate date);
 }
-
-

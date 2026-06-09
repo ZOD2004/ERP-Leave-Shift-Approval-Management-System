@@ -26,4 +26,8 @@ public class LeaveType {
 
     @Column(name = "max_days_per_year", nullable = false)
     private Integer maxDaysPerYear;
+
+    @Column(name = "apply_sandwich_rule", nullable = false)
+    private Boolean applySandwichRule = false;
+
 }

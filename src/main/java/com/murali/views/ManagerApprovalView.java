@@ -248,7 +248,7 @@ public class ManagerApprovalView extends VerticalLayout {
                 .setHeader("Date").setAutoWidth(true);
 
         correctionGrid.addComponentColumn(correction -> {
-            Span badge = new Span(correction.getAttendance().getStatus());
+            Span badge = new Span(correction.getAttendance().getStatus().name());
             badge.getElement().getThemeList().add("badge error");
             return badge;
         }).setHeader("Issue Type").setAutoWidth(true);
@@ -281,7 +281,7 @@ public class ManagerApprovalView extends VerticalLayout {
 
         detailsLayout.add(createDetailRow("Employee:", attendance.getEmployee().getFirstName() + " (ID: " + attendance.getEmployee().getId() + ")"));
         detailsLayout.add(createDetailRow("Date:", attendance.getAttendanceDate().toString()));
-        detailsLayout.add(createDetailRow("System Status:", attendance.getStatus()));
+        detailsLayout.add(createDetailRow("System Status:", attendance.getStatus().name()));
         VerticalLayout infoBanner = new VerticalLayout();
         infoBanner.addClassNames(LumoUtility.Background.CONTRAST_5, LumoUtility.BorderRadius.MEDIUM, LumoUtility.Padding.SMALL, LumoUtility.Margin.Top.SMALL);
         infoBanner.setSpacing(false);

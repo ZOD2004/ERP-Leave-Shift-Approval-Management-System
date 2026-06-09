@@ -11,4 +11,5 @@ public class LeaveDurationResultDTO {
     private BigDecimal netLeaveDays;
     private boolean isSandwichLeave;
     private BigDecimal actualWorkingDaysRequested;
+    private BigDecimal sandwichPenaltyDays;
 }

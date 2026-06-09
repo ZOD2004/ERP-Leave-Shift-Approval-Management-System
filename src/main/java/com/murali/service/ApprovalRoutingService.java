@@ -25,11 +25,12 @@ public class ApprovalRoutingService {
     private final AuditLogService auditLogService;
     private final UserRepository userRepository;
     private final AttendanceCronJobService attendanceCronJobService;
+    private final DurationEngineService durationEngineService;
 
     public static final String ACTION_REJECTED = "REJECTED";
     public static final String ACTION_APPROVED = "APPROVED";
     public static final String ACTION_PENDING = "PENDING";
-    public static final String ACTION_CANCELLED_BY_SIBLING = "CANCELLED_BY_SIBLING";
+    public static final String ACTION_CANCELLED_BY_SIBLING = "HANDLED_BY_SIBLING";
 
     public ApprovalRoutingService(LeaveApprovalRepository leaveApprovalRepository,
                                   LeaveRequestRepository leaveRequestRepository,
@@ -37,7 +38,7 @@ public class ApprovalRoutingService {
                                   LeaveApprovalRuleService ruleService,
                                   AuditLogService auditLogService,
                                   UserRepository userRepository,
-                                  AttendanceCronJobService attendanceCronJobService) {
+                                  AttendanceCronJobService attendanceCronJobService, DurationEngineService durationEngineService) {
         this.leaveApprovalRepository = leaveApprovalRepository;
         this.leaveRequestRepository = leaveRequestRepository;
         this.leaveBalanceService = leaveBalanceService;
@@ -45,9 +46,8 @@ public class ApprovalRoutingService {
         this.auditLogService = auditLogService;
         this.userRepository = userRepository;
         this.attendanceCronJobService = attendanceCronJobService;
+        this.durationEngineService = durationEngineService;
     }
-
-    // --- WORKFLOW GENERATION ---
 
     @Transactional
     public void generateApprovalWorkflow(LeaveRequest request, List<LeaveApprovalRule> applicableRules) {
@@ -66,30 +66,25 @@ public class ApprovalRoutingService {
     }
 
     private void generateApprovalsForLevel(LeaveRequest request, int targetLevel, List<LeaveApprovalRule> applicableRules) {
-        LeaveApprovalRule levelRule = applicableRules.stream()
-                .filter(r -> r.getApprovalLevel() == targetLevel)
-                .findFirst()
-                .orElse(null);
+        LeaveApprovalRule levelRule = null;
 
-        String requiredRoleName = (levelRule != null) ? levelRule.getRequiredRole().getName() : null;
+        for (LeaveApprovalRule rule : applicableRules) {
+            if (rule.getApprovalLevel() == targetLevel) { // use targetLevel to get the applicable rule
+                levelRule = rule;
+                break;
+            }
+        }
 
-        if (requiredRoleName == null) {
+        Role requiredRole = null;
+        if (levelRule != null) {
+            requiredRole = levelRule.getRequiredRole();
+        }
+
+        if (requiredRole == null) {
             throw new IllegalStateException("Cannot generate workflow for level " + targetLevel + ": No rule found.");
         }
 
-        List<User> approvers = resolveApproversForRole(request.getEmployee(), requiredRoleName);
-
-        // Filter out self-approval
-        approvers = approvers.stream()
-                .filter(u -> !u.getId().equals(request.getEmployee().getUser().getId()))
-                .toList();
-
-        if (approvers.isEmpty()) {
-            log.info("Self-approval detected or no approvers found for role {}. Escalating to next admin tier.", requiredRoleName);
-            approvers = getFallbackAdmins().stream()
-                    .filter(u -> !u.getId().equals(request.getEmployee().getUser().getId()))
-                    .toList();
-        }
+        List<User> approvers = resolveApprovers(request.getEmployee(), requiredRole);
 
         for (User approver : approvers) {
             createApprovalRecord(request, approver, targetLevel);
@@ -107,8 +102,6 @@ public class ApprovalRoutingService {
         String state = String.format("{ \"approverId\": %d, \"level\": %d, \"action\": \"%s\" }", approver.getId(), level, ACTION_PENDING);
         auditLogService.saveAuditLog(approval.getId(), "CREATE_QUEUE_ITEM", "LeaveApproval", null, state);
     }
-
-    // --- APPROVAL PROCESSING ---
 
     @Transactional
     public void processApprovalAction(Long leaveApprovalId, String action, String comments, User actor) {
@@ -146,11 +139,16 @@ public class ApprovalRoutingService {
         String newApprovalState = String.format("{ \"action\": \"%s\", \"comments\": \"%s\" }", approval.getAction(), safeNewComments);
         auditLogService.saveAuditLog(leaveApprovalId, normalizedAction, "LeaveApproval", oldApprovalState, newApprovalState);
 
-        // Cancel sibling queue items (e.g., if there were multiple HR admins)
-        List<LeaveApproval> siblings = leaveApprovalRepository.findByLeaveRequestIdAndAction(request.getId(), ACTION_PENDING)
-                .stream()
-                .filter(a -> a.getApprovalLevel().equals(approval.getApprovalLevel()) && !a.getId().equals(approval.getId()))
-                .toList();
+        List<LeaveApproval> approvals = leaveApprovalRepository.findByLeaveRequestIdAndAction(request.getId(), ACTION_PENDING);
+
+        List<LeaveApproval> siblings = new ArrayList<>();
+
+        for (LeaveApproval a : approvals) {
+            if (a.getApprovalLevel().equals(approval.getApprovalLevel())
+                    && !a.getId().equals(approval.getId())) {
+                siblings.add(a);
+            }
+        }
 
         for (LeaveApproval sibling : siblings) {
             String oldSiblingState = String.format("{ \"action\": \"%s\" }", sibling.getAction());
@@ -168,24 +166,50 @@ public class ApprovalRoutingService {
         if (ACTION_REJECTED.equals(normalizedAction)) {
             handleRejection(request, actor.getUsername());
         } else {
-            handleAdvancement(request, actor.getUsername());
+            handleAdvancement(request, actor);
         }
     }
 
-    private void handleAdvancement(LeaveRequest request, String actorUsername) {
-        // Calculate the "Chain" dynamically so advancing levels respects the consecutive day rule!
+    private void handleAdvancement(LeaveRequest request, User actor) {
         List<LeaveApprovalRule> applicableRules = getRulesForEffectiveChain(request);
 
-        int maxRequiredLevel = applicableRules.stream()
-                .mapToInt(LeaveApprovalRule::getApprovalLevel)
-                .max()
-                .orElse(1);
+        int maxRequiredLevel = 1;
+
+        for (LeaveApprovalRule rule : applicableRules) {
+            if (rule.getApprovalLevel() > maxRequiredLevel) {
+                maxRequiredLevel = rule.getApprovalLevel();
+            }
+        }
 
         int currentLevel = request.getCurrentLevel();
         String oldRequestState = String.format("{ \"status\": \"%s\", \"currentLevel\": %d }", request.getStatus(), currentLevel);
 
         if (currentLevel < maxRequiredLevel) {
             int nextLevel = currentLevel + 1;
+
+            LeaveApprovalRule nextLevelRule = null;
+
+            for (LeaveApprovalRule rule : applicableRules) {
+                if (rule.getApprovalLevel() == nextLevel) {
+                    nextLevelRule = rule;
+                    break;
+                }
+            }
+
+            int actorHighestWeight = getHighestRoleWeight(actor);
+
+            if (nextLevelRule != null && actorHighestWeight >= nextLevelRule.getRequiredRole().getHierarchyWeight()) {
+
+                log.info("Actor {} (Weight {}) outranks Level {} requirement (Weight {}). Auto-skipping level.",
+                        actor.getUsername(), actorHighestWeight, nextLevel, nextLevelRule.getRequiredRole().getHierarchyWeight());
+
+                createBypassedApprovalRecord(request, actor, nextLevel);
+
+                request.setCurrentLevel(nextLevel);
+                handleAdvancement(request, actor);
+                return;
+            }
+
             request.setCurrentLevel(nextLevel);
             request.setStatus("PENDING LVL " + nextLevel);
             leaveRequestRepository.save(request);
@@ -195,7 +219,7 @@ public class ApprovalRoutingService {
             String newRequestState = String.format("{ \"status\": \"%s\", \"currentLevel\": %d }", request.getStatus(), nextLevel);
             auditLogService.saveAuditLog(request.getId(), "WORKFLOW_ADVANCED", "LeaveRequest", oldRequestState, newRequestState);
         } else {
-            finalizeApproval(request, actorUsername);
+            finalizeApproval(request, actor.getUsername());
         }
     }
 
@@ -205,12 +229,8 @@ public class ApprovalRoutingService {
         request.setStatus(LeaveRequestService.STATUS_APPROVED);
         leaveRequestRepository.save(request);
 
-        Integer year = request.getStartDate().getYear();
+        leaveBalanceService.deduct(request);
 
-        // 1. Deduct Balance (Will auto-spillover to Unpaid if negative!)
-        leaveBalanceService.deduct(request.getEmployee(), request.getLeaveType(), request.getDurationDays(), request.getId(), year);
-
-        // 2. Safely recalculate Attendance via the Cron Job loop (Only for Past/Current dates)
         LocalDate cursor = request.getStartDate();
         while (!cursor.isAfter(request.getEndDate())) {
             if (!cursor.isAfter(LocalDate.now())) {
@@ -229,21 +249,16 @@ public class ApprovalRoutingService {
         request.setStatus(LeaveRequestService.STATUS_REJECTED);
         leaveRequestRepository.save(request);
 
-        Integer year = request.getStartDate().getYear();
-        leaveBalanceService.releasePendingHold(request.getEmployee(), request.getLeaveType(), request.getDurationDays(), year, request.getId());
-
+        leaveBalanceService.releasePendingHold(request);
         cancelPendingApprovals(request.getId());
 
         String newRequestState = String.format("{ \"status\": \"%s\" }", LeaveRequestService.STATUS_REJECTED);
         auditLogService.saveAuditLog(request.getId(), "WORKFLOW_FINALIZE_REJECTED", "LeaveRequest", oldRequestState, newRequestState);
     }
 
-    // --- HELPER METHODS ---
-
     @Transactional
     public void cancelPendingApprovals(Long leaveRequestId) {
-        List<LeaveApproval> pendingApprovals = leaveApprovalRepository
-                .findByLeaveRequestIdAndAction(leaveRequestId, ACTION_PENDING);
+        List<LeaveApproval> pendingApprovals = leaveApprovalRepository.findByLeaveRequestIdAndAction(leaveRequestId, ACTION_PENDING);
 
         for (LeaveApproval approval : pendingApprovals) {
             String oldState = String.format("{ \"action\": \"%s\" }", approval.getAction());
@@ -256,50 +271,58 @@ public class ApprovalRoutingService {
     }
 
 
-    /**
-     * Strict Fallback Routing: Manager -> HOD -> HR Admin -> Super Admin
-     */
-    private List<User> resolveApproversForRole(Employee applicant, String roleName) {
+    private List<User> resolveApprovers(Employee empApplied, Role requiredRole) {
+        String currentRoleName = requiredRole.getName();
+        int minWeight = requiredRole.getHierarchyWeight();
 
-        // 1. Try Manager
-        if ("ROLE_MANAGER".equals(roleName)) {
-            if (applicant.getManager() != null && applicant.getManager().getUser() != null) {
-                return List.of(applicant.getManager().getUser());
+        if ("ROLE_MANAGER".equals(currentRoleName)) {
+            if (empApplied.getManager() != null && empApplied.getManager().getUser() != null) {
+                return List.of(empApplied.getManager().getUser());
             }
-            log.info("No Manager found for {}, falling back to Department Head.", applicant.getEmployeeCode());
-            roleName = "ROLE_DEPT_HEAD";
+            log.info("No direct Manager found for {}, cascading to Department Head.", empApplied.getEmployeeCode());
+            currentRoleName = "ROLE_DEPT_HEAD";
         }
 
-        // 2. Try HOD
-        if ("ROLE_DEPT_HEAD".equals(roleName)) {
-            if (applicant.getDepartment() != null && applicant.getDepartment().getHod() != null && applicant.getDepartment().getHod().getUser() != null) {
-                return List.of(applicant.getDepartment().getHod().getUser());
+        if ("ROLE_DEPT_HEAD".equals(currentRoleName)) {
+            if (empApplied.getDepartment() != null
+                    && empApplied.getDepartment().getHod() != null
+                    && empApplied.getDepartment().getHod().getUser() != null) {
+                return List.of(empApplied.getDepartment().getHod().getUser());
             }
-            log.info("No HOD found for {}, falling back to HR Admin.", applicant.getEmployeeCode());
-            roleName = "ROLE_HR_ADMIN";
+            log.info("No direct HOD found for {}, cascading to the HR / Admin pool.", empApplied.getEmployeeCode());
+            currentRoleName = "ROLE_HR_ADMIN";
         }
 
-        // 3. Try HR (or Super Admin)
-        if ("ROLE_HR_ADMIN".equals(roleName) || "ROLE_SUPER_ADMIN".equals(roleName)) {
-            List<User> groupUsers = userRepository.findByRoleName(roleName);
-            if (!groupUsers.isEmpty()) {
-                return groupUsers;
+        List<User> eligibleApprovers = userRepository.findEligibleApproversByWeight(minWeight);
+
+        List<User> finalApprovers = new ArrayList<>();
+        for (User approver : eligibleApprovers) {
+            if (approver.getId().equals(empApplied.getUser().getId())) {
+                continue;
             }
+            if (("ROLE_MANAGER".equals(requiredRole.getName()) || "ROLE_DEPT_HEAD".equals(requiredRole.getName()))
+                    && approver.getRole().getHierarchyWeight() <= requiredRole.getHierarchyWeight()) {
+                continue;
+            }
+            finalApprovers.add(approver);
         }
 
-        return getFallbackAdmins();
+        if (finalApprovers.isEmpty()) {
+            throw new IllegalStateException("CRITICAL SYSTEM ERROR: No eligible approvers found for this request.");
+        }
+
+        int lowestFoundWeight = finalApprovers.get(0).getRole().getHierarchyWeight();
+
+        List<User> result = new ArrayList<>();
+
+        for (User user : finalApprovers) {
+            if (user.getRole().getHierarchyWeight() == lowestFoundWeight) {
+                result.add(user);
+            }
+        }
+        return result;
     }
 
-    private List<User> getFallbackAdmins() {
-        List<User> users = userRepository.findByRoleName("ROLE_HR_ADMIN");
-        if (users.isEmpty()) {
-            users = userRepository.findByRoleName("ROLE_SUPER_ADMIN");
-        }
-        if (users.isEmpty()) {
-            throw new IllegalStateException("CRITICAL SYSTEM ERROR: No HR Admin or Super Admin found in the system to route approvals.");
-        }
-        return users;
-    }
     @Transactional(readOnly = true)
     public List<LeaveApproval> getApprovalsForRequest(Long leaveRequestId) {
         return leaveApprovalRepository.findAllByLeaveRequestIdChronological(leaveRequestId);
@@ -309,21 +332,71 @@ public class ApprovalRoutingService {
         return leaveApprovalRepository.findByApproverIdAndAction(userId, ACTION_PENDING);
     }
 
-    /**
-     * Re-calculates the contiguous chain to ensure loophole validation persists during level advancement.
-     */
     private List<LeaveApprovalRule> getRulesForEffectiveChain(LeaveRequest request) {
+        LocalDate previousWorkingDay = durationEngineService.getPreviousWorkingDay(request.getStartDate(), request.getEmployee());
+        LocalDate nextWorkingDay = durationEngineService.getNextWorkingDay(request.getEndDate(), request.getEmployee());
+
         List<LeaveRequest> adjacentLeaves = leaveRequestRepository.findAdjacentLeaves(
-                request.getEmployee().getId(), request.getStartDate().minusDays(1), request.getEndDate().plusDays(1)
+                request.getEmployee().getId(), previousWorkingDay, nextWorkingDay
         );
 
         BigDecimal effectiveDuration = request.getDurationDays();
 
         for (LeaveRequest adj : adjacentLeaves) {
-            // Include adjacent cross-type leaves to ensure HOD levels are still triggered
             effectiveDuration = effectiveDuration.add(adj.getDurationDays());
         }
 
         return ruleService.getApplicableRules(request.getLeaveType().getId(), effectiveDuration);
+    }
+
+    private int getHighestRoleWeight(User user) {
+        if (user.getRole() != null) {
+            return user.getRole().getHierarchyWeight();
+        }
+        return 0;
+    }
+
+    private void createBypassedApprovalRecord(LeaveRequest request, User higherAuthorityActor, int skippedLevel) {
+        LeaveApproval bypassedApproval = new LeaveApproval();
+        bypassedApproval.setLeaveRequest(request);
+        bypassedApproval.setApprover(higherAuthorityActor);
+        bypassedApproval.setApprovalLevel(skippedLevel);
+        bypassedApproval.setAction("AUTO_APPROVED");
+        bypassedApproval.setComments("System: Automatically approved because a higher authority processed a previous step.");
+        bypassedApproval.setActedAt(LocalDateTime.now());
+        leaveApprovalRepository.save(bypassedApproval);
+    }
+    @Transactional
+    public void upgradePendingWorkflow(LeaveRequest existingRequest, List<LeaveApprovalRule> upgradedRules, Long triggeringRequestId) {
+
+        log.info("Auto-upgrading workflow for Leave Request ID: {} due to chained request ID: {}",
+                existingRequest.getId(), triggeringRequestId);
+
+        // 1. Cancel currently pending approval queues for this request
+        List<LeaveApproval> pendingApprovals = leaveApprovalRepository.findByLeaveRequestIdAndAction(existingRequest.getId(), ACTION_PENDING);
+
+        for (LeaveApproval approval : pendingApprovals) {
+            String oldState = String.format("{ \"action\": \"%s\" }", approval.getAction());
+            approval.setAction("CANCELLED");
+            approval.setComments("System Auto-Action: Workflow reset and upgraded due to adjacent leave submission (Salami-slicing prevention).");
+            approval.setActedAt(LocalDateTime.now());
+            leaveApprovalRepository.save(approval);
+
+            auditLogService.saveAuditLog(approval.getId(), "UPGRADE_RESET", "LeaveApproval", oldState, "{ \"action\": \"CANCELLED\" }");
+        }
+
+        // 2. Reset the Request level back to 1 and update status
+        String oldReqState = String.format("{ \"currentLevel\": %d, \"status\": \"%s\" }",
+                existingRequest.getCurrentLevel(), existingRequest.getStatus());
+
+        existingRequest.setCurrentLevel(1);
+        existingRequest.setStatus("PENDING LVL 1");
+        leaveRequestRepository.save(existingRequest);
+
+        // 3. Generate the new upgraded workflow
+        generateApprovalsForLevel(existingRequest, 1, upgradedRules);
+
+        String newReqState = String.format("{ \"currentLevel\": 1, \"status\": \"PENDING LVL 1\", \"upgradedBy\": %d }", triggeringRequestId);
+        auditLogService.saveAuditLog(existingRequest.getId(), "WORKFLOW_UPGRADED", "LeaveRequest", oldReqState, newReqState);
     }
 }

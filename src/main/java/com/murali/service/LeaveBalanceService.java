@@ -1,9 +1,6 @@
 package com.murali.service;
 
-import com.murali.entity.Employee;
-import com.murali.entity.LeaveBalance;
-import com.murali.entity.LeaveBalanceTransaction;
-import com.murali.entity.LeaveType;
+import com.murali.entity.*;
 import com.murali.repository.LeaveBalanceRepository;
 import com.murali.repository.LeaveBalanceTransactionRepository;
 import com.murali.repository.LeaveTypeRepository;
@@ -52,8 +49,7 @@ public class LeaveBalanceService {
     @Transactional
     public void initializeBalancesForEmployee(Employee employee, Integer year, Set<LeaveType> selectedLeaves) {
         java.util.Collection<LeaveType> typesToInitialize = (selectedLeaves == null || selectedLeaves.isEmpty())
-                ? leaveTypeRepository.findAll()
-                : selectedLeaves;
+                ? leaveTypeRepository.findAll():selectedLeaves;
 
         for (LeaveType leaveType : typesToInitialize) {
             getOrCreateBalance(employee, leaveType, year);
@@ -63,48 +59,60 @@ public class LeaveBalanceService {
     }
 
     @Transactional
-    public void holdPendingBalance(Employee employee, LeaveType leaveType, BigDecimal duration, Integer year, Long referenceId) {
-        LeaveBalance balance = getOrCreateBalance(employee, leaveType, year);
+    public void holdPendingBalance(LeaveRequest request) {
+        LeaveBalance balance = getOrCreateBalance(request.getEmployee(), request.getLeaveType(), request.getStartDate().getYear());
         String oldState = formatAuditState(balance);
 
         BigDecimal currentPending = balance.getPendingDays() != null ? balance.getPendingDays() : BigDecimal.ZERO;
-        balance.setPendingDays(currentPending.add(duration));
+        balance.setPendingDays(currentPending.add(request.getDurationDays()));
 
         leaveBalanceRepository.save(balance);
-        recordTransaction(employee, leaveType, PENDING_HOLD, duration, referenceId, "Pending hold placed for new leave request");
+
+        BigDecimal netDays = request.getDurationDays().subtract(request.getSandwichPenaltyDays());
+        recordTransaction(request.getEmployee(), request.getLeaveType(), PENDING_HOLD, netDays, request.getId(), "Pending hold placed for new leave request");
+
+        if (request.getSandwichPenaltyDays().compareTo(BigDecimal.ZERO) > 0) {
+            recordTransaction(request.getEmployee(), request.getLeaveType(), PENDING_HOLD, request.getSandwichPenaltyDays(), request.getId(), "Pending hold for cross-request sandwich penalty");
+        }
 
         auditLoggingService.saveAuditLog(balance.getId(), "UPDATED", "leave_balances", oldState, formatAuditState(balance));
     }
 
     @Transactional
-    public void deduct(Employee employee, LeaveType leaveType, BigDecimal duration, Long leaveRequestId, Integer year) {
-        LeaveBalance balance = getOrCreateBalance(employee, leaveType, year);
+    public void deduct(LeaveRequest request) {
+        LeaveBalance balance = getOrCreateBalance(request.getEmployee(), request.getLeaveType(), request.getStartDate().getYear());
         String oldState = formatAuditState(balance);
 
         BigDecimal currentUsed = balance.getUsed() != null ? balance.getUsed() : BigDecimal.ZERO;
-        balance.setUsed(currentUsed.add(duration));
+        balance.setUsed(currentUsed.add(request.getDurationDays()));
 
         BigDecimal currentPending = balance.getPendingDays() != null ? balance.getPendingDays() : BigDecimal.ZERO;
-        BigDecimal newPending = currentPending.subtract(duration);
+        BigDecimal newPending = currentPending.subtract(request.getDurationDays());
 
         if (newPending.compareTo(BigDecimal.ZERO) < 0) {
-            throw new IllegalStateException("Data Corruption Alert: Pending days dropped below zero for request ID: " + leaveRequestId);
+            throw new IllegalStateException("Data Corruption Alert: Pending days dropped below zero for request ID: " + request.getId());
         }
 
         balance.setPendingDays(newPending);
         leaveBalanceRepository.save(balance);
 
-        recordTransaction(employee, leaveType, LEAVE_DEDUCT, duration, leaveRequestId, "Leave approved and deducted from balance");
+        BigDecimal netDays = request.getDurationDays().subtract(request.getSandwichPenaltyDays());
+        recordTransaction(request.getEmployee(), request.getLeaveType(), LEAVE_DEDUCT, netDays, request.getId(), "Leave approved and net days deducted");
+
+        if (request.getSandwichPenaltyDays().compareTo(BigDecimal.ZERO) > 0) {
+            recordTransaction(request.getEmployee(), request.getLeaveType(), LEAVE_DEDUCT, request.getSandwichPenaltyDays(), request.getId(), "Sandwich penalty days deducted");
+        }
+
         auditLoggingService.saveAuditLog(balance.getId(), "UPDATED", "leave_balances", oldState, formatAuditState(balance));
     }
 
     @Transactional
-    public void rollbackDeduction(Employee employee, LeaveType leaveType, BigDecimal duration, Long originalLeaveRequestId, Integer year) {
-        LeaveBalance balance = getOrCreateBalance(employee, leaveType, year);
+    public void rollbackDeduction(LeaveRequest request) {
+        LeaveBalance balance = getOrCreateBalance(request.getEmployee(), request.getLeaveType(), request.getStartDate().getYear());
         String oldState = formatAuditState(balance);
 
         BigDecimal currentUsed = balance.getUsed() != null ? balance.getUsed() : BigDecimal.ZERO;
-        BigDecimal newUsed = currentUsed.subtract(duration);
+        BigDecimal newUsed = currentUsed.subtract(request.getDurationDays());
 
         if (newUsed.compareTo(BigDecimal.ZERO) < 0) {
             throw new IllegalStateException("Data Corruption Alert: Cannot refund more days than used.");
@@ -112,17 +120,23 @@ public class LeaveBalanceService {
         balance.setUsed(newUsed);
         leaveBalanceRepository.save(balance);
 
-        recordTransaction(employee, leaveType, LEAVE_REFUND, duration, originalLeaveRequestId, "Leave cancelled and days refunded");
+        BigDecimal netDays = request.getDurationDays().subtract(request.getSandwichPenaltyDays());
+        recordTransaction(request.getEmployee(), request.getLeaveType(), LEAVE_REFUND, netDays, request.getId(), "Leave cancelled and net days refunded");
+
+        if (request.getSandwichPenaltyDays().compareTo(BigDecimal.ZERO) > 0) {
+            recordTransaction(request.getEmployee(), request.getLeaveType(), LEAVE_REFUND, request.getSandwichPenaltyDays(), request.getId(), "Leave cancelled and sandwich penalty refunded");
+        }
+
         auditLoggingService.saveAuditLog(balance.getId(), "UPDATED", "leave_balances", oldState, formatAuditState(balance));
     }
 
     @Transactional
-    public void releasePendingHold(Employee employee, LeaveType leaveType, BigDecimal duration, Integer year, Long referenceId) {
-        LeaveBalance balance = getOrCreateBalance(employee, leaveType, year);
+    public void releasePendingHold(LeaveRequest request) {
+        LeaveBalance balance = getOrCreateBalance(request.getEmployee(), request.getLeaveType(), request.getStartDate().getYear());
         String oldState = formatAuditState(balance);
 
         BigDecimal currentPending = balance.getPendingDays() != null ? balance.getPendingDays() : BigDecimal.ZERO;
-        BigDecimal newPending = currentPending.subtract(duration);
+        BigDecimal newPending = currentPending.subtract(request.getDurationDays());
 
         if (newPending.compareTo(BigDecimal.ZERO) < 0) {
             throw new IllegalStateException("Data Corruption Alert: Attempting to release more pending days than exist.");
@@ -131,21 +145,24 @@ public class LeaveBalanceService {
         balance.setPendingDays(newPending);
         leaveBalanceRepository.save(balance);
 
-        recordTransaction(employee, leaveType, HOLD_RELEASE, duration, referenceId, "Pending hold released due to rejection or cancellation");
+        BigDecimal netDays = request.getDurationDays().subtract(request.getSandwichPenaltyDays());
+        recordTransaction(request.getEmployee(), request.getLeaveType(), HOLD_RELEASE, netDays, request.getId(), "Pending hold released for net days");
+
+        if (request.getSandwichPenaltyDays().compareTo(BigDecimal.ZERO) > 0) {
+            recordTransaction(request.getEmployee(), request.getLeaveType(), HOLD_RELEASE, request.getSandwichPenaltyDays(), request.getId(), "Pending hold released for sandwich penalty");
+        }
+
         auditLoggingService.saveAuditLog(balance.getId(), "UPDATED", "leave_balances", oldState, formatAuditState(balance));
     }
 
-    // 2. SMART PENALTY DEDUCTION WITH UNPAID LEAVE SPILLOVER
     @Transactional
     public void deductPenalty(Employee employee, LeaveType leaveType, BigDecimal duration, Integer year, String description) {
         LeaveBalance balance = getOrCreateBalance(employee, leaveType, year);
         BigDecimal availableBalance = getEffectiveBalance(balance);
 
-        // If they have enough balance, deduct normally
         if (availableBalance.compareTo(duration) >= 0) {
             executeDirectPenalty(balance, duration, description);
         } else {
-            // SPILLOVER LOGIC: They don't have enough. Drain what they have, push the rest to Unpaid Leave.
             BigDecimal shortfall = duration.subtract(availableBalance);
 
             if (availableBalance.compareTo(BigDecimal.ZERO) > 0) {
@@ -174,7 +191,6 @@ public class LeaveBalanceService {
         auditLoggingService.saveAuditLog(balance.getId(), "UPDATED", "leave_balances", oldState, formatAuditState(balance));
     }
 
-    // 3. DYNAMIC ENTITLEMENT CREATION
     private LeaveBalance getOrCreateBalance(Employee employee, LeaveType leaveType, Integer year) {
         return leaveBalanceRepository.findByEmployeeIdAndLeaveTypeIdAndYear(employee.getId(), leaveType.getId(), year)
                 .orElseGet(() -> {

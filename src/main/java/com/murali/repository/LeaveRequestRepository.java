@@ -63,6 +63,9 @@ public interface LeaveRequestRepository extends JpaRepository<LeaveRequest, Long
     List<LeaveRequest> findPendingRequests(@Param("status") String status, Pageable pageable);
     long countByStatus(String status);
 
+    @Query("SELECT COUNT(r) FROM LeaveRequest r WHERE r.status LIKE 'PENDING%'")
+    long countPendingRequests();
+
     @Query("SELECT COUNT(r) FROM LeaveRequest r WHERE r.status = 'APPROVED' " +
             "AND :targetDate >= r.startDate AND :targetDate <= r.endDate")
     long countActiveLeavesForDate(@Param("targetDate") LocalDate targetDate);
@@ -78,13 +81,12 @@ public interface LeaveRequestRepository extends JpaRepository<LeaveRequest, Long
     );
     @Query("SELECT CASE WHEN COUNT(lr) > 0 THEN true ELSE false END FROM LeaveRequest lr " +
             "WHERE lr.employee.id = :employeeId " +
-            "AND lr.status IN :activeStatuses " +
-            "AND lr.startDate <= :endDate AND lr.endDate >= :startDate")
+            "AND (lr.status = 'APPROVED' OR lr.status LIKE 'PENDING%') " +
+            "AND (lr.startDate <= :endDate AND lr.endDate >= :startDate)")
     boolean hasOverlappingLeave(
             @Param("employeeId") Long employeeId,
             @Param("startDate") LocalDate startDate,
-            @Param("endDate") LocalDate endDate,
-            @Param("activeStatuses") List<String> activeStatuses
+            @Param("endDate") LocalDate endDate
     );
     @EntityGraph(attributePaths = {"leaveType"})
     List<LeaveRequest> findByEmployeeIdAndStatusOrderByIdDesc(Long employeeId, String status);

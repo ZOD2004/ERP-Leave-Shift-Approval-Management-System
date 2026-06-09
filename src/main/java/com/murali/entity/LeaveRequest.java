@@ -62,4 +62,7 @@ public class LeaveRequest {
 
     // added new suggested feature
     private Boolean isSandwichLeave;
+
+    @Column(name = "sandwich_penalty_days", precision = 4, scale = 1)
+    private BigDecimal sandwichPenaltyDays = BigDecimal.ZERO;
 }

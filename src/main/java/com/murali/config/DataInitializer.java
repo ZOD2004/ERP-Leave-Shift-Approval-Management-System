@@ -56,18 +56,33 @@ public class DataInitializer implements CommandLineRunner {
             if (roleRepository.findByName(roleName) == null) {
                 Role role = new Role();
                 role.setName(roleName);
+                role.setHierarchyWeight(0);
+                switch (roleName){
+                    case "ROLE_SUPER_ADMIN":
+                        role.setHierarchyWeight(6);
+                    case "ROLE_HR_ADMIN":
+                        role.setHierarchyWeight(5);
+                    case "ROLE_EMPLOYEE":
+                        role.setHierarchyWeight(2);
+                    case "ROLE_MANAGER":
+                        role.setHierarchyWeight(3);
+                    case "ROLE_AUDITOR":
+                        role.setHierarchyWeight(1);
+                    case "ROLE_DEPT_HEAD":
+                        role.setHierarchyWeight(4);
+                }
                 roleRepository.save(role);
             }
         }
 
         // 2. Initialize Leave Types
-        createLeaveTypeIfNotFound("Casual Leave", "CL-001", 10, true);
-        createLeaveTypeIfNotFound("Sick Leave", "SL-001", 12, true);
-        createLeaveTypeIfNotFound("Earned Leave", "EL-001", 6, true);
-        createLeaveTypeIfNotFound("Work From Home", "WFH-001", 60, true);
-        createLeaveTypeIfNotFound("Half Day Leave", "HDL-001", 12, true);
-        createLeaveTypeIfNotFound("Emergency Leave", "EMG-001", 10, true);
-        createLeaveTypeIfNotFound("Unpaid Leave", "UPL-001", 365, false);
+        createLeaveTypeIfNotFound("Casual Leave", "CL-001", 10, true,true);
+        createLeaveTypeIfNotFound("Sick Leave", "SL-001", 12, true,true);
+        createLeaveTypeIfNotFound("Earned Leave", "EL-001", 6, true,true);
+        createLeaveTypeIfNotFound("Work From Home", "WFH-001", 60, true,false);
+        createLeaveTypeIfNotFound("Half Day Leave", "HDL-001", 12, true,true);
+        createLeaveTypeIfNotFound("Emergency Leave", "EMG-001", 10, true,true);
+        createLeaveTypeIfNotFound("Unpaid Leave", "UPL-001", 365, false,false);
 
         // 3. Initialize Dummy Department (No HOD yet)
         Department adminDept = departmentRepository.findByName("Administration");
@@ -115,13 +130,14 @@ public class DataInitializer implements CommandLineRunner {
         System.out.println("System Initialized: Roles, Leave Types, Super Admin, and Navigation Menus setup complete.");
     }
 
-    private void createLeaveTypeIfNotFound(String name, String code, int maxDays, boolean isPaid) {
+    private void createLeaveTypeIfNotFound(String name, String code, int maxDays, boolean isPaid,boolean sand) {
         if (leaveTypeRepository.findByCode(code).isEmpty()) {
             LeaveType leaveType = new LeaveType();
             leaveType.setName(name);
             leaveType.setCode(code);
             leaveType.setMaxDaysPerYear(maxDays);
             leaveType.setPaid(isPaid);
+            leaveType.setApplySandwichRule(sand);
             leaveTypeRepository.save(leaveType);
         }
     }
@@ -248,12 +264,12 @@ public class DataInitializer implements CommandLineRunner {
 
             // Tier 2: Mid duration (2.5 to 5.0 days) -> Needs Manager (Level 1) then HR Admin (Level 2)
             createApprovalRuleIfNotFound(code, 2.5, 5.0, 1, "ROLE_MANAGER");
-            createApprovalRuleIfNotFound(code, 2.5, 5.0, 2, "ROLE_HR_ADMIN");
+            createApprovalRuleIfNotFound(code, 2.5, 5.0, 2, "ROLE_DEPT_HEAD");
 
             // Tier 3: High duration (5.5+ days) -> Needs Manager (Level 1), HR Admin (Level 2), then Dept Head (Level 3)
             createApprovalRuleIfNotFound(code, 5.5, 99.9, 1, "ROLE_MANAGER");
-            createApprovalRuleIfNotFound(code, 5.5, 99.9, 2, "ROLE_HR_ADMIN");
-            createApprovalRuleIfNotFound(code, 5.5, 99.9, 3, "ROLE_DEPT_HEAD");
+            createApprovalRuleIfNotFound(code, 5.5, 99.9, 2, "ROLE_DEPT_HEAD");
+            createApprovalRuleIfNotFound(code, 5.5, 99.9, 3, "ROLE_HR_ADMIN");
         }
     }
 }

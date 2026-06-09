@@ -1,5 +1,6 @@
 package com.murali.entity;
 
+import com.murali.entity.enums.AttendanceStatus;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -47,7 +48,7 @@ public class Attendance {
     private List<TimeLog> timeLogs = new ArrayList<>();
 
     @Column(length = 20)
-    private String status;
+    private AttendanceStatus status;
 
     // removed private Boolean isLate = false;
 }

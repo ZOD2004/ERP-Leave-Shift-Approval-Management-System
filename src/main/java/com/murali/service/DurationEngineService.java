@@ -90,11 +90,13 @@ public class DurationEngineService {
         // 4. Apply the Sandwich Rule
         boolean sandwichRuleTriggered = false;
         BigDecimal netLeaveDays = baseWorkingDays;
+        BigDecimal sandwichPenaltyDays = BigDecimal.ZERO;
 
         if (applySandwichRulePolicy && offDaysCount > 0) {
             sandwichRuleTriggered = true;
+            sandwichPenaltyDays = BigDecimal.valueOf(offDaysCount);
             // Add the off-days to the penalty. (Holidays remain free)
-            netLeaveDays = netLeaveDays.add(BigDecimal.valueOf(offDaysCount));
+            netLeaveDays = netLeaveDays.add(sandwichPenaltyDays);
             log.info("Sandwich rule applied. Added {} off-days to total.", offDaysCount);
         }
 
@@ -130,12 +132,50 @@ public class DurationEngineService {
                 startDate, endDate, netLeaveDays, sandwichRuleTriggered);
         auditLoggingService.saveAuditLog(null, "CALCULATE_DURATION", "none", null, newState);
 
-        return new LeaveDurationResultDTO(netLeaveDays, sandwichRuleTriggered, baseWorkingDays);
+        return new LeaveDurationResultDTO(netLeaveDays, sandwichRuleTriggered, baseWorkingDays,sandwichPenaltyDays);
     }
 
     private boolean isWorkingDayForShift(LocalDate date, Shift shift) {
         String dayName = date.getDayOfWeek().name();
         return shift.getWorkingDays().stream()
                 .anyMatch(wd -> wd.name().equals(dayName));
+    }
+
+    public LocalDate getPreviousWorkingDay(LocalDate date, Employee employee) {
+        return findWorkingDay(date, employee, -1);
+    }
+
+    public LocalDate getNextWorkingDay(LocalDate date, Employee employee) {
+        return findWorkingDay(date, employee, 1);
+    }
+
+    private LocalDate findWorkingDay(LocalDate start, Employee employee, int stepDays) {
+        LocalDate current = start.plusDays(stepDays);
+        int safeguard = 0;
+
+        while (safeguard < 30) {
+            List<ShiftAssignment> assignments = shiftAssignmentRepository
+                    .findByEmployeeIdInAndDateRange(List.of(employee.getId()), current, current);
+            ShiftAssignment dailyShift = assignments.isEmpty() ? null : assignments.get(0);
+
+            List<LocalDate> holidays = holidayRepository.findHolidayDatesBetween(current, current);
+            boolean isHoliday = !holidays.isEmpty();
+
+            boolean isOffDay;
+            if (dailyShift == null) {
+                java.time.DayOfWeek day = current.getDayOfWeek();
+                isOffDay = (day == java.time.DayOfWeek.SATURDAY || day == java.time.DayOfWeek.SUNDAY);
+            } else {
+                isOffDay = !isWorkingDayForShift(current, dailyShift.getShift());
+            }
+
+            if (!isHoliday && !isOffDay) {
+                return current;
+            }
+
+            current = current.plusDays(stepDays);
+            safeguard++;
+        }
+        return current;
     }
 }
