@@ -17,7 +17,7 @@ import java.util.Optional;
 public class DepartmentService {
 
     private final DepartmentRepository departmentRepository;
-    private final EmployeeRepository employeeRepository; // Injected to check constraints
+    private final EmployeeRepository employeeRepository;
     private final AuditLogService auditLoggingService;
 
     public List<Department> findAll() {
@@ -37,7 +37,7 @@ public class DepartmentService {
             Optional<Department> existingOpt = departmentRepository.findById(department.getId());
             if (existingOpt.isPresent()) {
                 Department existing = existingOpt.get();
-                oldState = formatAuditState(existing); // Extracting to a helper method
+                oldState = formatAuditState(existing);
             }
         }
 

@@ -13,7 +13,6 @@ import java.util.Optional;
 @Repository
 public interface ShiftRotationPolicyRepository extends JpaRepository<ShiftRotationPolicy, Long> {
 
-    // Finds active policies that haven't expired before the target window starts
     @Query("SELECT p FROM ShiftRotationPolicy p WHERE p.active = true AND (p.endDate IS NULL OR p.endDate >= :windowStart)")
     List<ShiftRotationPolicy> findActivePoliciesValidFrom(@Param("windowStart") LocalDate windowStart);
 
@@ -28,4 +27,10 @@ public interface ShiftRotationPolicyRepository extends JpaRepository<ShiftRotati
             "LEFT JOIN FETCH s.shift " +
             "WHERE p.id = :id")
     Optional<ShiftRotationPolicy> findByIdWithSequences(@Param("id") Long id);
+
+    @Query("SELECT p FROM ShiftRotationPolicy p " +
+            "LEFT JOIN FETCH p.sequences s " +
+            "LEFT JOIN FETCH s.shift " +
+            "WHERE p.employee.id = :employeeId AND p.active = true")
+    Optional<ShiftRotationPolicy> findActivePolicyWithSequencesByEmployeeId(@Param("employeeId") Long employeeId);
 }

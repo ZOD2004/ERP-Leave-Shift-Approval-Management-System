@@ -26,7 +26,6 @@ public class ShiftService {
 
     @Transactional
     public void deleteShift(Long id){
-        // 1. Foreign Key Constraint Check (Prevents 500 DB Crash)
         if (shiftAssignmentRepository.existsByShiftId(id)) {
             throw new IllegalStateException("Cannot delete this shift because it is currently assigned to one or more employees. Please reassign them first.");
         }

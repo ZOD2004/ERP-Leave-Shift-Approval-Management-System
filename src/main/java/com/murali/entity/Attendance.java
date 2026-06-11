@@ -44,10 +44,11 @@ public class Attendance {
     private Integer totalWorkedMinutes;
 
     //added newly to cover multi in and out
-    @OneToMany(mappedBy = "attendance", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    @OneToMany(mappedBy = "attendance", fetch = FetchType.LAZY)
     private List<TimeLog> timeLogs = new ArrayList<>();
 
     @Column(length = 20)
+    @Enumerated(EnumType.STRING)
     private AttendanceStatus status;
 
     // removed private Boolean isLate = false;

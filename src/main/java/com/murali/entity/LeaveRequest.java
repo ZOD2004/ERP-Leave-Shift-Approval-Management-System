@@ -60,9 +60,13 @@ public class LeaveRequest {
     @Column(name = "end_session", length = 20)
     private LeaveSession endSession = LeaveSession.FULL_DAY;
 
-    // added new suggested feature
+    // added new suggested
     private Boolean isSandwichLeave;
 
     @Column(name = "sandwich_penalty_days", precision = 4, scale = 1)
     private BigDecimal sandwichPenaltyDays = BigDecimal.ZERO;
+
+    @Column(name = "superseded_leave_ids")
+    private String supersededLeaveIds;
+
 }

@@ -28,7 +28,7 @@ public class AttendanceCorrection {
     private User approver;
 
     @Column(nullable = false, length = 20)
-    private String status; // to see if PENDING, APPROVED, REJECTED
+    private String status; // to see if PENDING,APPROVED,REJECTED
 
     @Column(name = "resolved_check_out_time")
     private LocalDateTime resolvedCheckOutTime;

@@ -54,8 +54,6 @@ public class ShiftAssignmentService {
         this.timeLogRepository = timeLogRepository;
     }
 
-    // --- 1. PREVIEW & BATCH LOGIC ---
-
     public BatchPreviewResponse previewBatchAssignments(List<Long> employeeIds, Long shiftId, LocalDate startDate, LocalDate endDate) {
         BatchPreviewResponse response = new BatchPreviewResponse();
 
@@ -83,7 +81,6 @@ public class ShiftAssignmentService {
             boolean isHoliday = holidayDates.contains(currentDate);
             String currentDayName = currentDate.getDayOfWeek().name();
 
-            // Check if today matches the working days defined in the Shift entity
             boolean isShiftWorkingDay = shift.getWorkingDays().stream()
                     .anyMatch(wd -> wd.name().equalsIgnoreCase(currentDayName));
 
@@ -96,12 +93,10 @@ public class ShiftAssignmentService {
                 boolean hasExistingShift = isEmployeeAssignedOnDate(existingAssignments, empId, currentDate);
                 boolean isInvalidDay = !isShiftWorkingDay;
 
-                // --- THE NEW PRIORITY RESOLUTION ENGINE ---
                 if (activeLeave != null || hasExistingShift || isHoliday || isInvalidDay) {
 
                     ShiftConflictDTO conflict = createConflictBase(employee, shift, currentDate);
 
-                    // 1. LEAVE (Highest Priority - Strict Block)
                     if (activeLeave != null) {
                         LeaveSession session = getSessionForDate(activeLeave, currentDate);
                         if (session == LeaveSession.FULL_DAY) {
@@ -110,29 +105,24 @@ public class ShiftAssignmentService {
                             conflict.setConflictType("Half-Day Leave (" + session.name() + ")");
                         }
                     }
-                    // 2. OVERLAP (Beats Holiday & Off-Days)
                     else if (hasExistingShift) {
                         conflict.setConflictType("Overlap");
                     }
-                    // 3. HOLIDAY
                     else if (isHoliday) {
                         conflict.setConflictType("Holiday");
                     }
-                    // 4. NON-WORKING DAY
                     else {
                         conflict.setConflictType("Non-Working Day");
                     }
 
                     response.getHardConflicts().add(conflict);
                 } else {
-                    // Valid Day! No conflicts found.
                     validDaysPerEmployee.computeIfAbsent(empId, k -> new ArrayList<>()).add(currentDate);
                 }
             }
             currentDate = currentDate.plusDays(1);
         }
 
-        // Group the valid days into optimized date ranges
         response.setReadyToSave(groupValidDaysIntoRanges(validDaysPerEmployee, employeeMap, shift));
         return response;
     }
@@ -174,12 +164,6 @@ public class ShiftAssignmentService {
         auditLoggingService.saveAuditLog(null, "BATCH_CREATED", "shift_assignments", null, String.format("{ \"batchSize\": %d }", assignmentsToSave.size()));
     }
 
-    // --- 2. SINGLE ASSIGNMENT UPDATES & HOLE PUNCHING ---
-
-    /**
-     * Use this when HR wants to "Hole Punch" an existing range
-     * (e.g., Nov 15th changing to Night Shift amidst a month-long Morning shift).
-     */
     @Transactional
     public void assignOverrideShift(ShiftAssignmentDTO dto) {
         Employee employee = employeeRepository.findById(dto.getEmployeeId())
@@ -187,10 +171,8 @@ public class ShiftAssignmentService {
         Shift shift = shiftRepository.findById(dto.getShiftId())
                 .orElseThrow(() -> new ShiftNotFoundException("Shift not found"));
 
-        // 1. Slice existing overlapping shifts
         punchHoleInExistingShifts(employee.getId(), dto.getStartDate(), dto.getEndDate());
 
-        // 2. Insert new shift in the hole
         ShiftAssignment newAssignment = new ShiftAssignment();
         newAssignment.setEmployee(employee);
         newAssignment.setShift(shift);
@@ -204,9 +186,6 @@ public class ShiftAssignmentService {
         triggerAttendanceRecalculationIfPast(employee.getId(), dto.getStartDate(), dto.getEndDate());
     }
 
-    /**
-     * The core 3-way split logic for overwriting ranges.
-     */
     private void punchHoleInExistingShifts(Long employeeId, LocalDate newStart, LocalDate newEnd) {
         List<ShiftAssignment> overlaps = shiftAssignmentRepository.findByEmployeeIdInAndDateRange(
                 List.of(employeeId), newStart, newEnd);
@@ -217,27 +196,24 @@ public class ShiftAssignmentService {
 
             if (!newStart.isAfter(oldStart) && !newEnd.isBefore(oldEnd)) {
                 shiftAssignmentRepository.delete(old);
-                shiftAssignmentRepository.flush(); // FIX: Flush immediately after delete
+                shiftAssignmentRepository.flush();
             } else if (newStart.isAfter(oldStart) && newEnd.isBefore(oldEnd)) {
                 ShiftAssignment remainder = new ShiftAssignment();
-                // ... setters ...
                 old.setEndDate(newStart.minusDays(1));
                 shiftAssignmentRepository.save(old);
-                shiftAssignmentRepository.saveAndFlush(remainder); // FIX: saveAndFlush remainder
-            } else if (!newStart.isAfter(oldStart) && newEnd.isBefore(oldEnd)) {
+                shiftAssignmentRepository.saveAndFlush(remainder);
+            } else if (newStart.isAfter(oldStart) && newEnd.isBefore(oldEnd)) {
                 old.setStartDate(newEnd.plusDays(1));
-                shiftAssignmentRepository.saveAndFlush(old); // FIX: saveAndFlush
+                shiftAssignmentRepository.saveAndFlush(old);
             } else if (newStart.isAfter(oldStart) && !newEnd.isBefore(oldEnd)) {
                 old.setEndDate(newStart.minusDays(1));
-                shiftAssignmentRepository.saveAndFlush(old); // FIX: saveAndFlush
+                shiftAssignmentRepository.saveAndFlush(old);
             }
 
             triggerAttendanceRecalculationIfPast(employeeId, oldStart, oldEnd);
         }
     }
-    /**
-     * Use this when HR wants to change the boundaries or type of an EXISTING row.
-     */
+
     @Transactional
     public void updateSingleAssignment(ShiftAssignmentDTO dto) {
         ShiftAssignment existing = shiftAssignmentRepository.findById(dto.getId())
@@ -283,8 +259,6 @@ public class ShiftAssignmentService {
         triggerAttendanceRecalculationIfPast(empId, start, end);
     }
 
-    // --- 3. FETCHING & UTILITIES ---
-
     public Page<ShiftAssignmentDTO> fetchAssignmentsForGrid(int offset, int limit, LocalDate filterDate, String employeeNameSearch){
         Pageable pageable = PageRequest.of(offset / limit, limit, Sort.by("startDate").ascending());
         Page<ShiftAssignment> page;
@@ -316,8 +290,6 @@ public class ShiftAssignmentService {
         return mapToDTOList(filterOutApprovedFullDayLeaves(assignments));
     }
 
-    // --- PRIVATE HELPER LOGIC ---
-
     private List<ShiftAssignmentDTO> groupValidDaysIntoRanges(Map<Long, List<LocalDate>> validDaysPerEmployee, Map<Long, Employee> employeeMap, Shift shift) {
         List<ShiftAssignmentDTO> readyToSave = new ArrayList<>();
 
@@ -333,7 +305,7 @@ public class ShiftAssignmentService {
             for (int i = 1; i < sortedDays.size(); i++) {
                 LocalDate nextDay = sortedDays.get(i);
                 if (currentEnd.plusDays(1).equals(nextDay)) {
-                    currentEnd = nextDay; // Extend range
+                    currentEnd = nextDay;
                 } else {
                     readyToSave.add(createReadyDTO(employeeMap.get(empId), shift, currentStart, currentEnd));
                     currentStart = nextDay;
@@ -410,23 +382,17 @@ public class ShiftAssignmentService {
     private LeaveSession getSessionForDate(LeaveRequest request, LocalDate targetDate) {
         if (request == null) return null;
 
-        // If the leave is just one single day, the startSession dictates the leave type
-        if (targetDate.equals(request.getStartDate()) && targetDate.equals(request.getEndDate())) {
+       if (targetDate.equals(request.getStartDate()) && targetDate.equals(request.getEndDate())) {
             return request.getStartSession();
         }
 
-        // If it's the first day of a multi-day leave
-        if (targetDate.equals(request.getStartDate())) {
+       if (targetDate.equals(request.getStartDate())) {
             return request.getStartSession();
         }
-
-        // If it's the last day of a multi-day leave
-        if (targetDate.equals(request.getEndDate())) {
+       if (targetDate.equals(request.getEndDate())) {
             return request.getEndSession();
         }
-
-        // Any day in the middle of a multi-day leave is ALWAYS a full day
-        return LeaveSession.FULL_DAY;
+       return LeaveSession.FULL_DAY;
     }
 
     private boolean isFullDayLeave(LeaveRequest leave, LocalDate date) {
@@ -437,7 +403,6 @@ public class ShiftAssignmentService {
     private List<ShiftAssignment> filterOutApprovedFullDayLeaves(List<ShiftAssignment> assignments) {
         if (assignments == null || assignments.isEmpty()) return assignments;
 
-        // Uses a massive date range covering the start and end of all assignments to fetch relevant leaves efficiently
         LocalDate minDate = assignments.stream().map(ShiftAssignment::getStartDate).min(LocalDate::compareTo).orElse(LocalDate.now());
         LocalDate maxDate = assignments.stream().map(ShiftAssignment::getEndDate).max(LocalDate::compareTo).orElse(LocalDate.now());
         List<Long> empIds = assignments.stream().map(a -> a.getEmployee().getId()).distinct().toList();
@@ -445,8 +410,6 @@ public class ShiftAssignmentService {
         List<LeaveRequest> leaves = leaveRequestRepository.findApprovedLeavesForEmployeesInRange(empIds, "APPROVED", minDate, maxDate);
         Map<Long, List<LeaveRequest>> leavesByEmployee = leaves.stream().collect(Collectors.groupingBy(l -> l.getEmployee().getId()));
 
-        // Note: For date ranges crossing full-day leaves, the frontend calendar will draw the shift,
-        // and the leave block will visually layer over the specific full-day leave dates on the UI.
         return assignments;
     }
 
@@ -460,16 +423,13 @@ public class ShiftAssignmentService {
         return stats;
     }
     public List<DailyCellDTO> getResolvedCalendarData(LocalDate startDate, LocalDate endDate) {
-        // 1. Fetch active employees (or pass in a specific list if filtering)
-        List<Employee> activeEmployees = employeeRepository.findByActiveTrue();
+         List<Employee> activeEmployees = employeeRepository.findByActiveTrue();
         List<Long> empIds = activeEmployees.stream().map(Employee::getId).toList();
 
-        // 2. Fetch all required data layers
         List<ShiftAssignment> rawAssignments = shiftAssignmentRepository.findByEmployeeIdInAndDateRange(empIds, startDate, endDate);
         Set<LocalDate> holidayDates = new HashSet<>(holidayRepository.findHolidayDatesBetween(startDate, endDate));
         List<LeaveRequest> leaves = leaveRequestRepository.findApprovedLeavesForEmployeesInRange(empIds, "APPROVED", startDate, endDate);
 
-        // 3. Group for fast processing
         Map<Long, List<ShiftAssignment>> assignmentsByEmp = rawAssignments.stream()
                 .collect(Collectors.groupingBy(a -> a.getEmployee().getId()));
         Map<Long, List<LeaveRequest>> leavesByEmp = leaves.stream()
@@ -477,38 +437,35 @@ public class ShiftAssignmentService {
 
         List<DailyCellDTO> resolvedData = new ArrayList<>();
 
-        // 4. Resolve Day-by-Day
         for (Employee emp : activeEmployees) {
             List<ShiftAssignment> empAssignments = assignmentsByEmp.getOrDefault(emp.getId(), List.of());
             List<LeaveRequest> empLeaves = leavesByEmp.getOrDefault(emp.getId(), List.of());
 
-            LocalDate cursor = startDate;
-            while (!cursor.isAfter(endDate)) {
+            LocalDate startCur = startDate;
+            while (!startCur.isAfter(endDate)) {
                 DailyCellDTO cell = new DailyCellDTO();
-                cell.setDate(cursor);
+                cell.setDate(startCur);
                 cell.setEmployeeId(emp.getId());
                 cell.setEmployeeName(emp.getFirstName());
 
-                // A. Check Holidays & Leaves
-                cell.setHoliday(holidayDates.contains(cursor));
+                cell.setHoliday(holidayDates.contains(startCur));
 
-                LeaveRequest activeLeave = getActiveLeaveForDate(empLeaves, cursor);
+                LeaveRequest activeLeave = getActiveLeaveForDate(empLeaves, startCur);
                 if (activeLeave != null) {
                     cell.setOnLeave(true);
-                    cell.setLeaveSession(getSessionForDate(activeLeave, cursor));
+                    cell.setLeaveSession(getSessionForDate(activeLeave, startCur));
                 }
 
-                // B. Resolve Shifts & Overlaps
-                final LocalDate currentDay = cursor;
+                final LocalDate currentDay = startCur;
                 List<ShiftAssignment> assignmentsToday = empAssignments.stream()
                         .filter(a -> !currentDay.isBefore(a.getStartDate()) && !currentDay.isAfter(a.getEndDate()))
                         .toList();
 
                 ShiftAssignment bestAssignment = null;
                 if (!assignmentsToday.isEmpty()) {
-                    // Priority Logic: A 1-day assignment (Overtime) overrides a long-term monthly assignment
+
                     bestAssignment = assignmentsToday.stream()
-                            .filter(a -> a.getStartDate().equals(a.getEndDate())) // Single day override
+                            .filter(a -> a.getStartDate().equals(a.getEndDate()))
                             .findFirst()
                             .orElse(assignmentsToday.get(0));
                 }
@@ -517,9 +474,8 @@ public class ShiftAssignmentService {
                     cell.setAssignment(mapToDTO(bestAssignment));
                     cell.setOvertimeOverride(bestAssignment.getStartDate().equals(bestAssignment.getEndDate()));
 
-                    // If it's NOT a manual 1-day override, check if it's an off-day based on the Shift's working days
-                    if (!cell.isOvertimeOverride()) {
-                        String currentDayName = cursor.getDayOfWeek().name();
+                   if (!cell.isOvertimeOverride()) {
+                        String currentDayName = startCur.getDayOfWeek().name();
                         boolean isWorkingDay = bestAssignment.getShift().getWorkingDays().stream()
                                 .anyMatch(w -> w.name().equals(currentDayName));
 
@@ -529,14 +485,13 @@ public class ShiftAssignmentService {
                     }
                 }
 
-                // C. Overtime OVERRIDES Holidays and Off-days
                 if (cell.isOvertimeOverride()) {
                     cell.setHoliday(false);
                     cell.setOffDay(false);
                 }
 
                 resolvedData.add(cell);
-                cursor = cursor.plusDays(1);
+                startCur = startCur.plusDays(1);
             }
         }
         return resolvedData;
@@ -547,38 +502,28 @@ public class ShiftAssignmentService {
         LocalDate today = LocalDate.now();
         LocalDate earliestDeletableDate = today;
 
-        // 1. Determine if "Today" is locked due to existing punches
         LocalDateTime startOfDay = today.atStartOfDay();
         LocalDateTime endOfDay = today.atTime(LocalTime.MAX);
 
         List<TimeLog> todayPunches = timeLogRepository.findPunchesInShiftWindow(employeeId, startOfDay, endOfDay);
         if (!todayPunches.isEmpty()) {
-            // Employee has already started working today; lock today.
             earliestDeletableDate = today.plusDays(1);
         }
 
-        // 2. Validate and apply Smart Trim
         if (requestedEnd.isBefore(earliestDeletableDate)) {
-            // The entire requested range is in the past/locked. Block it completely.
             throw new IllegalArgumentException("Cannot delete past shifts or active shifts where the employee has already punched in.");
         }
 
-        // Trim the start date: if they asked to delete from Monday, but Monday/Tuesday are locked,
-        // the actual deletion starts on Wednesday.
         LocalDate actualDeleteStart = requestedStart.isBefore(earliestDeletableDate)
                 ? earliestDeletableDate
                 : requestedStart;
 
-        // 3. Slice out the legally deletable date range
         punchHoleInExistingShifts(employeeId, actualDeleteStart, requestedEnd);
 
-        // 4. Audit the deletion (logging both what they requested and what actually happened)
         auditLoggingService.saveAuditLog(null, "RANGE_DELETED", "shift_assignments", null,
                 String.format("{ \"employeeId\": %d, \"actualStart\": \"%s\", \"actualEnd\": \"%s\", \"requestedStart\": \"%s\" }",
                         employeeId, actualDeleteStart, requestedEnd, requestedStart));
 
-        // 5. Recalculate attendance for the empty hole
-        // (This sweeps the newly deleted future dates to ensure any pending flags are cleared)
         triggerAttendanceRecalculationIfPast(employeeId, actualDeleteStart, requestedEnd);
     }
     @Transactional
@@ -593,16 +538,12 @@ public class ShiftAssignmentService {
             throw new IllegalArgumentException("Cannot modify or move shifts in the past or present.");
         }
 
-        // 1. If the date was changed, "Punch Out" (delete) the shift from the original day
         if (!originalDate.equals(newDate)) {
-            // We reuse your existing Smart Trim logic to slice the old day out
             deleteAssignmentRange(employeeId, originalDate, originalDate);
         }
 
-        // 2. Clear any existing shifts on the target date (Overwrite behavior)
-        punchHoleInExistingShifts(employeeId, newDate, newDate);
+       punchHoleInExistingShifts(employeeId, newDate, newDate);
 
-        // 3. Create the new 1-day shift assignment on the target date
         ShiftAssignment newAssignment = new ShiftAssignment();
         newAssignment.setEmployee(employee);
         newAssignment.setShift(shift);
@@ -615,7 +556,6 @@ public class ShiftAssignmentService {
                 String.format("{ \"employeeId\": %d, \"oldDate\": \"%s\", \"newDate\": \"%s\", \"shiftId\": %d }",
                         employeeId, originalDate, newDate, shift.getId()));
 
-        // 4. Recalculate attendance for both the old empty hole and the new assigned day
         if (!originalDate.equals(newDate)) {
             triggerAttendanceRecalculationIfPast(employeeId, originalDate, originalDate);
         }

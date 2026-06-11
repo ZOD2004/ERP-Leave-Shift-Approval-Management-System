@@ -17,9 +17,7 @@ import java.math.BigDecimal;
                 @UniqueConstraint(
                         name = "uq_leave_balances",
                         columnNames = {
-                                "employee_id",
-                                "leave_type_id",
-                                "year"
+                                "employee_id","leave_type_id","year"
                         }
                 )
         }

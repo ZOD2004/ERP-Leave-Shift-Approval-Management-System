@@ -50,7 +50,6 @@ public class EmployeeService {
             }
         }
 
-        // Handle User Logic
         User finalUser = currentUser;
         if (isExistingUserLinked && currentUser != null && currentUser.getUsername() != null) {
             finalUser = userService.findByUsername(currentUser.getUsername());
@@ -59,10 +58,8 @@ public class EmployeeService {
         }
         currentEmployee.setUser(finalUser);
 
-        // Save Employee (No more setApplicableLeaveTypes!)
         Employee savedEmployee = employeeRepository.save(currentEmployee);
 
-        // Directly delegate leave initialization to the Balance service
         Integer currentYear = LocalDate.now().getYear();
         leaveBalanceService.initializeBalancesForEmployee(savedEmployee, currentYear, selectedLeaves);
 
@@ -84,9 +81,7 @@ public class EmployeeService {
         User currUser = employee.getUser();
         if (currUser != null) {
             currUser.setActive(false);
-            // We rely on cascade or user service to save the user state,
-            // but saving the employee here triggers the cascade update safely.
-        }
+      }
 
         employeeRepository.save(employee);
 

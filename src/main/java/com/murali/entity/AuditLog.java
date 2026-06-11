@@ -25,10 +25,10 @@ public class AuditLog {
     private LocalDateTime timestamp;
 
     @Column(name = "action", length = 50)
-    private String action; // CREATE, UPDATE, DELETE
+    private String action; // CREATE,UPDATE,DELETE
 
     @Column(name = "entity_name", length = 100)
-    private String entityName; // e.g., "LeaveBalance", "ShiftAssignment"
+    private String entityName; // "LeaveBalance","ShiftAssignment"
 
     @Column(name = "performed_by")
     private String performedBy;

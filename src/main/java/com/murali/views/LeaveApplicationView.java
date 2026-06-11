@@ -36,6 +36,7 @@ import jakarta.annotation.security.RolesAllowed;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.List;
 
 @RolesAllowed({"ROLE_SUPER_ADMIN", "ROLE_HR_ADMIN", "ROLE_MANAGER", "ROLE_DEPT_HEAD", "ROLE_EMPLOYEE", "ROLE_AUDITOR"})
@@ -73,12 +74,7 @@ public class LeaveApplicationView extends VerticalLayout {
     private final VerticalLayout draftSection = new VerticalLayout();
     private LeaveRequest currentDraft = null;
 
-    public LeaveApplicationView(LeaveRequestService leaveRequestService,
-                                LeaveTypeService leaveTypeService,
-                                EmployeeService employeeService,
-                                DurationEngineService durationEngineService,
-                                SecurityService securityService,
-                                LeaveBalanceService leaveBalanceService, ApprovalRoutingService approvalRoutingService) {
+    public LeaveApplicationView(LeaveRequestService leaveRequestService, LeaveTypeService leaveTypeService, EmployeeService employeeService, DurationEngineService durationEngineService, SecurityService securityService, LeaveBalanceService leaveBalanceService, ApprovalRoutingService approvalRoutingService) {
 
         this.leaveRequestService = leaveRequestService;
         this.leaveTypeService = leaveTypeService;
@@ -115,7 +111,7 @@ public class LeaveApplicationView extends VerticalLayout {
         header.setAlignItems(FlexComponent.Alignment.CENTER);
         header.addClassNames(LumoUtility.Margin.Bottom.MEDIUM);
 
-        add(header, createBalanceSection(),createDraftSection(), createHistorySection());
+        add(header, createBalanceSection(), createDraftSection(), createHistorySection());
     }
 
     private Component createBalanceSection() {
@@ -131,17 +127,11 @@ public class LeaveApplicationView extends VerticalLayout {
         H3 title = new H3("Recent Requests");
         title.addClassNames(LumoUtility.Margin.Top.LARGE, LumoUtility.Margin.Bottom.SMALL);
 
-        historyGrid.addColumn(LeaveRequest::getStartDate)
-                .setHeader("Start")
-                .setAutoWidth(true);
+        historyGrid.addColumn(LeaveRequest::getStartDate).setHeader("Start").setAutoWidth(true);
 
-        historyGrid.addColumn(req -> req.getLeaveType() != null ? req.getLeaveType().getName() : "")
-                .setHeader("Type")
-                .setAutoWidth(true);
+        historyGrid.addColumn(req -> req.getLeaveType() != null ? req.getLeaveType().getName() : "").setHeader("Type").setAutoWidth(true);
 
-        historyGrid.addColumn(LeaveRequest::getDurationDays)
-                .setHeader("Days")
-                .setAutoWidth(true);
+        historyGrid.addColumn(LeaveRequest::getDurationDays).setHeader("Days").setAutoWidth(true);
 
         historyGrid.addComponentColumn(req -> {
             Span badge = new Span(req.getStatus());
@@ -166,10 +156,7 @@ public class LeaveApplicationView extends VerticalLayout {
         }).setHeader("Status").setAutoWidth(true);
 
 
-        historyGrid.addComponentColumn(this::createActionColumn)
-                .setHeader("Actions")
-                .setAutoWidth(true)
-                .setFlexGrow(0);
+        historyGrid.addComponentColumn(this::createActionColumn).setHeader("Actions").setAutoWidth(true).setFlexGrow(0);
 
         historyGrid.addThemeVariants(GridVariant.LUMO_NO_BORDER, GridVariant.LUMO_ROW_STRIPES);
         historyGrid.setSizeFull();
@@ -202,10 +189,7 @@ public class LeaveApplicationView extends VerticalLayout {
         Dialog confirmDialog = new Dialog();
         confirmDialog.setHeaderTitle("Cancel Leave Request");
 
-        Span warningMessage = new Span(String.format(
-                "Are you sure you want to cancel your %s leave request from %s to %s?",
-                request.getLeaveType().getName(), request.getStartDate(), request.getEndDate()
-        ));
+        Span warningMessage = new Span(String.format("Are you sure you want to cancel your %s leave request from %s to %s?", request.getLeaveType().getName(), request.getStartDate(), request.getEndDate()));
         confirmDialog.add(new VerticalLayout(warningMessage));
 
         Button confirmBtn = new Button("Yes, Cancel It", e -> {
@@ -215,15 +199,13 @@ public class LeaveApplicationView extends VerticalLayout {
                 leaveRequestService.cancelLeaveRequest(request.getId(), currentEmployee.getId(), currentYear);
 
 
-                Notification.show("Leave request cancelled successfully.", 3000, Notification.Position.TOP_END)
-                        .addThemeVariants(NotificationVariant.LUMO_SUCCESS);
+                Notification.show("Leave request cancelled successfully.", 3000, Notification.Position.TOP_END).addThemeVariants(NotificationVariant.LUMO_SUCCESS);
 
                 confirmDialog.close();
                 refreshBalanceAndHistory();
 
             } catch (Exception ex) {
-                Notification.show("Cancellation failed: " + ex.getMessage(), 5000, Notification.Position.MIDDLE)
-                        .addThemeVariants(NotificationVariant.LUMO_ERROR);
+                Notification.show("Cancellation failed: " + ex.getMessage(), 5000, Notification.Position.MIDDLE).addThemeVariants(NotificationVariant.LUMO_ERROR);
             }
         });
         confirmBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY, ButtonVariant.LUMO_ERROR);
@@ -237,13 +219,7 @@ public class LeaveApplicationView extends VerticalLayout {
 
     private Component createBalanceCard(String title, BigDecimal remaining, double used, BigDecimal total, String themeColor, VaadinIcon iconType) {
         VerticalLayout card = new VerticalLayout();
-        card.addClassNames(
-                LumoUtility.Background.BASE,
-                LumoUtility.Border.ALL, LumoUtility.BorderColor.CONTRAST_10,
-                LumoUtility.BorderRadius.LARGE,
-                LumoUtility.Padding.LARGE,
-                LumoUtility.BoxShadow.SMALL
-        );
+        card.addClassNames(LumoUtility.Background.BASE, LumoUtility.Border.ALL, LumoUtility.BorderColor.CONTRAST_10, LumoUtility.BorderRadius.LARGE, LumoUtility.Padding.LARGE, LumoUtility.BoxShadow.SMALL);
         card.setWidth("280px");
         card.setSpacing(false);
 
@@ -285,9 +261,7 @@ public class LeaveApplicationView extends VerticalLayout {
             valueSpan.addClassNames(LumoUtility.TextColor.ERROR);
         }
 
-        Span statsSpan = new Span(String.format("%s used of %s total",
-                BigDecimal.valueOf(used).stripTrailingZeros().toPlainString(),
-                total.stripTrailingZeros().toPlainString()));
+        Span statsSpan = new Span(String.format("%s used of %s total", BigDecimal.valueOf(used).stripTrailingZeros().toPlainString(), total.stripTrailingZeros().toPlainString()));
         statsSpan.addClassNames(LumoUtility.FontSize.XSMALL, LumoUtility.TextColor.TERTIARY, LumoUtility.FontWeight.MEDIUM);
 
         HorizontalLayout footerLayout = new HorizontalLayout(statsSpan);
@@ -298,6 +272,7 @@ public class LeaveApplicationView extends VerticalLayout {
         card.add(headerLayout, numberLayout, progressBar, footerLayout);
         return card;
     }
+
     private void openApplyLeaveDialog(LeaveRequest draftToEdit) {
         Dialog dialog = new Dialog();
         dialog.setHeaderTitle(draftToEdit == null ? "New Leave Request" : "Resume Draft");
@@ -350,8 +325,7 @@ public class LeaveApplicationView extends VerticalLayout {
         formLayout.setResponsiveSteps(new FormLayout.ResponsiveStep("0", 2));
 
         Span infoNote = new Span(VaadinIcon.INFO_CIRCLE.create(), new Span(" Routed to immediate manager."));
-        infoNote.addClassNames(LumoUtility.FontSize.XSMALL, LumoUtility.TextColor.SECONDARY,
-                LumoUtility.Display.FLEX, LumoUtility.Gap.XSMALL, LumoUtility.Margin.Top.SMALL);
+        infoNote.addClassNames(LumoUtility.FontSize.XSMALL, LumoUtility.TextColor.SECONDARY, LumoUtility.Display.FLEX, LumoUtility.Gap.XSMALL, LumoUtility.Margin.Top.SMALL);
 
         VerticalLayout dialogLayout = new VerticalLayout(formLayout, infoNote);
         dialogLayout.setPadding(false);
@@ -361,27 +335,20 @@ public class LeaveApplicationView extends VerticalLayout {
         Button saveDraftBtn = new Button("Save as Draft", e -> {
             // Basic validation because DB requires dates and type
             if (leaveType.getValue() == null || startDate.getValue() == null || endDate.getValue() == null) {
-                Notification.show("Please select Leave Type and Dates to save a draft.", 3000, Notification.Position.MIDDLE)
-                        .addThemeVariants(NotificationVariant.LUMO_WARNING);
+                Notification.show("Please select Leave Type and Dates to save a draft.", 3000, Notification.Position.MIDDLE).addThemeVariants(NotificationVariant.LUMO_WARNING);
                 return;
             }
 
             try {
                 Long draftId = currentDraft != null ? currentDraft.getId() : null;
-                leaveRequestService.saveOrUpdateDraft(
-                        draftId, currentEmployee, leaveType.getValue(),
-                        startDate.getValue(), endDate.getValue(),
-                        reason.getValue(), startSessionBox.getValue(), endSessionBox.getValue(), applySandwichRule
-                );
-                Notification.show("Draft saved successfully.", 3000, Notification.Position.TOP_END)
-                        .addThemeVariants(NotificationVariant.LUMO_SUCCESS);
+                leaveRequestService.saveOrUpdateDraft(draftId, currentEmployee, leaveType.getValue(), startDate.getValue(), endDate.getValue(), reason.getValue(), startSessionBox.getValue(), endSessionBox.getValue(), applySandwichRule);
+                Notification.show("Draft saved successfully.", 3000, Notification.Position.TOP_END).addThemeVariants(NotificationVariant.LUMO_SUCCESS);
 
                 this.currentDraft = null;
                 dialog.close();
                 refreshBalanceAndHistory();
             } catch (Exception ex) {
-                Notification.show("Failed to save draft: " + ex.getMessage(), 5000, Notification.Position.MIDDLE)
-                        .addThemeVariants(NotificationVariant.LUMO_ERROR);
+                Notification.show("Failed to save draft: " + ex.getMessage(), 5000, Notification.Position.MIDDLE).addThemeVariants(NotificationVariant.LUMO_ERROR);
             }
         });
         saveDraftBtn.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
@@ -414,26 +381,18 @@ public class LeaveApplicationView extends VerticalLayout {
     private void setupBinder() {
         binder.forField(leaveType).asRequired("Please select a leave type").bind(LeaveRequest::getLeaveType, LeaveRequest::setLeaveType);
 
-        binder.forField(startDate)
-                .asRequired("Start date is required")
-                .withValidator(date -> !date.isBefore(LocalDate.now()), "Start date cannot be in the past")
-                .bind(LeaveRequest::getStartDate, LeaveRequest::setStartDate);
+        binder.forField(startDate).asRequired("Start date is required").withValidator(date -> !date.isBefore(LocalDate.now()), "Start date cannot be in the past").bind(LeaveRequest::getStartDate, LeaveRequest::setStartDate);
 
-        binder.forField(endDate)
-                .asRequired("End date is required")
-                .withValidator(date -> startDate.getValue() == null || !date.isBefore(startDate.getValue()), "End date cannot be before start date")
-                .bind(LeaveRequest::getEndDate, LeaveRequest::setEndDate);
+        binder.forField(endDate).asRequired("End date is required").withValidator(date -> startDate.getValue() == null || !date.isBefore(startDate.getValue()), "End date cannot be before start date").bind(LeaveRequest::getEndDate, LeaveRequest::setEndDate);
 
-        binder.forField(reason)
-                .asRequired("Please provide a reason")
-                .withValidator(text -> text.length() >= 5, "Reason must be at least 5 characters")
-                .bind(LeaveRequest::getReason, LeaveRequest::setReason);
+        binder.forField(reason).asRequired("Please provide a reason").withValidator(text -> text.length() >= 5, "Reason must be at least 5 characters").bind(LeaveRequest::getReason, LeaveRequest::setReason);
 
         binder.forField(startSessionBox).asRequired("Start session is required").bind(LeaveRequest::getStartSession, LeaveRequest::setStartSession);
         binder.forField(endSessionBox).bind(LeaveRequest::getEndSession, LeaveRequest::setEndSession);
 
         binder.readBean(currentRequest);
     }
+
     private void setupDateCalculations() {
         startDate.addValueChangeListener(e -> {
             if (e.getValue() != null) {
@@ -450,6 +409,7 @@ public class LeaveApplicationView extends VerticalLayout {
         endSessionBox.addValueChangeListener(e -> calculateDuration());
         leaveType.addValueChangeListener(e -> calculateDuration());
     }
+
     private void calculateDuration() {
         LeaveType type = leaveType.getValue();
         LocalDate start = startDate.getValue();
@@ -461,19 +421,17 @@ public class LeaveApplicationView extends VerticalLayout {
             try {
                 if (endSess == null) endSess = LeaveSession.FULL_DAY;
 
-                LeaveDurationResultDTO result = durationEngineService.calculateLeaveDuration(
-                        start, end, currentEmployee, startSess, endSess, applySandwichRule
-                );
+                LeaveDurationResultDTO result = durationEngineService.calculateLeaveDuration(start, end, currentEmployee, startSess, endSess, type.getApplySandwichRule());
                 durationDays.setValue(result.getNetLeaveDays().doubleValue());
             } catch (Exception ex) {
                 durationDays.clear();
-                Notification.show("Calculation Error: " + ex.getMessage(), 4000, Notification.Position.MIDDLE)
-                        .addThemeVariants(NotificationVariant.LUMO_ERROR);
+                Notification.show("Calculation Error: " + ex.getMessage(), 4000, Notification.Position.MIDDLE).addThemeVariants(NotificationVariant.LUMO_ERROR);
             }
         } else {
             durationDays.clear();
         }
     }
+
     private void syncSessionUI() {
         LocalDate start = startDate.getValue();
         LocalDate end = endDate.getValue();
@@ -499,48 +457,72 @@ public class LeaveApplicationView extends VerticalLayout {
         }
         calculateDuration();
     }
+
     private boolean attemptSubmit() {
         try {
             binder.writeBean(currentRequest);
 
             if (durationDays.getValue() == null || durationDays.getValue() <= 0) {
-                Notification.show("Duration must be greater than 0", 3000, Notification.Position.MIDDLE)
-                        .addThemeVariants(NotificationVariant.LUMO_ERROR);
+                Notification.show("Duration must be greater than 0", 3000, Notification.Position.MIDDLE).addThemeVariants(NotificationVariant.LUMO_ERROR);
                 return false;
             }
 
+            List<LeaveRequest> conflicts = leaveRequestService.getMergeableConflicts(currentEmployee.getId(), startDate.getValue(), endDate.getValue());
+            if (!conflicts.isEmpty()) {
+                showMergeConflictDialog(conflicts);
+                return false;
+            }
+
+            executeFinalSubmit(null);
+            return true;
+
+        } catch (ValidationException e) {
+            Notification.show("Please fix the errors in the form.", 3000, Notification.Position.MIDDLE).addThemeVariants(NotificationVariant.LUMO_ERROR);
+            return false;
+        }
+    }
+
+    private void executeFinalSubmit(List<Long> supersededIds) {
+        try {
             Long draftId = this.currentDraft != null ? this.currentDraft.getId() : null;
 
-            leaveRequestService.submitLeaveRequest(
-                    draftId,
-                    currentEmployee,
-                    leaveType.getValue(),
-                    startDate.getValue(),
-                    endDate.getValue(),
-                    reason.getValue(),
-                    LocalDate.now().getYear(),
-                    startSessionBox.getValue(),
-                    endSessionBox.getValue() != null ? endSessionBox.getValue() : LeaveSession.FULL_DAY,
-                    applySandwichRule
-            );
+            leaveRequestService.submitLeaveRequest(draftId, currentEmployee, leaveType.getValue(), startDate.getValue(), endDate.getValue(), reason.getValue(), LocalDate.now().getYear(), startSessionBox.getValue(), endSessionBox.getValue() != null ? endSessionBox.getValue() : LeaveSession.FULL_DAY, applySandwichRule, supersededIds);
 
-            Notification.show("Leave request submitted successfully!", 4000, Notification.Position.TOP_END)
-                    .addThemeVariants(NotificationVariant.LUMO_SUCCESS);
+            Notification.show("Leave request submitted successfully!", 4000, Notification.Position.TOP_END).addThemeVariants(NotificationVariant.LUMO_SUCCESS);
 
             clearForm();
             this.currentDraft = null;
             refreshBalanceAndHistory();
-            return true;
 
-        } catch (ValidationException e) {
-            Notification.show("Please fix the errors in the form.", 3000, Notification.Position.MIDDLE)
-                    .addThemeVariants(NotificationVariant.LUMO_ERROR);
-            return false;
         } catch (Exception e) {
-            Notification.show("Submission failed: " + e.getMessage(), 5000, Notification.Position.MIDDLE)
-                    .addThemeVariants(NotificationVariant.LUMO_ERROR);
-            return false;
+            Notification.show("Submission failed: " + e.getMessage(), 5000, Notification.Position.MIDDLE).addThemeVariants(NotificationVariant.LUMO_ERROR);
         }
+    }
+
+    private void showMergeConflictDialog(List<LeaveRequest> conflicts) {
+        Dialog conflictDialog = new Dialog();
+        conflictDialog.setHeaderTitle("Adjacent Leave Detected");
+
+        Span message = new Span("You already have a leave request near or on these dates. To proceed, this must be merged into a single continuous request of the same leave type.");
+
+        List<Long> conflictIds = new ArrayList<>();
+        VerticalLayout list = new VerticalLayout();
+        for (LeaveRequest conflict : conflicts) {
+            conflictIds.add(conflict.getId());
+            list.add(new Span("• " + conflict.getStartDate() + " to " + conflict.getEndDate() + " (" + conflict.getLeaveType().getName() + ") - " + conflict.getStatus()));
+        }
+
+        Button mergeBtn = new Button("Merge & Submit", e -> {
+            executeFinalSubmit(conflictIds);
+            conflictDialog.close();
+        });
+        mergeBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+
+        Button cancelBtn = new Button("Cancel", e -> conflictDialog.close());
+
+        conflictDialog.add(new VerticalLayout(message, list));
+        conflictDialog.getFooter().add(cancelBtn, mergeBtn);
+        conflictDialog.open();
     }
 
     private void clearForm() {
@@ -553,9 +535,7 @@ public class LeaveApplicationView extends VerticalLayout {
     private void refreshBalanceAndHistory() {
         balanceLayout.removeAll();
 
-        List<LeaveBalance> balances = leaveBalanceService.getBalancesForEmployee(
-                currentEmployee.getId(), LocalDate.now().getYear()
-        );
+        List<LeaveBalance> balances = leaveBalanceService.getBalancesForEmployee(currentEmployee.getId(), LocalDate.now().getYear());
 
         for (LeaveBalance balance : balances) {
             BigDecimal total = balance.getTotalEntitled();
@@ -580,18 +560,10 @@ public class LeaveApplicationView extends VerticalLayout {
                 iconType = VaadinIcon.FAMILY;
             }
 
-            balanceLayout.add(createBalanceCard(
-                    balance.getLeaveType().getName(),
-                    remaining,
-                    used,
-                    total,
-                    themeColor,
-                    iconType
-            ));
+            balanceLayout.add(createBalanceCard(balance.getLeaveType().getName(), remaining, used, total, themeColor, iconType));
         }
 
-        historyGrid.setItems(leaveRequestService.getLeaveHistoryForEmployee(currentEmployee.getId())
-                .stream().filter(req -> !"DRAFT".equals(req.getStatus())).toList());
+        historyGrid.setItems(leaveRequestService.getLeaveHistoryForEmployee(currentEmployee.getId()).stream().filter(req -> !"DRAFT".equals(req.getStatus())).toList());
 
         List<LeaveRequest> drafts = leaveRequestService.getDraftsForEmployee(currentEmployee.getId());
         if (drafts.isEmpty()) {
@@ -626,6 +598,7 @@ public class LeaveApplicationView extends VerticalLayout {
         draftSection.setVisible(false); // Hidden by default
         return draftSection;
     }
+
     private void showApprovalHistoryDialog(LeaveRequest request) {
         Dialog dialog = new Dialog();
         dialog.setHeaderTitle("Approval History & Comments");
@@ -648,18 +621,11 @@ public class LeaveApplicationView extends VerticalLayout {
                 String roleName = getRoleName(approval.getApprovalLevel());
                 String approverName = approval.getApprover() != null ? approval.getApprover().getUsername() : "Unknown"; // Adjust if you have a getFirstName() method
                 String actionText = approval.getAction() != null ? approval.getAction() : "PENDING";
-                String commentText = (approval.getComments() != null && !approval.getComments().isBlank())
-                        ? approval.getComments()
-                        : "No comments provided.";
+                String commentText = (approval.getComments() != null && !approval.getComments().isBlank()) ? approval.getComments() : "No comments provided.";
 
                 // Card container for each timeline entry
                 VerticalLayout entryCard = new VerticalLayout();
-                entryCard.addClassNames(
-                        LumoUtility.Background.CONTRAST_5,
-                        LumoUtility.BorderRadius.MEDIUM,
-                        LumoUtility.Padding.SMALL,
-                        LumoUtility.Margin.Bottom.SMALL
-                );
+                entryCard.addClassNames(LumoUtility.Background.CONTRAST_5, LumoUtility.BorderRadius.MEDIUM, LumoUtility.Padding.SMALL, LumoUtility.Margin.Bottom.SMALL);
                 entryCard.setSpacing(false);
 
                 // Header: Role (Name) - Badge
@@ -677,9 +643,7 @@ public class LeaveApplicationView extends VerticalLayout {
                 headerLayout.setJustifyContentMode(FlexComponent.JustifyContentMode.BETWEEN);
                 headerLayout.setAlignItems(FlexComponent.Alignment.CENTER);
 
-                String timeString = approval.getActedAt() != null
-                        ? approval.getActedAt().format(formatter)
-                        : "Awaiting Action";
+                String timeString = approval.getActedAt() != null ? approval.getActedAt().format(formatter) : "Awaiting Action";
                 Span timeSpan = new Span(timeString);
                 timeSpan.addClassNames(LumoUtility.FontSize.XSMALL, LumoUtility.TextColor.TERTIARY, LumoUtility.Margin.Bottom.XSMALL);
 
@@ -703,19 +667,28 @@ public class LeaveApplicationView extends VerticalLayout {
     private String getRoleName(Integer level) {
         if (level == null) return "Approver";
         switch (level) {
-            case 1: return "Manager";
-            case 2: return "HR";
-            case 3: return "Head of Department (HOD)";
-            default: return "Approver Level " + level;
+            case 1:
+                return "Manager";
+            case 2:
+                return "HR";
+            case 3:
+                return "Head of Department (HOD)";
+            default:
+                return "Approver Level " + level;
         }
     }
+
     private String formatSessionName(LeaveSession session) {
         if (session == null) return "";
         switch (session) {
-            case FIRST_HALF: return "1st Half (Morning off)";
-            case SECOND_HALF: return "2nd Half (Afternoon off)";
-            case FULL_DAY: return "Full Day";
-            default: return session.name();
+            case FIRST_HALF:
+                return "1st Half (Morning off)";
+            case SECOND_HALF:
+                return "2nd Half (Afternoon off)";
+            case FULL_DAY:
+                return "Full Day";
+            default:
+                return session.name();
         }
     }
 }

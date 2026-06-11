@@ -40,4 +40,6 @@ public class LeaveApproval {
 
     @Column(name = "acted_at")
     private LocalDateTime actedAt;
+
+
 }

@@ -13,6 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.*;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -48,50 +49,100 @@ public class LeaveRequestService {
 
     @Transactional
     public void submitLeaveRequest(Long existingDraftId, Employee detachedEmployee, LeaveType leaveType,
-                                   LocalDate startDate, LocalDate endDate,
+                                   LocalDate inputStartDate, LocalDate inputEndDate,
                                    String reason, Integer currentYear,
-                                   LeaveSession startSession, LeaveSession endSession,
-                                   boolean applySandwichRule) {
+                                   LeaveSession inputStartSession, LeaveSession inputEndSession,
+                                   boolean applySandwichRule, List<Long> supersededLeaveIds) {
 
         Employee employee = employeeRepository.findById(detachedEmployee.getId())
                 .orElseThrow(() -> new IllegalArgumentException("Employee not found"));
 
-        // 1. Overlap Validation
-        boolean hasOverlap = leaveRequestRepository.hasOverlappingLeave(employee.getId(), startDate, endDate);
-        if (hasOverlap) {
-            throw new IllegalArgumentException("This date is already an approved or pending leave, so you cannot apply.");
+        LeaveRequest request = (existingDraftId != null)
+                ? leaveRequestRepository.findById(existingDraftId).orElseThrow() : new LeaveRequest();
+        String oldState = existingDraftId != null ? String.format("{ \"status\": \"%s\" }", request.getStatus()) : null;
+
+        // 1. Establish the base dates and sessions
+        LocalDate startDate = inputStartDate;
+        LocalDate endDate = inputEndDate;
+        LeaveSession startSession = inputStartSession;
+        LeaveSession endSession = inputEndSession;
+
+        List<LeaveRequest> pendingLeavesToCancelImmediately = new ArrayList<>();
+        BigDecimal alreadyDeductedFromApproved = BigDecimal.ZERO;
+
+        // 2. STRETCH DATES BACKWARDS/FORWARDS IF MERGING
+        if (supersededLeaveIds != null && !supersededLeaveIds.isEmpty()) {
+            request.setSupersededLeaveIds(supersededLeaveIds.stream().map(String::valueOf).collect(Collectors.joining(",")));
+
+            for (Long id : supersededLeaveIds) {
+                LeaveRequest oldReq = leaveRequestRepository.findById(id).orElseThrow();
+                if (!oldReq.getLeaveType().getId().equals(leaveType.getId())) {
+                    throw new IllegalArgumentException("Merged leaves must be of the exact same Leave Type.");
+                }
+
+                // If old leave started earlier, stretch our new Start Date backwards
+                if (oldReq.getStartDate().isBefore(startDate)) {
+                    startDate = oldReq.getStartDate();
+                    startSession = oldReq.getStartSession();
+                }
+
+                // If old leave ended later, stretch our new End Date forwards
+                if (oldReq.getEndDate().isAfter(endDate)) {
+                    endDate = oldReq.getEndDate();
+                    endSession = oldReq.getEndSession();
+                }
+
+                // Balance Math prep
+                if (oldReq.getStatus().equals(STATUS_APPROVED)) {
+                    alreadyDeductedFromApproved = alreadyDeductedFromApproved.add(oldReq.getDurationDays());
+                } else if (oldReq.getStatus().startsWith(STATUS_PENDING)) {
+                    pendingLeavesToCancelImmediately.add(oldReq);
+                }
+            }
         }
 
-        // 2. Duration Engine Calculation
-        LeaveDurationResultDTO durationResult = durationEngineService.calculateLeaveDuration(
-                startDate, endDate, employee, startSession, endSession, leaveType.getApplySandwichRule()
-        );
-        BigDecimal duration = durationResult.getNetLeaveDays();
+        // 3. OVERLAP CHECK (Using the new Stretched Dates)
+        boolean hasOverlap;
+        if (supersededLeaveIds != null && !supersededLeaveIds.isEmpty()) {
+            hasOverlap = leaveRequestRepository.hasOverlappingLeaveIgnoring(employee.getId(), startDate, endDate, supersededLeaveIds);
+        } else {
+            hasOverlap = leaveRequestRepository.hasOverlappingLeave(employee.getId(), startDate, endDate);
+        }
 
-        // 3. Back-dating Validation
+        if (hasOverlap) {
+            throw new IllegalArgumentException("This date overlaps with another approved or pending leave.");
+        }
+
+        // 4. Calculate Final Duration based on Stretched Dates
+        LeaveDurationResultDTO durationResult = durationEngineService.calculateLeaveDuration(
+                startDate, endDate, employee, startSession, endSession, leaveType.getApplySandwichRule());
+
+        BigDecimal duration = durationResult.getNetLeaveDays();
+        BigDecimal sandwichPenaltyDays = durationResult.getSandwichPenaltyDays() != null
+                ? durationResult.getSandwichPenaltyDays() : BigDecimal.ZERO;
+
         if (startDate.isBefore(LocalDate.now()) && !BACKDATED_ALLOWED_CODES.contains(leaveType.getCode().toUpperCase())) {
             throw new PastDateException("Back-dating is only permitted for Sick or Emergency leaves.");
         }
 
-        // 4. Calculate Consecutive "Chain" Duration for Rules
+        // 5. Look for any remaining Adjacent Chains
         LocalDate previousWorkingDay = durationEngineService.getPreviousWorkingDay(startDate, employee);
         LocalDate nextWorkingDay = durationEngineService.getNextWorkingDay(endDate, employee);
 
-        List<LeaveRequest> adjacentLeaves = leaveRequestRepository.findAdjacentLeaves(
-                employee.getId(), previousWorkingDay, nextWorkingDay
-        );
+        List<LeaveRequest> adjacentLeaves = leaveRequestRepository.findAdjacentLeaves(employee.getId(), previousWorkingDay, nextWorkingDay);
 
         BigDecimal effectiveChainDuration = duration;
+        List<LeaveRequest> adjacentPendingLeavesToUpgrade = new ArrayList<>();
         long crossRequestPenaltyDays = 0;
 
-        // NEW: Separate pending leaves that need auto-upgrading
-        List<LeaveRequest> adjacentPendingLeavesToUpgrade = new ArrayList<>();
-
         for (LeaveRequest adj : adjacentLeaves) {
-            // Add to total chain duration regardless of whether it is PENDING or APPROVED
+            // Skip adjacencies if they are the ones we just merged into this request
+            if (supersededLeaveIds != null && supersededLeaveIds.contains(adj.getId())) {
+                continue;
+            }
+
             effectiveChainDuration = effectiveChainDuration.add(adj.getDurationDays());
 
-            // If it is PENDING, we will need to upgrade its workflow later
             if (adj.getStatus().startsWith(STATUS_PENDING)) {
                 adjacentPendingLeavesToUpgrade.add(adj);
             }
@@ -100,80 +151,86 @@ public class LeaveRequestService {
                 if (adj.getEndDate().isBefore(startDate)) {
                     long gap = java.time.temporal.ChronoUnit.DAYS.between(adj.getEndDate(), startDate) - 1;
                     if (gap > 0) crossRequestPenaltyDays += gap;
-                }
-                else if (adj.getStartDate().isAfter(endDate)) {
+                } else if (adj.getStartDate().isAfter(endDate)) {
                     long gap = java.time.temporal.ChronoUnit.DAYS.between(endDate, adj.getStartDate()) - 1;
                     if (gap > 0) crossRequestPenaltyDays += gap;
                 }
             }
         }
 
-        boolean isSandwichLeave = durationResult.isSandwichLeave();
-        BigDecimal sandwichPenaltyDays = durationResult.getSandwichPenaltyDays() != null
-                ? durationResult.getSandwichPenaltyDays() : BigDecimal.ZERO;
-
         if (crossRequestPenaltyDays > 0) {
             duration = duration.add(BigDecimal.valueOf(crossRequestPenaltyDays));
-            isSandwichLeave = true;
             sandwichPenaltyDays = sandwichPenaltyDays.add(BigDecimal.valueOf(crossRequestPenaltyDays));
             reason = String.format("[SANDWICH PENALTY: %d gap days] - ", crossRequestPenaltyDays) + reason;
         }
 
-        // 5. Strict Balance Validation
+        // 6. Net Duration to Hold calculation
+        BigDecimal netDurationToHold = duration.subtract(alreadyDeductedFromApproved);
+        if (netDurationToHold.compareTo(BigDecimal.ZERO) < 0) {
+            netDurationToHold = BigDecimal.ZERO;
+        }
+
+        // 7. Balance Deductions
         List<LeaveBalance> balances = leaveBalanceService.getBalancesForEmployee(employee.getId(), currentYear);
         LeaveBalance currentBalance = balances.stream()
                 .filter(b -> b.getLeaveType().getId().equals(leaveType.getId()))
                 .findFirst().orElse(null);
 
         BigDecimal effectiveBalance = leaveBalanceService.getEffectiveBalance(currentBalance);
-        if (duration.compareTo(effectiveBalance) > 0) {
+
+        if (netDurationToHold.compareTo(effectiveBalance) > 0) {
             if (!leaveType.getCode().equals("SL-001") && !leaveType.getCode().equals("EMG-001")) {
                 throw new IllegalArgumentException("Insufficient balance.");
             }
             reason = "[WARNING: NEGATIVE BALANCE REQUEST] - " + reason;
         }
 
-        // 6. Get Rules based on the combined CHAIN duration for the NEW request
         List<LeaveApprovalRule> applicableRules = ruleService.getApplicableRules(leaveType.getId(), effectiveChainDuration);
         if (applicableRules.isEmpty()) {
             throw new IllegalStateException("System Configuration Error: No rules found.");
         }
 
-        // 7. Save Entity
-        LeaveRequest request = (existingDraftId != null)
-                ? leaveRequestRepository.findById(existingDraftId).orElseThrow() : new LeaveRequest();
-        String oldState = existingDraftId != null ? String.format("{ \"status\": \"%s\" }", request.getStatus()) : null;
-
+        // 8. Save with Stretched Dates
         request.setEmployee(employee);
         request.setLeaveType(leaveType);
-        request.setStartDate(startDate);
-        request.setEndDate(endDate);
+        request.setStartDate(startDate); // Now uses the STRETCHED date!
+        request.setEndDate(endDate);     // Now uses the STRETCHED date!
         request.setDurationDays(duration);
-        request.setStartSession(startSession);
-        request.setEndSession(endSession);
+        request.setStartSession(startSession); // Safely carried over if stretched
+        request.setEndSession(endSession);     // Safely carried over if stretched
         request.setReason(reason);
         request.setStatus(STATUS_PENDING);
         request.setCurrentLevel(1);
-        request.setIsSandwichLeave(isSandwichLeave);
         request.setSandwichPenaltyDays(sandwichPenaltyDays);
 
         LeaveRequest savedRequest = leaveRequestRepository.save(request);
 
-        // 8. Execute Side-Effects
-        leaveBalanceService.holdPendingBalance(savedRequest);
+        leaveBalanceService.holdPendingBalance(savedRequest, netDurationToHold);
         approvalRoutingService.generateApprovalWorkflow(savedRequest, applicableRules);
 
-        // 9. NEW: Auto-Upgrade adjacent PENDING leaves
         for (LeaveRequest pendingAdj : adjacentPendingLeavesToUpgrade) {
-            // Get the rules for the adjacent leave's specific type, but using the NEW combined duration
             List<LeaveApprovalRule> upgradedRules = ruleService.getApplicableRules(pendingAdj.getLeaveType().getId(), effectiveChainDuration);
             approvalRoutingService.upgradePendingWorkflow(pendingAdj, upgradedRules, savedRequest.getId());
         }
 
         String action = existingDraftId != null ? "UPDATED" : "CREATED";
         auditLoggingService.saveAuditLog(savedRequest.getId(), action, "leave_requests", oldState, "{...}");
-    }
 
+        // 9. Cleanup Pending Superseded leaves
+        for (LeaveRequest pendingOldReq : pendingLeavesToCancelImmediately) {
+            String oldPendingState = String.format("{ \"status\": \"%s\" }", pendingOldReq.getStatus());
+
+            pendingOldReq.setStatus(STATUS_CANCELLED);
+            pendingOldReq.setReason(pendingOldReq.getReason() + " [AUTO-CANCELLED: MERGED INTO REQUEST ID: " + savedRequest.getId() + "]");
+            leaveRequestRepository.save(pendingOldReq);
+
+            leaveBalanceService.releasePendingHold(pendingOldReq);
+            approvalRoutingService.cancelPendingApprovals(pendingOldReq.getId());
+
+            String newPendingState = String.format("{ \"status\": \"%s\" }", STATUS_CANCELLED);
+            auditLoggingService.saveAuditLog(pendingOldReq.getId(), "AUTO_CANCELLED_FOR_MERGE", "leave_requests", oldPendingState, newPendingState);
+        }
+    }
     @Transactional(readOnly = true)
     public List<LeaveRequest> getLeaveHistoryForEmployee(Long employeeId) {
         return leaveRequestRepository.findByEmployeeIdOrderByStartDateDesc(employeeId);
@@ -225,8 +282,7 @@ public class LeaveRequestService {
             request.setStatus(STATUS_CANCELLED);
             leaveBalanceService.rollbackDeduction(request);
 
-            // Loop through dates and let the Cron Job fix the Attendance table perfectly
-            LocalDate cursor = request.getStartDate();
+           LocalDate cursor = request.getStartDate();
             while (!cursor.isAfter(request.getEndDate())) {
                 if (cursor.isBefore(LocalDate.now()) || cursor.equals(LocalDate.now())) {
                     attendanceCronJobService.recalculateAttendanceForDate(request.getEmployee().getId(), cursor);
@@ -240,7 +296,6 @@ public class LeaveRequestService {
                 String.format("{ \"status\": \"%s\" }", savedRequest.getStatus()));
     }
 
-    // Fixed: Updated method signature and implementation to match new DTO and Entity properties
     @Transactional
     public LeaveRequest saveOrUpdateDraft(Long draftId, Employee detachedEmployee, LeaveType leaveType,
                                           LocalDate startDate, LocalDate endDate, String reason,
@@ -250,7 +305,6 @@ public class LeaveRequestService {
         Employee employee = employeeRepository.findById(detachedEmployee.getId())
                 .orElseThrow(() -> new IllegalArgumentException("Employee not found"));
 
-        // Fixed: Use calculateLeaveDuration and DTO
         LeaveDurationResultDTO durationResult = durationEngineService.calculateLeaveDuration(
                 startDate, endDate, employee, startSession, endSession, leaveType.getApplySandwichRule()
         );
@@ -275,7 +329,6 @@ public class LeaveRequestService {
         draft.setDurationDays(duration);
         draft.setReason(reason != null ? reason : "");
 
-        // Fixed: set new session variables
         draft.setStartSession(startSession);
         draft.setEndSession(endSession);
         draft.setIsSandwichLeave(durationResult.isSandwichLeave());
@@ -291,5 +344,12 @@ public class LeaveRequestService {
         auditLoggingService.saveAuditLog(savedDraft.getId(), action, "leave_requests", oldState, newState);
 
         return savedDraft;
+    }
+    @Transactional(readOnly = true)
+    public List<LeaveRequest> getMergeableConflicts(Long employeeId, LocalDate startDate, LocalDate endDate) {
+        Employee emp = employeeRepository.findById(employeeId).orElseThrow();
+        LocalDate prevDay = durationEngineService.getPreviousWorkingDay(startDate, emp);
+        LocalDate nextDay = durationEngineService.getNextWorkingDay(endDate, emp);
+        return leaveRequestRepository.findAdjacentLeaves(employeeId, prevDay, nextDay);
     }
 }

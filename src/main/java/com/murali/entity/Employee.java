@@ -21,8 +21,7 @@ public class Employee{
     @GeneratedValue(strategy = GenerationType.SEQUENCE)
     private Long id;
 
-    // cascade all coz whatever chages to user should reflect on employee
-    @OneToOne(fetch = FetchType.LAZY,cascade = CascadeType.ALL)
+    @OneToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", unique = true)
     private User user;
 

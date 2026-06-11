@@ -17,10 +17,7 @@ import java.math.BigDecimal;
                 @UniqueConstraint(
                         name = "uq_leave_approval_rules",
                         columnNames = {
-                                "leave_type_id",
-                                "min_days",
-                                "max_days",
-                                "approval_level"
+                                "leave_type_id","min_days","max_days","approval_level"
                         }
                 )
         }

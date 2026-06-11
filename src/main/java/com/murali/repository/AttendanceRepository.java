@@ -19,8 +19,6 @@ public interface AttendanceRepository extends JpaRepository<Attendance, Long> {
     @Query("SELECT a FROM Attendance a WHERE a.attendanceDate = :date")
     List<Attendance> findAllByAttendanceDate(@Param("date") LocalDate date);
 
-    // Note: You can technically remove this line since findByEmployeeIdAndAttendanceDate
-    // above does the exact same thing via Spring Data's property traversal.
     Optional<Attendance> findByEmployee_IdAndAttendanceDate(Long employeeId, LocalDate attendanceDate);
 
     @Query("SELECT a FROM Attendance a " +

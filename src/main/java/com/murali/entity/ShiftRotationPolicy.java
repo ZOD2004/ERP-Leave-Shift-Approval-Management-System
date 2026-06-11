@@ -31,7 +31,7 @@ public class ShiftRotationPolicy {
     @Column(name = "is_active")
     private Boolean active = true;
 
-    @OneToMany(mappedBy = "policy", cascade = CascadeType.ALL, fetch = FetchType.LAZY, orphanRemoval = true)
+    @OneToMany(mappedBy = "policy", fetch = FetchType.LAZY)
     @OrderBy("sequenceOrder ASC")
     private List<RotationSequence> sequences = new ArrayList<>();
 }

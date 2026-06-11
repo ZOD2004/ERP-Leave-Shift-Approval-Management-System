@@ -24,7 +24,7 @@ public class TimeLog {
     private LocalDateTime punchTime;
 
     @Column(name = "punch_type", length = 5, nullable = false)
-    private String punchType;
+    private String punchType;// in or out
 
     private String source;
 }

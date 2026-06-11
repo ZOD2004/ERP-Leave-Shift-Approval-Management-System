@@ -59,17 +59,17 @@ public class LeaveBalanceService {
     }
 
     @Transactional
-    public void holdPendingBalance(LeaveRequest request) {
+    public void holdPendingBalance(LeaveRequest request, BigDecimal customNetDaysToHold) {
         LeaveBalance balance = getOrCreateBalance(request.getEmployee(), request.getLeaveType(), request.getStartDate().getYear());
         String oldState = formatAuditState(balance);
 
         BigDecimal currentPending = balance.getPendingDays() != null ? balance.getPendingDays() : BigDecimal.ZERO;
-        balance.setPendingDays(currentPending.add(request.getDurationDays()));
+
+        balance.setPendingDays(currentPending.add(customNetDaysToHold));
 
         leaveBalanceRepository.save(balance);
 
-        BigDecimal netDays = request.getDurationDays().subtract(request.getSandwichPenaltyDays());
-        recordTransaction(request.getEmployee(), request.getLeaveType(), PENDING_HOLD, netDays, request.getId(), "Pending hold placed for new leave request");
+        recordTransaction(request.getEmployee(), request.getLeaveType(), PENDING_HOLD, customNetDaysToHold, request.getId(), "Pending hold placed for new/merged leave request");
 
         if (request.getSandwichPenaltyDays().compareTo(BigDecimal.ZERO) > 0) {
             recordTransaction(request.getEmployee(), request.getLeaveType(), PENDING_HOLD, request.getSandwichPenaltyDays(), request.getId(), "Pending hold for cross-request sandwich penalty");

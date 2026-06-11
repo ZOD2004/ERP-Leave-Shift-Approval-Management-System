@@ -1,5 +1,6 @@
 package com.murali.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 
 import lombok.AllArgsConstructor;
@@ -23,6 +24,7 @@ public class User {
     private String username;
 
     @Column(name = "password_hash", nullable = false)
+    @JsonIgnore
     private String passwordHash;
 
     @Column(nullable = false, unique = true, length = 50)
@@ -31,7 +33,7 @@ public class User {
     @Column(name = "is_active")
     private Boolean active = true;
 
-    @ManyToOne(fetch = FetchType.EAGER)
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "role_id", nullable = false)
     private Role role;
 

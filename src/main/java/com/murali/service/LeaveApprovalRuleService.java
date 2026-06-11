@@ -78,7 +78,6 @@ public class LeaveApprovalRuleService {
         log.info("LeaveApprovalRule DELETED successfully. ID: {}", id);
         auditLoggingService.saveAuditLog(id, "DELETED", "leave_approval_rules", oldState, null);
     }
-
     public List<LeaveType> getAllLeaveTypes() {
         return leaveTypeRepository.findAll();
     }

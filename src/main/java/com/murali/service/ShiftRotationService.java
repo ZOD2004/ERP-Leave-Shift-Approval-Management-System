@@ -22,37 +22,31 @@ public class ShiftRotationService {
     private final ShiftRotationPolicyRepository policyRepository;
     private final ShiftAssignmentRepository assignmentRepository;
 
-    private static final int GENERATION_BUFFER_DAYS = 30;
+    private static final int GENERATION_DAYS_AHEAD = 30;
 
-    /**
-     * The Daily Top-Up Cron Job. Runs at 2:00 AM every night.
-     * Looks for active policies whose generated runway is running out.
-     */
+
     @Scheduled(cron = "0 0 2 * * ?")
     @Transactional
     public void dailyTopUpRotations() {
         log.info("Starting Daily Shift Rotation Top-Up Job.");
 
         List<ShiftRotationPolicy> activePolicies = policyRepository.findByActiveTrue();
-        LocalDate targetMinimumRunway = LocalDate.now().plusDays(GENERATION_BUFFER_DAYS);
+        LocalDate targetMinimumRunway = LocalDate.now().plusDays(GENERATION_DAYS_AHEAD);
 
         for (ShiftRotationPolicy policy : activePolicies) {
             try {
-                // Find the latest shift assignment generated for this policy's employee
                 LocalDate maxGeneratedDate = assignmentRepository.findMaxEndDateByEmployeeId(policy.getEmployee().getId())
-                        .orElse(policy.getStartDate().minusDays(1)); // Fallback to before policy started
+                        .orElse(policy.getStartDate().minusDays(1));
 
-                // If runway is expiring within 7 days, top it up to the 30-day buffer
                 if (maxGeneratedDate.isBefore(LocalDate.now().plusDays(7))) {
 
-                    // Don't generate past the policy's end date (if it has one)
                     LocalDate generationEnd = targetMinimumRunway;
                     if (policy.getEndDate() != null && generationEnd.isAfter(policy.getEndDate())) {
                         generationEnd = policy.getEndDate();
                     }
 
                     if (!maxGeneratedDate.isBefore(generationEnd)) {
-                        continue; // No generation needed, already past end date
+                        continue;
                     }
 
                     LocalDate startGenerationFrom = maxGeneratedDate.plusDays(1);
@@ -69,16 +63,12 @@ public class ShiftRotationService {
         log.info("Finished Daily Shift Rotation Top-Up Job.");
     }
 
-    /**
-     * Called by the API when HR creates a brand new policy.
-     * Validates the policy, saves it, and immediately kickstarts the first 30 days of shifts.
-     */
     @Transactional
     public ShiftRotationPolicy createAndKickstartPolicy(ShiftRotationPolicy policy) {
         validatePolicy(policy);
         ShiftRotationPolicy savedPolicy = policyRepository.save(policy);
 
-        LocalDate generationEnd = savedPolicy.getStartDate().plusDays(GENERATION_BUFFER_DAYS);
+        LocalDate generationEnd = savedPolicy.getStartDate().plusDays(GENERATION_DAYS_AHEAD);
         if (savedPolicy.getEndDate() != null && generationEnd.isAfter(savedPolicy.getEndDate())) {
             generationEnd = savedPolicy.getEndDate();
         }
@@ -87,9 +77,6 @@ public class ShiftRotationService {
         return savedPolicy;
     }
 
-    /**
-     * Validates that WORK segments have shifts, OFF segments don't, and sequences are ordered.
-     */
     private void validatePolicy(ShiftRotationPolicy policy) {
         if (policy.getSequences() == null || policy.getSequences().isEmpty()) {
             throw new IllegalArgumentException("A rotation policy must have at least one sequence.");
@@ -108,28 +95,21 @@ public class ShiftRotationService {
         }
     }
 
-    /**
-     * Processes a single policy, evaluates segment types, skips manual conflicts, and chunks the result.
-     */
-    public void processPolicyForWindow(ShiftRotationPolicy policy, LocalDate windowStart, LocalDate windowEnd) {
-        if (windowStart.isAfter(windowEnd)) return;
+    public void processPolicyForWindow(ShiftRotationPolicy policy, LocalDate start, LocalDate end) {
+        if (start.isAfter(end)) return;
 
         int totalCycleDays = calculateCycleDays(policy);
 
-        // Fetch existing assignments to map out "Occupied Dates" (Manual Overrides by HR)
         List<ShiftAssignment> existingAssignments = assignmentRepository.findByEmployeeIdInAndDateRange(
-                List.of(policy.getEmployee().getId()), windowStart, windowEnd
-        );
-        Set<LocalDate> occupiedDates = extractOccupiedDates(existingAssignments, windowStart, windowEnd);
+                List.of(policy.getEmployee().getId()), start, end);
+        Set<LocalDate> occupiedDates = extractOccupiedDates(existingAssignments, start, end);
 
         List<ShiftAssignment> newAssignments = new ArrayList<>();
         Shift currentShift = null;
         LocalDate chunkStart = null;
         LocalDate chunkEnd = null;
 
-        for (LocalDate date = windowStart; !date.isAfter(windowEnd); date = date.plusDays(1)) {
-
-            // If HR manually assigned a shift here, we skip it and break the current chunk
+        for (LocalDate date = start; !date.isAfter(end); date = date.plusDays(1)) {
             if (occupiedDates.contains(date)) {
                 if (currentShift != null) {
                     newAssignments.add(createAssignment(policy.getEmployee(), currentShift, chunkStart, chunkEnd));
@@ -140,8 +120,7 @@ public class ShiftRotationService {
 
             RotationSequence activeSequence = calculateSequenceForDate(policy, date, totalCycleDays);
 
-            // If it's an OFF segment, we close the chunk and do NOT assign a shift for this day
-            if (activeSequence == null || activeSequence.getSegmentType() == RotationSegmentType.OFF) {
+           if (activeSequence == null || activeSequence.getSegmentType() == RotationSegmentType.OFF) {
                 if (currentShift != null) {
                     newAssignments.add(createAssignment(policy.getEmployee(), currentShift, chunkStart, chunkEnd));
                     currentShift = null;
@@ -149,7 +128,6 @@ public class ShiftRotationService {
                 continue;
             }
 
-            // It's a WORK segment! Let's group it.
             Shift shiftForDay = activeSequence.getShift();
 
             if (currentShift == null) {
@@ -166,31 +144,25 @@ public class ShiftRotationService {
             }
         }
 
-        // Close out the final pending chunk
         if (currentShift != null) {
             newAssignments.add(createAssignment(policy.getEmployee(), currentShift, chunkStart, chunkEnd));
         }
 
         if (!newAssignments.isEmpty()) {
             assignmentRepository.saveAll(newAssignments);
-            log.debug("Generated {} chunked assignment records for Employee {} from {} to {}",
-                    newAssignments.size(), policy.getEmployee().getId(), windowStart, windowEnd);
+            log.info("Generated {} chunked assignment records for Employee {} from {} to {}",
+                    newAssignments.size(), policy.getEmployee().getId(), start, end);
         }
     }
 
-    /**
-     * Dynamically calculates total cycle length.
-     */
-    private int calculateCycleDays(ShiftRotationPolicy policy) {
+    public int calculateCycleDays(ShiftRotationPolicy policy) {
         return policy.getSequences().stream()
                 .mapToInt(RotationSequence::getDurationDays)
                 .sum();
     }
 
-    /**
-     * Mathematical engine to find exactly which RotationSequence falls on a specific date.
-     */
-    private RotationSequence calculateSequenceForDate(ShiftRotationPolicy policy, LocalDate targetDate, int totalCycleDays) {
+
+    public RotationSequence calculateSequenceForDate(ShiftRotationPolicy policy, LocalDate targetDate, int totalCycleDays) {
         long daysSinceStart = ChronoUnit.DAYS.between(policy.getStartDate(), targetDate);
         if (daysSinceStart < 0) return null;
 
@@ -205,14 +177,14 @@ public class ShiftRotationService {
         return null;
     }
 
-    private Set<LocalDate> extractOccupiedDates(List<ShiftAssignment> assignments, LocalDate windowStart, LocalDate windowEnd) {
+    private Set<LocalDate> extractOccupiedDates(List<ShiftAssignment> assignments, LocalDate startDate, LocalDate endDate) {
         Set<LocalDate> dates = new HashSet<>();
         for (ShiftAssignment sa : assignments) {
-            LocalDate cur = sa.getStartDate().isBefore(windowStart) ? windowStart : sa.getStartDate();
-            LocalDate end = sa.getEndDate().isAfter(windowEnd) ? windowEnd : sa.getEndDate();
-            while (!cur.isAfter(end)) {
-                dates.add(cur);
-                cur = cur.plusDays(1);
+            LocalDate start = sa.getStartDate().isBefore(startDate) ? startDate : sa.getStartDate();
+            LocalDate end = sa.getEndDate().isAfter(endDate) ? endDate : sa.getEndDate();
+            while (!start.isAfter(end)) {
+                dates.add(start);
+                start = start.plusDays(1);
             }
         }
         return dates;
@@ -232,10 +204,7 @@ public class ShiftRotationService {
         return policyRepository.findAllWithEmployee();
     }
 
-    /**
-     * Deletes a shift rotation policy.
-     * Note: This stops future generation, but does NOT delete already-generated shifts.
-     */
+
     @Transactional
     public void deletePolicy(Long id) {
         ShiftRotationPolicy policy = policyRepository.findById(id)

@@ -67,6 +67,7 @@ public class AttendanceCronJobService {
             List<LeaveRequest> approvedLeaves = leaveRequestRepository.findApprovedLeavesForEmployeesInRange(
                     empIds, "APPROVED", yesterday, yesterday);
 
+            //dint come
             for (ShiftAssignment assignment : assignments) {
                 Employee emp = assignment.getEmployee();
 

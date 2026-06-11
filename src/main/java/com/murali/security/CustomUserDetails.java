@@ -25,9 +25,7 @@ public class CustomUserDetails implements UserDetails {
     }
 
     public Long getEmployeeId() {
-        return user.getEmployee() != null
-                ? user.getEmployee().getId()
-                : null;
+        return user.getEmployee() != null ? user.getEmployee().getId() : null;
     }
 
     public String getRole() {

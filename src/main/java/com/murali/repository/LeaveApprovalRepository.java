@@ -22,7 +22,6 @@ public interface LeaveApprovalRepository extends JpaRepository<LeaveApproval, Lo
             "AND a.action = 'PENDING' " +
             "AND a.approvalLevel = r.currentLevel")
     List<LeaveApproval> findActivePendingApprovalsForUser(@Param("approverId") Long approverId);
-//    List<LeaveApproval> findByLeaveRequestIdOrderByApprovalLevelAsc(Long leaveRequestId);
 
     @Query("SELECT a FROM LeaveApproval a " +
             "JOIN FETCH a.approver " +

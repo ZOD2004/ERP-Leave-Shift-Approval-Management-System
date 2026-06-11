@@ -56,23 +56,18 @@ public class DashboardService {
         return getMissingPunchesCount(startOfMonth, endOfMonth);
     }
 
-    // --- REFACTORED METRICS ---
-
     public long getEscalatedApprovalsCount() {
-        // Just checking how many current items are screaming for HR's attention
-        return leaveApprovalRepository.countPendingEscalations();
+       return leaveApprovalRepository.countPendingEscalations();
     }
 
     public long getManualOverridesCount() {
         LocalDate startOfMonth = LocalDate.now().withDayOfMonth(1);
         LocalDate endOfMonth = LocalDate.now().withDayOfMonth(LocalDate.now().lengthOfMonth());
 
-        // Since we deleted the override flag, we look for 1-day assignments created manually
-        return shiftAssignmentRepository.countSingleDayHolePunches(startOfMonth, endOfMonth);
+      return shiftAssignmentRepository.countSingleDayHolePunches(startOfMonth, endOfMonth);
     }
 
     public long getExhaustedBalanceUsersCount() {
-        // Replaces "Negative Balances". Counts how many people spilled over into Unpaid Leave
         return leaveBalanceRepository.countUsersWithUnpaidLeave(LocalDate.now().getYear());
     }
 }

@@ -47,8 +47,7 @@ public class SecurityService {
         if (principal == null) {
             return null;
         }
-
-        return userRepository.findById(principal.getUserId())
+        return userRepository.findWithRoleById(principal.getUserId())
                 .orElseThrow(() ->
                         new RuntimeException("Authenticated user not found"));
     }

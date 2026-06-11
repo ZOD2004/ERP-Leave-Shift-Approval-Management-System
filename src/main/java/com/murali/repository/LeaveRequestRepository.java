@@ -1,6 +1,7 @@
 package com.murali.repository;
 
 import com.murali.entity.LeaveRequest;
+import com.murali.entity.LeaveType;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -88,6 +89,30 @@ public interface LeaveRequestRepository extends JpaRepository<LeaveRequest, Long
             @Param("startDate") LocalDate startDate,
             @Param("endDate") LocalDate endDate
     );
+    @Query("SELECT CASE WHEN COUNT(lr) > 0 THEN true ELSE false END FROM LeaveRequest lr " +
+            "WHERE lr.employee.id = :employeeId " +
+            "AND (lr.status = 'APPROVED' OR lr.status LIKE 'PENDING%') " +
+            "AND (lr.startDate <= :endDate AND lr.endDate >= :startDate) " +
+            "AND (COALESCE(:ignoredIds, NULL) IS NULL OR lr.id NOT IN :ignoredIds)")
+    boolean hasOverlappingLeaveIgnoring(
+            @Param("employeeId") Long employeeId,
+            @Param("startDate") LocalDate startDate,
+            @Param("endDate") LocalDate endDate,
+            @Param("ignoredIds") List<Long> ignoredIds
+    );
+    @EntityGraph(attributePaths = {"leaveType"})
+    @Query("SELECT lr FROM LeaveRequest lr " +
+            "WHERE lr.employee.id = :employeeId " +
+            "AND (lr.status = 'APPROVED' OR lr.status LIKE 'PENDING%') " +
+            "AND ( (lr.startDate <= :endDate AND lr.endDate >= :startDate) " +
+            "      OR (lr.endDate = :dayBefore OR lr.startDate = :dayAfter) )")
+    List<LeaveRequest> findConflictsForMerge(
+            @Param("employeeId") Long employeeId,
+            @Param("startDate") LocalDate startDate,
+            @Param("endDate") LocalDate endDate,
+            @Param("dayBefore") LocalDate dayBefore,
+            @Param("dayAfter") LocalDate dayAfter
+    );
     @EntityGraph(attributePaths = {"leaveType"})
     List<LeaveRequest> findByEmployeeIdAndStatusOrderByIdDesc(Long employeeId, String status);
     @Query("SELECT COUNT(lr) FROM LeaveRequest lr WHERE " +
@@ -104,8 +129,10 @@ public interface LeaveRequestRepository extends JpaRepository<LeaveRequest, Long
             @Param("targetDate") LocalDate targetDate
     );
 
+
+    @EntityGraph(attributePaths = {"leaveType"})
     @Query("SELECT lr FROM LeaveRequest lr WHERE lr.employee.id = :employeeId " +
-            "AND lr.status IN ('APPROVED', 'PENDING') " +
+            "AND (lr.status = 'APPROVED' OR lr.status LIKE 'PENDING%') " +
             "AND (lr.endDate = :dayBefore OR lr.startDate = :dayAfter)")
     List<LeaveRequest> findAdjacentLeaves(
             @Param("employeeId") Long employeeId,

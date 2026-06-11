@@ -69,7 +69,7 @@ public class ApprovalRoutingService {
         LeaveApprovalRule levelRule = null;
 
         for (LeaveApprovalRule rule : applicableRules) {
-            if (rule.getApprovalLevel() == targetLevel) { // use targetLevel to get the applicable rule
+            if (rule.getApprovalLevel() == targetLevel) {
                 levelRule = rule;
                 break;
             }
@@ -231,6 +231,32 @@ public class ApprovalRoutingService {
 
         leaveBalanceService.deduct(request);
 
+        // REPLACEMENT BLOCK in finalizeApproval
+        if (request.getSupersededLeaveIds() != null && !request.getSupersededLeaveIds().isEmpty()) {
+            String[] ids = request.getSupersededLeaveIds().split(",");
+            for (String idStr : ids) {
+                Long oldId = Long.valueOf(idStr.trim());
+                LeaveRequest oldReq = leaveRequestRepository.findById(oldId).orElse(null);
+
+                if (oldReq != null && !oldReq.getStatus().equals(LeaveRequestService.STATUS_CANCELLED)) {
+
+                    // 1. Capture the status BEFORE changing it
+                    String previousStatus = oldReq.getStatus();
+
+                    // 2. Cancel it
+                    oldReq.setStatus(LeaveRequestService.STATUS_CANCELLED);
+                    oldReq.setReason(oldReq.getReason() + " [SUPERSEDED BY REQUEST ID: " + request.getId() + "]");
+                    leaveRequestRepository.save(oldReq);
+
+                    // 3. Rollback using the captured status
+                    if (previousStatus.equals(LeaveRequestService.STATUS_APPROVED)) {
+                        leaveBalanceService.rollbackDeduction(oldReq);
+                    } else {
+                        leaveBalanceService.releasePendingHold(oldReq);
+                    }
+                }
+            }
+        }
         LocalDate cursor = request.getStartDate();
         while (!cursor.isAfter(request.getEndDate())) {
             if (!cursor.isAfter(LocalDate.now())) {
@@ -290,7 +316,6 @@ public class ApprovalRoutingService {
                 return List.of(empApplied.getDepartment().getHod().getUser());
             }
             log.info("No direct HOD found for {}, cascading to the HR / Admin pool.", empApplied.getEmployeeCode());
-            currentRoleName = "ROLE_HR_ADMIN";
         }
 
         List<User> eligibleApprovers = userRepository.findEligibleApproversByWeight(minWeight);
@@ -337,8 +362,7 @@ public class ApprovalRoutingService {
         LocalDate nextWorkingDay = durationEngineService.getNextWorkingDay(request.getEndDate(), request.getEmployee());
 
         List<LeaveRequest> adjacentLeaves = leaveRequestRepository.findAdjacentLeaves(
-                request.getEmployee().getId(), previousWorkingDay, nextWorkingDay
-        );
+                request.getEmployee().getId(), previousWorkingDay, nextWorkingDay);
 
         BigDecimal effectiveDuration = request.getDurationDays();
 
@@ -372,20 +396,18 @@ public class ApprovalRoutingService {
         log.info("Auto-upgrading workflow for Leave Request ID: {} due to chained request ID: {}",
                 existingRequest.getId(), triggeringRequestId);
 
-        // 1. Cancel currently pending approval queues for this request
         List<LeaveApproval> pendingApprovals = leaveApprovalRepository.findByLeaveRequestIdAndAction(existingRequest.getId(), ACTION_PENDING);
 
         for (LeaveApproval approval : pendingApprovals) {
             String oldState = String.format("{ \"action\": \"%s\" }", approval.getAction());
             approval.setAction("CANCELLED");
-            approval.setComments("System Auto-Action: Workflow reset and upgraded due to adjacent leave submission (Salami-slicing prevention).");
+            approval.setComments("System Auto-Action: Workflow reset and upgraded due to adjacent leave submission.");
             approval.setActedAt(LocalDateTime.now());
             leaveApprovalRepository.save(approval);
 
             auditLogService.saveAuditLog(approval.getId(), "UPGRADE_RESET", "LeaveApproval", oldState, "{ \"action\": \"CANCELLED\" }");
         }
 
-        // 2. Reset the Request level back to 1 and update status
         String oldReqState = String.format("{ \"currentLevel\": %d, \"status\": \"%s\" }",
                 existingRequest.getCurrentLevel(), existingRequest.getStatus());
 
@@ -393,7 +415,6 @@ public class ApprovalRoutingService {
         existingRequest.setStatus("PENDING LVL 1");
         leaveRequestRepository.save(existingRequest);
 
-        // 3. Generate the new upgraded workflow
         generateApprovalsForLevel(existingRequest, 1, upgradedRules);
 
         String newReqState = String.format("{ \"currentLevel\": 1, \"status\": \"PENDING LVL 1\", \"upgradedBy\": %d }", triggeringRequestId);

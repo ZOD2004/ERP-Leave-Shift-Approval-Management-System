@@ -60,16 +60,24 @@ public class DataInitializer implements CommandLineRunner {
                 switch (roleName){
                     case "ROLE_SUPER_ADMIN":
                         role.setHierarchyWeight(6);
+                        break;
                     case "ROLE_HR_ADMIN":
                         role.setHierarchyWeight(5);
+                        break;
                     case "ROLE_EMPLOYEE":
                         role.setHierarchyWeight(2);
+                        break;
                     case "ROLE_MANAGER":
                         role.setHierarchyWeight(3);
+                        break;
                     case "ROLE_AUDITOR":
                         role.setHierarchyWeight(1);
+                        break;
                     case "ROLE_DEPT_HEAD":
                         role.setHierarchyWeight(4);
+                        break;
+                    default:
+                        role.setHierarchyWeight(0);
                 }
                 roleRepository.save(role);
             }

@@ -16,7 +16,6 @@ import java.util.Optional;
 @Repository
 public interface ShiftAssignmentRepository extends JpaRepository<ShiftAssignment, Long> {
 
-    // 1. Check for ANY overlap for a specific employee and date range
     @Query("""
         SELECT COUNT(sa) > 0 FROM ShiftAssignment sa 
         WHERE sa.employee.id = :employeeId 
@@ -77,9 +76,7 @@ public interface ShiftAssignmentRepository extends JpaRepository<ShiftAssignment
     @Query("SELECT sa.shift.name, COUNT(sa) FROM ShiftAssignment sa WHERE :date BETWEEN sa.startDate AND sa.endDate GROUP BY sa.shift.name")
     List<Object[]> countShiftsByDate(@Param("date") LocalDate date);
 
-    // A clever way to detect manual overrides without the old flag:
-    // Find assignments where startDate equals endDate (a 1-day hole punch) inside the month
-    @Query("SELECT COUNT(sa) FROM ShiftAssignment sa WHERE sa.startDate = sa.endDate AND sa.startDate >= :start AND sa.endDate <= :end")
+   @Query("SELECT COUNT(sa) FROM ShiftAssignment sa WHERE sa.startDate = sa.endDate AND sa.startDate >= :start AND sa.endDate <= :end")
     long countSingleDayHolePunches(@Param("start") LocalDate start, @Param("end") LocalDate end);
 
     @Query("SELECT sa FROM ShiftAssignment sa WHERE :targetDate BETWEEN sa.startDate AND sa.endDate")
@@ -88,23 +85,19 @@ public interface ShiftAssignmentRepository extends JpaRepository<ShiftAssignment
     @Query("SELECT sa FROM ShiftAssignment sa WHERE sa.employee.id = :employeeId AND :targetDate BETWEEN sa.startDate AND sa.endDate")
     Optional<ShiftAssignment> findAssignmentByEmployeeAndDate(@Param("employeeId") Long employeeId, @Param("targetDate") LocalDate targetDate);
 
-    // Fixes the getTodayTeamAttendanceSummary error
     @Query("SELECT sa FROM ShiftAssignment sa WHERE sa.employee.id IN :employeeIds AND :targetDate BETWEEN sa.startDate AND sa.endDate")
     List<ShiftAssignment> findTodayAssignmentsForEmployees(@Param("employeeIds") List<Long> employeeIds, @Param("targetDate") LocalDate targetDate);
 
-    // Fixes the processDailyPunch error you are about to hit next
     @Query("SELECT sa FROM ShiftAssignment sa WHERE sa.employee.id = :employeeId AND :targetDate BETWEEN sa.startDate AND sa.endDate")
     Optional<ShiftAssignment> findByEmployeeIdAndAssignmentDate(@Param("employeeId") Long employeeId, @Param("targetDate") LocalDate targetDate);
 
     @Query("SELECT MAX(sa.endDate) FROM ShiftAssignment sa WHERE sa.employee.id = :employeeId")
     Optional<LocalDate> findMaxEndDateByEmployeeId(@Param("employeeId") Long employeeId);
 
-    // Update this method
     @EntityGraph(attributePaths = {"employee", "shift"})
     @Query("SELECT sa FROM ShiftAssignment sa WHERE LOWER(sa.employee.firstName) LIKE LOWER(CONCAT('%', :employeeName, '%')) AND sa.endDate >= CURRENT_DATE")
     Page<ShiftAssignment> findByEmployeeName(@Param("employeeName") String employeeName, Pageable pageable);
 
-    // Update this method
     @EntityGraph(attributePaths = {"employee", "shift"})
     @Query("SELECT sa FROM ShiftAssignment sa WHERE sa.endDate >= CURRENT_DATE")
     Page<ShiftAssignment> findAllAssignments(Pageable pageable);
