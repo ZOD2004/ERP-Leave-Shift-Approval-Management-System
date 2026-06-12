@@ -1,5 +1,6 @@
 package com.murali.entity;
 
+import com.murali.entity.enums.ApprovalType;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -41,5 +42,7 @@ public class LeaveApproval {
     @Column(name = "acted_at")
     private LocalDateTime actedAt;
 
-
+    @Enumerated(EnumType.STRING)
+    @Column(name = "approval_type", length = 20)
+    private ApprovalType approvalType = ApprovalType.ORIGINAL;
 }

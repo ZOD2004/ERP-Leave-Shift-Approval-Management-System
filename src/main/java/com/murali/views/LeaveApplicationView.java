@@ -2,6 +2,7 @@ package com.murali.views;
 
 import com.murali.dto.LeaveDurationResultDTO;
 import com.murali.entity.*;
+import com.murali.entity.enums.ApprovalType;
 import com.murali.entity.enums.LeaveSession;
 import com.murali.util.SecurityService;
 import com.murali.service.*;
@@ -21,6 +22,7 @@ import com.vaadin.flow.component.notification.Notification;
 import com.vaadin.flow.component.notification.NotificationVariant;
 import com.vaadin.flow.component.orderedlayout.FlexComponent;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
+import com.vaadin.flow.component.orderedlayout.Scroller;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.progressbar.ProgressBar;
 import com.vaadin.flow.component.radiobutton.RadioButtonGroup;
@@ -196,7 +198,7 @@ public class LeaveApplicationView extends VerticalLayout {
             try {
                 int currentYear = LocalDate.now().getYear();
 
-                leaveRequestService.cancelLeaveRequest(request.getId(), currentEmployee.getId(), currentYear);
+                leaveRequestService.requestManualCancellation(request.getId(), currentEmployee.getId(), currentYear);
 
 
                 Notification.show("Leave request cancelled successfully.", 3000, Notification.Position.TOP_END).addThemeVariants(NotificationVariant.LUMO_SUCCESS);
@@ -602,60 +604,116 @@ public class LeaveApplicationView extends VerticalLayout {
     private void showApprovalHistoryDialog(LeaveRequest request) {
         Dialog dialog = new Dialog();
         dialog.setHeaderTitle("Approval History & Comments");
-        dialog.setWidth("500px");
+        dialog.setWidth("550px");
+        dialog.setMaxHeight("90vh");
 
         List<LeaveApproval> approvals = approvalRoutingService.getApprovalsForRequest(request.getId());
 
         VerticalLayout timelineLayout = new VerticalLayout();
         timelineLayout.setPadding(false);
-        timelineLayout.setSpacing(true);
+        // Replaced default spacing with a distinct Lumo gap for better consistency between cards
+        timelineLayout.setSpacing(false);
+        timelineLayout.addClassName(LumoUtility.Gap.MEDIUM);
 
         if (approvals == null || approvals.isEmpty()) {
             Span emptyState = new Span("No approval records found for this request yet.");
-            emptyState.addClassNames(LumoUtility.TextColor.SECONDARY);
+            emptyState.addClassNames(LumoUtility.TextColor.SECONDARY, LumoUtility.Padding.Top.MEDIUM);
             timelineLayout.add(emptyState);
         } else {
             DateTimeFormatter formatter = DateTimeFormatter.ofPattern("MMM dd, yyyy - hh:mm a");
 
             for (LeaveApproval approval : approvals) {
                 String roleName = getRoleName(approval.getApprovalLevel());
-                String approverName = approval.getApprover() != null ? approval.getApprover().getUsername() : "Unknown"; // Adjust if you have a getFirstName() method
+                String approverName = approval.getApprover() != null ? approval.getApprover().getUsername() : "Unknown";
                 String actionText = approval.getAction() != null ? approval.getAction() : "PENDING";
-                String commentText = (approval.getComments() != null && !approval.getComments().isBlank()) ? approval.getComments() : "No comments provided.";
 
-                // Card container for each timeline entry
+                boolean isCancellation = approval.getApprovalType() == ApprovalType.CANCELLATION;
+                String displayAction = isCancellation ? "CANCEL " + actionText : actionText;
+
+                // 1. Card Container Spacing Enhancements
                 VerticalLayout entryCard = new VerticalLayout();
-                entryCard.addClassNames(LumoUtility.Background.CONTRAST_5, LumoUtility.BorderRadius.MEDIUM, LumoUtility.Padding.SMALL, LumoUtility.Margin.Bottom.SMALL);
+                entryCard.addClassNames(
+                        LumoUtility.Background.CONTRAST_5,
+                        LumoUtility.BorderRadius.MEDIUM,
+                        LumoUtility.Padding.MEDIUM, // Increased from SMALL to MEDIUM for inner breathing room
+                        LumoUtility.Gap.XSMALL // Adds a tiny, consistent gap between elements INSIDE the card
+                );
                 entryCard.setSpacing(false);
 
-                // Header: Role (Name) - Badge
-                Span roleSpan = new Span(roleName + " (" + approverName + ")");
+                // Colored left border with an explicit left-padding so text doesn't hug the line
+                String threadColor = isCancellation ? "var(--lumo-error-color)" : "var(--lumo-primary-color)";
+                entryCard.getStyle().set("border-left", "5px solid " + threadColor);
+                entryCard.getStyle().set("padding-left", "var(--lumo-space-m)");
+
+                // 2. Header Layout
+                HorizontalLayout headerLayout = new HorizontalLayout();
+                headerLayout.setWidthFull();
+                headerLayout.setAlignItems(FlexComponent.Alignment.CENTER);
+                headerLayout.setJustifyContentMode(FlexComponent.JustifyContentMode.BETWEEN);
+
+                Span roleSpan = new Span(roleName);
                 roleSpan.addClassNames(LumoUtility.FontWeight.BOLD, LumoUtility.FontSize.MEDIUM);
 
-                Span statusBadge = new Span(actionText);
+                Span approverSpan = new Span("• " + approverName);
+                approverSpan.addClassNames(LumoUtility.FontSize.SMALL, LumoUtility.TextColor.SECONDARY);
+
+                HorizontalLayout identityLayout = new HorizontalLayout(roleSpan, approverSpan);
+                identityLayout.setAlignItems(FlexComponent.Alignment.BASELINE);
+                identityLayout.setThemeName("spacing-s");
+
+                if (isCancellation) {
+                    Span typeBadge = new Span("Cancellation");
+                    typeBadge.getElement().getThemeList().add("badge small contrast");
+                    identityLayout.add(typeBadge);
+                }
+
+                Span statusBadge = new Span(displayAction);
                 statusBadge.getElement().getThemeList().add("badge small");
-                if ("APPROVED".equalsIgnoreCase(actionText)) statusBadge.getElement().getThemeList().add("success");
-                else if ("REJECTED".equalsIgnoreCase(actionText)) statusBadge.getElement().getThemeList().add("error");
-                else statusBadge.getElement().getThemeList().add("warning");
 
-                HorizontalLayout headerLayout = new HorizontalLayout(roleSpan, statusBadge);
-                headerLayout.setWidthFull();
-                headerLayout.setJustifyContentMode(FlexComponent.JustifyContentMode.BETWEEN);
-                headerLayout.setAlignItems(FlexComponent.Alignment.CENTER);
+                if (actionText.contains("APPROVED")) {
+                    statusBadge.getElement().getThemeList().add(isCancellation ? "error" : "success");
+                } else if (actionText.contains("REJECTED")) {
+                    statusBadge.getElement().getThemeList().add(isCancellation ? "success" : "error");
+                } else if (actionText.contains("CANCELLED") || actionText.contains("SIBLING")) {
+                    statusBadge.getElement().getThemeList().add("contrast");
+                } else {
+                    statusBadge.getElement().getThemeList().add("warning");
+                }
 
-                String timeString = approval.getActedAt() != null ? approval.getActedAt().format(formatter) : "Awaiting Action";
+                headerLayout.add(identityLayout, statusBadge);
+
+                // 3. Time Details
+                String timeString = approval.getActedAt() != null
+                        ? approval.getActedAt().format(formatter)
+                        : "Awaiting Action";
                 Span timeSpan = new Span(timeString);
-                timeSpan.addClassNames(LumoUtility.FontSize.XSMALL, LumoUtility.TextColor.TERTIARY, LumoUtility.Margin.Bottom.XSMALL);
+                // Removed bottom margin since the Gap.XSMALL on the parent handles it now
+                timeSpan.addClassNames(LumoUtility.FontSize.XSMALL, LumoUtility.TextColor.TERTIARY);
 
-                Span commentSpan = new Span("\"" + commentText + "\"");
-                commentSpan.addClassNames(LumoUtility.FontSize.SMALL, LumoUtility.TextColor.SECONDARY);
+                // 4. Comment Formatting
+                boolean hasComment = approval.getComments() != null && !approval.getComments().isBlank();
+                Span commentSpan = new Span(hasComment ? "\"" + approval.getComments() + "\"" : "No comments provided.");
+                commentSpan.addClassNames(LumoUtility.FontSize.SMALL);
+
+                if (hasComment) {
+                    commentSpan.addClassNames(LumoUtility.TextColor.BODY);
+                } else {
+                    commentSpan.addClassNames(LumoUtility.TextColor.TERTIARY);
+                }
 
                 entryCard.add(headerLayout, timeSpan, commentSpan);
                 timelineLayout.add(entryCard);
             }
         }
 
-        dialog.add(timelineLayout);
+        // Add extra padding around the scroller content so the top/bottom cards don't touch the dialog edges
+        timelineLayout.getStyle().set("padding", "var(--lumo-space-s)");
+
+        Scroller scroller = new Scroller(timelineLayout);
+        scroller.setMaxHeight("450px");
+        scroller.getStyle().set("padding-right", "10px");
+
+        dialog.add(scroller);
 
         Button closeButton = new Button("Close", e -> dialog.close());
         closeButton.addThemeVariants(ButtonVariant.LUMO_TERTIARY);

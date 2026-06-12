@@ -1,5 +1,6 @@
 package com.murali.entity;
 
+import com.murali.entity.enums.CancellationStatus;
 import com.murali.entity.enums.LeaveSession;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
@@ -68,5 +69,9 @@ public class LeaveRequest {
 
     @Column(name = "superseded_leave_ids")
     private String supersededLeaveIds;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "cancellation_status", length = 20)
+    private CancellationStatus cancellationStatus = CancellationStatus.NONE;
 
 }

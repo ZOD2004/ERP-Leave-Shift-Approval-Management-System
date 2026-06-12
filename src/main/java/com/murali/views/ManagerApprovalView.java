@@ -1,6 +1,7 @@
 package com.murali.views;
 
 import com.murali.entity.*;
+import com.murali.entity.enums.ApprovalType;
 import com.murali.service.ApprovalRoutingService;
 import com.murali.service.AttendanceCorrectionService;
 import com.murali.util.SecurityService;
@@ -18,6 +19,7 @@ import com.vaadin.flow.component.notification.Notification;
 import com.vaadin.flow.component.notification.NotificationVariant;
 import com.vaadin.flow.component.orderedlayout.FlexComponent;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
+import com.vaadin.flow.component.orderedlayout.Scroller;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.tabs.Tab;
 import com.vaadin.flow.component.tabs.Tabs;
@@ -124,8 +126,24 @@ public class ManagerApprovalView extends VerticalLayout {
         leaveGrid.addComponentColumn(approval -> createEmployeeBadge(approval.getLeaveRequest().getEmployee()))
                 .setHeader("Employee").setFlexGrow(1).setAutoWidth(true);
 
-        leaveGrid.addColumn(approval -> approval.getLeaveRequest().getLeaveType().getName())
-                .setHeader("Leave Type").setAutoWidth(true);
+        // MODIFIED: Show a badge if it is a Cancellation Request
+        leaveGrid.addComponentColumn(approval -> {
+            VerticalLayout cell = new VerticalLayout();
+            cell.setPadding(false);
+            cell.setSpacing(false);
+
+            Span leaveName = new Span(approval.getLeaveRequest().getLeaveType().getName());
+            cell.add(leaveName);
+
+            // Assuming your enum is imported: ApprovalType.CANCELLATION
+            if (approval.getApprovalType() == ApprovalType.CANCELLATION) {
+                Span cancelBadge = new Span("CANCELLATION REQ");
+                cancelBadge.getElement().getThemeList().add("badge error small");
+                cancelBadge.getStyle().set("margin-top", "4px");
+                cell.add(cancelBadge);
+            }
+            return cell;
+        }).setHeader("Leave Type").setAutoWidth(true);
 
         leaveGrid.addColumn(approval -> approval.getLeaveRequest().getStartDate() + " to " + approval.getLeaveRequest().getEndDate())
                 .setHeader("Dates").setAutoWidth(true);
@@ -149,31 +167,63 @@ public class ManagerApprovalView extends VerticalLayout {
 
     private void openLeaveReviewDialog(LeaveApproval approval) {
         Dialog dialog = new Dialog();
-        dialog.setHeaderTitle("Review Leave Request");
+
+        boolean isCancellation = approval.getApprovalType() == ApprovalType.CANCELLATION;
+        dialog.setHeaderTitle(isCancellation ? "Review Cancellation Request" : "Review Leave Request");
         dialog.setWidth("450px");
+        dialog.setMaxHeight("90vh"); // FIX 1: Prevents dialog from stretching off-screen
 
         LeaveRequest request = approval.getLeaveRequest();
+
+        // FIX 2: Create a master wrapper for all the content so it can scroll
+        VerticalLayout contentLayout = new VerticalLayout();
+        contentLayout.setPadding(false);
+        contentLayout.setSpacing(true); // Adds a little breathing room between sections
 
         VerticalLayout detailsLayout = new VerticalLayout();
         detailsLayout.setPadding(false);
         detailsLayout.setSpacing(false);
-        detailsLayout.addClassNames(LumoUtility.Margin.Bottom.LARGE);
+        detailsLayout.addClassNames(LumoUtility.Margin.Bottom.MEDIUM);
+
+        if (isCancellation) {
+            VerticalLayout warningBanner = new VerticalLayout();
+            warningBanner.addClassNames(LumoUtility.Background.ERROR_10, LumoUtility.BorderRadius.MEDIUM, LumoUtility.Padding.SMALL, LumoUtility.Margin.Bottom.MEDIUM);
+            Span warnIcon = new Span(VaadinIcon.WARNING.create());
+            warnIcon.getStyle().set("color", "var(--lumo-error-color)");
+            Span warnText = new Span(" The employee is requesting to CANCEL this already approved leave.");
+            warnText.addClassNames(LumoUtility.TextColor.ERROR, LumoUtility.FontSize.SMALL, LumoUtility.FontWeight.BOLD);
+            warningBanner.add(new HorizontalLayout(warnIcon, warnText));
+            detailsLayout.add(warningBanner);
+        }
 
         detailsLayout.add(createDetailRow("Employee ID:", String.valueOf(request.getEmployee().getId())));
         detailsLayout.add(createDetailRow("Leave Type:", request.getLeaveType().getName()));
         detailsLayout.add(createDetailRow("Dates:", request.getStartDate() + " to " + request.getEndDate()));
         detailsLayout.add(createDetailRow("Duration:", request.getDurationDays() + " days"));
 
-        TextArea reasonDisplay = new TextArea("Employee Reason");
+        contentLayout.add(detailsLayout);
+
+        TextArea reasonDisplay = new TextArea(isCancellation ? "Original Reason" : "Employee Reason");
         reasonDisplay.setValue(request.getReason() != null ? request.getReason() : "N/A");
         reasonDisplay.setReadOnly(true);
         reasonDisplay.setWidthFull();
+        contentLayout.add(reasonDisplay);
 
         TextArea commentsArea = new TextArea("Approver Feedback");
         commentsArea.setPlaceholder("Required if rejecting...");
         commentsArea.setWidthFull();
+        contentLayout.add(commentsArea);
 
-        Button approveBtn = new Button("Approve", VaadinIcon.CHECK.create());
+        // FIX 3: Put the master content layout inside a Scroller
+        Scroller scroller = new Scroller(contentLayout);
+        scroller.setSizeFull();
+        scroller.getStyle().set("padding-right", "8px"); // Prevents scrollbar from covering text
+
+        // Add the Scroller to the dialog instead of the individual pieces
+        dialog.add(scroller);
+
+        String approveText = isCancellation ? "Approve Cancellation" : "Approve Leave";
+        Button approveBtn = new Button(approveText, VaadinIcon.CHECK.create());
         approveBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY, ButtonVariant.LUMO_SUCCESS);
         approveBtn.addClickListener(e -> {
             try {
@@ -186,7 +236,8 @@ public class ManagerApprovalView extends VerticalLayout {
             }
         });
 
-        Button rejectBtn = new Button("Reject", VaadinIcon.CLOSE.create());
+        String rejectText = isCancellation ? "Reject (Keep Leave)" : "Reject Leave";
+        Button rejectBtn = new Button(rejectText, VaadinIcon.CLOSE.create());
         rejectBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY, ButtonVariant.LUMO_ERROR);
         rejectBtn.addClickListener(e -> {
             try {
@@ -199,14 +250,13 @@ public class ManagerApprovalView extends VerticalLayout {
             }
         });
 
-        Button cancelBtn = new Button("Cancel", e -> dialog.close());
+        Button cancelBtn = new Button("Close", e -> dialog.close());
         cancelBtn.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
 
         HorizontalLayout footerLayout = new HorizontalLayout(cancelBtn, rejectBtn, approveBtn);
         footerLayout.setJustifyContentMode(FlexComponent.JustifyContentMode.END);
         footerLayout.setWidthFull();
 
-        dialog.add(detailsLayout, reasonDisplay, commentsArea);
         dialog.getFooter().add(footerLayout);
         dialog.open();
     }
@@ -216,9 +266,6 @@ public class ManagerApprovalView extends VerticalLayout {
     }
 
 
-    // ==========================================
-    // ATTENDANCE CORRECTION LOGIC
-    // ==========================================
 
     private HorizontalLayout createCorrectionToolbar() {
         TextField searchField = new TextField();

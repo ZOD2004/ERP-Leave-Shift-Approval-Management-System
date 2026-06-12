@@ -2,6 +2,7 @@ package com.murali.service;
 
 import com.murali.dto.LeaveDurationResultDTO;
 import com.murali.entity.*;
+import com.murali.entity.enums.CancellationStatus;
 import com.murali.entity.enums.LeaveSession;
 import com.murali.exception.PastDateException;
 import com.murali.repository.EmployeeRepository;
@@ -193,15 +194,16 @@ public class LeaveRequestService {
         // 8. Save with Stretched Dates
         request.setEmployee(employee);
         request.setLeaveType(leaveType);
-        request.setStartDate(startDate); // Now uses the STRETCHED date!
-        request.setEndDate(endDate);     // Now uses the STRETCHED date!
+        request.setStartDate(startDate);
+        request.setEndDate(endDate);
         request.setDurationDays(duration);
-        request.setStartSession(startSession); // Safely carried over if stretched
-        request.setEndSession(endSession);     // Safely carried over if stretched
+        request.setStartSession(startSession);
+        request.setEndSession(endSession);
         request.setReason(reason);
         request.setStatus(STATUS_PENDING);
         request.setCurrentLevel(1);
         request.setSandwichPenaltyDays(sandwichPenaltyDays);
+        request.setCancellationStatus(CancellationStatus.NONE);
 
         LeaveRequest savedRequest = leaveRequestRepository.save(request);
 
@@ -258,7 +260,7 @@ public class LeaveRequestService {
     }
 
     @Transactional
-    public void cancelLeaveRequest(Long leaveRequestId, Long requestingEmployeeId, Integer currentYear) {
+    public void systemBypassCancelLeave(Long leaveRequestId, Long requestingEmployeeId, Integer currentYear) {
         LeaveRequest request = leaveRequestRepository.findById(leaveRequestId)
                 .orElseThrow(() -> new IllegalArgumentException("Leave request not found"));
 
@@ -297,6 +299,42 @@ public class LeaveRequestService {
     }
 
     @Transactional
+    public void requestManualCancellation(Long leaveRequestId, Long requestingEmployeeId, Integer currentYear) {
+        LeaveRequest request = leaveRequestRepository.findById(leaveRequestId)
+                .orElseThrow(() -> new IllegalArgumentException("Leave request not found"));
+
+        if (!request.getEmployee().getId().equals(requestingEmployeeId)) {
+            throw new SecurityException("You do not have permission to cancel this leave.");
+        }
+
+        String currentStatus = request.getStatus();
+        if (currentStatus.equals(STATUS_REJECTED) || currentStatus.equals(STATUS_CANCELLED)) {
+            throw new IllegalStateException("This request is already " + currentStatus);
+        }
+
+        if (request.getCancellationStatus() == CancellationStatus.PENDING) {
+            throw new IllegalStateException("A cancellation request is already pending for this leave.");
+        }
+
+        // Fetch anyone who has already approved it
+        List<LeaveApproval> approvedOriginals = approvalRoutingService.getApprovedOriginals(request.getId());
+
+        if (approvedOriginals.isEmpty()) {
+            // "Zero Approvers Edge Case" -> Auto-cancel instantly
+            systemBypassCancelLeave(leaveRequestId, requestingEmployeeId, currentYear);
+        } else {
+            // "In-Flight" or "Approved" -> Trigger workflow, which automatically freezes original steps
+            request.setCancellationStatus(CancellationStatus.PENDING);
+            leaveRequestRepository.save(request);
+
+            approvalRoutingService.generateCancellationWorkflow(request, approvedOriginals);
+
+            auditLoggingService.saveAuditLog(leaveRequestId, "REQUESTED_CANCELLATION", "leave_requests",
+                    "{ \"cancellationStatus\": \"NONE\" }", "{ \"cancellationStatus\": \"PENDING\" }");
+        }
+    }
+
+    @Transactional
     public LeaveRequest saveOrUpdateDraft(Long draftId, Employee detachedEmployee, LeaveType leaveType,
                                           LocalDate startDate, LocalDate endDate, String reason,
                                           LeaveSession startSession, LeaveSession endSession,
@@ -332,6 +370,7 @@ public class LeaveRequestService {
         draft.setStartSession(startSession);
         draft.setEndSession(endSession);
         draft.setIsSandwichLeave(durationResult.isSandwichLeave());
+        draft.setCancellationStatus(CancellationStatus.NONE);
 
         draft.setStatus(STATUS_DRAFT);
         draft.setCurrentLevel(0);

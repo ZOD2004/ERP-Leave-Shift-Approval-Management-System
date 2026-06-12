@@ -20,9 +20,19 @@ public interface LeaveApprovalRepository extends JpaRepository<LeaveApproval, Lo
             "JOIN FETCH r.employee " +
             "WHERE a.approver.id = :approverId " +
             "AND a.action = 'PENDING' " +
-            "AND a.approvalLevel = r.currentLevel")
+            "AND ( " +
+            "  (a.approvalType = 'ORIGINAL' AND a.approvalLevel = r.currentLevel AND (r.cancellationStatus IS NULL OR r.cancellationStatus IN ('NONE', 'REJECTED'))) " +
+            "  OR " +
+            "  (a.approvalType = 'CANCELLATION' AND r.cancellationStatus = 'PENDING') " +
+            ")")
     List<LeaveApproval> findActivePendingApprovalsForUser(@Param("approverId") Long approverId);
 
+    @Query("SELECT a FROM LeaveApproval a " +
+            "WHERE a.leaveRequest.id = :leaveRequestId " +
+            "AND a.approvalType = 'ORIGINAL' " +
+            "AND a.action = 'APPROVED' " +
+            "ORDER BY a.approvalLevel ASC")
+    List<LeaveApproval> findApprovedOriginals(@Param("leaveRequestId") Long leaveRequestId);
     @Query("SELECT a FROM LeaveApproval a " +
             "JOIN FETCH a.approver " +
             "WHERE a.leaveRequest.id = :leaveRequestId " +
