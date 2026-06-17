@@ -35,6 +35,8 @@ import org.springframework.dao.DataIntegrityViolationException;
 
 import java.time.Duration;
 import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
+import java.util.Locale;
 
 @Route(value = "add-shifts", layout = MainLayout.class)
 @PageTitle("Manage Shifts")
@@ -66,6 +68,7 @@ public class ShiftView extends VerticalLayout {
     // FIXED: Using standard Binder instead of BeanValidationBinder
     private final Binder<Shift> binder = new Binder<>(Shift.class);
     private Shift currentShift;
+    private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm");
 
     public ShiftView(ShiftService shiftService) {
         this.shiftService = shiftService;
@@ -97,7 +100,7 @@ public class ShiftView extends VerticalLayout {
         grid.addColumn(Shift::getName).setHeader("Name").setSortable(true).setAutoWidth(true);
         grid.addColumn(Shift::getShiftType).setHeader("Type").setSortable(true).setAutoWidth(true);
 
-        grid.addColumn(shift -> shift.getStartTime() + " - " + shift.getEndTime())
+        grid.addColumn(shift -> shift.getStartTime().format(TIME_FORMATTER) + " - " + shift.getEndTime().format(TIME_FORMATTER))
                 .setHeader("Timings").setAutoWidth(true);
 
         grid.addColumn(shift -> shift.getRequiredWorkTime() != null ? shift.getRequiredWorkTime()+ " mins" : "None")
@@ -136,6 +139,12 @@ public class ShiftView extends VerticalLayout {
         firstHalfEndTimeField.setStep(Duration.ofMinutes(15));
         secondHalfStartTimeField.setStep(Duration.ofMinutes(15));
         gracePeriodField.setStepButtonsVisible(true);
+        startTimeField.setLocale(Locale.UK);
+        endTimeField.setLocale(Locale.UK);
+        firstHalfEndTimeField.setLocale(Locale.UK);
+        secondHalfStartTimeField.setLocale(Locale.UK);
+
+        gracePeriodField.setStepButtonsVisible(true);
         gracePeriodField.setMin(0);
         gracePeriodField.setTooltipText("The minimum total minutes an employee must be clocked in to avoid being marked absent (Total shift time minus 1-hour lunch).");
 
@@ -153,11 +162,9 @@ public class ShiftView extends VerticalLayout {
                 if (durationMinutes > 60) {
                     long halfDuration = durationMinutes / 2;
 
-                    LocalTime firstHalfEnd = start.plusMinutes(halfDuration - 30);
-                    firstHalfEndTimeField.setValue(firstHalfEnd);
-
-                    LocalTime secondHalfStart = start.plusMinutes(halfDuration + 30);
-                    secondHalfStartTimeField.setValue(secondHalfStart);
+                    LocalTime middleTime = start.plusMinutes(halfDuration);
+                    firstHalfEndTimeField.setValue(middleTime);
+                    secondHalfStartTimeField.setValue(middleTime);
 
                     long requiredWorkMins = durationMinutes - 60;
                     gracePeriodField.setValue((int) requiredWorkMins);
@@ -169,10 +176,10 @@ public class ShiftView extends VerticalLayout {
         startTimeField.addValueChangeListener(timeChangeListener);
         endTimeField.addValueChangeListener(timeChangeListener);
 
-        // Layouts
-        FormLayout topLayout = new FormLayout(nameField, shiftTypeField, workingDaysField, gracePeriodField);
+
+        FormLayout topLayout = new FormLayout(nameField, shiftTypeField, workingDaysField);
         topLayout.setResponsiveSteps(new FormLayout.ResponsiveStep("0", 1), new FormLayout.ResponsiveStep("500px", 2));
-        topLayout.setColspan(workingDaysField, 2); // Span full width for better UX
+        topLayout.setColspan(workingDaysField, 2);
 
         H4 mainTimesHeader = new H4("Standard Shift Timings");
         mainTimesHeader.addClassNames(LumoUtility.Margin.Top.MEDIUM, LumoUtility.Margin.Bottom.XSMALL);
@@ -184,7 +191,10 @@ public class ShiftView extends VerticalLayout {
         FormLayout sessionTimesLayout = new FormLayout(firstHalfEndTimeField, secondHalfStartTimeField);
         sessionTimesLayout.setResponsiveSteps(new FormLayout.ResponsiveStep("0", 1), new FormLayout.ResponsiveStep("400px", 2));
 
-        VerticalLayout dialogLayout = new VerticalLayout(topLayout, mainTimesHeader, mainTimesLayout, sessionTimesHeader, sessionTimesLayout);
+        FormLayout bottomLayout = new FormLayout(gracePeriodField);
+        bottomLayout.addClassNames(LumoUtility.Margin.Top.MEDIUM);
+
+        VerticalLayout dialogLayout = new VerticalLayout(topLayout, mainTimesHeader, mainTimesLayout, sessionTimesHeader, sessionTimesLayout, bottomLayout);
         dialogLayout.setPadding(false);
 
         // Binder Bindings
@@ -225,13 +235,26 @@ public class ShiftView extends VerticalLayout {
             boolean isNightShift = Shifts.NIGHT_SHIFT.equals(selectedShift);
 
             // Time Validation
+            LocalTime start = startTimeField.getValue();
+            LocalTime end = endTimeField.getValue();
+            LocalTime firstHalf = firstHalfEndTimeField.getValue();
+            LocalTime secondHalf = secondHalfStartTimeField.getValue();
+
             if (!isNightShift) {
-                if (startTimeField.getValue() != null && endTimeField.getValue() != null && startTimeField.getValue().isAfter(endTimeField.getValue())) {
+                if (start != null && end != null && start.isAfter(end)) {
                     Notification.show("The start time cannot come after the end time for a day shift.").addThemeVariants(NotificationVariant.LUMO_ERROR);
                     return;
                 }
-                if (firstHalfEndTimeField.getValue() != null && secondHalfStartTimeField.getValue() != null && firstHalfEndTimeField.getValue().isAfter(secondHalfStartTimeField.getValue())) {
+                if (firstHalf != null && secondHalf != null && firstHalf.isAfter(secondHalf)) {
                     Notification.show("The 1st Half End Time cannot be after the 2nd Half Start Time.").addThemeVariants(NotificationVariant.LUMO_ERROR);
+                    return;
+                }
+            }
+
+            // Ensure half-day boundaries fall between start and end times
+            if (start != null && end != null && firstHalf != null && secondHalf != null) {
+                if (!isTimeBetwee(firstHalf, start, end, isNightShift) || !isTimeBetwee(secondHalf, start, end, isNightShift)) {
+                    Notification.show("Half-day boundaries must fall between the shift start and end times.").addThemeVariants(NotificationVariant.LUMO_ERROR);
                     return;
                 }
             }
@@ -296,5 +319,19 @@ public class ShiftView extends VerticalLayout {
     private void showNotification(String message, NotificationVariant variant) {
         Notification notification = Notification.show(message, 3000, Notification.Position.TOP_CENTER);
         notification.addThemeVariants(variant);
+    }
+    private boolean isTimeBetwee(LocalTime time, LocalTime start, LocalTime end, boolean isNightShift) {
+        // Allow the boundary to be exactly on the start or end time if needed
+        if (time.equals(start) || time.equals(end)) {
+            return true;
+        }
+
+        if (!isNightShift) {
+            // Standard Day Shift: time must be literally between start and end
+            return time.isAfter(start) && time.isBefore(end);
+        } else {
+            // Night Shift (e.g., 22:00 to 06:00): time must be late at night OR early morning
+            return time.isAfter(start) || time.isBefore(end);
+        }
     }
 }

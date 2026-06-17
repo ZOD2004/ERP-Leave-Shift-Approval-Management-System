@@ -13,9 +13,6 @@ import java.util.Optional;
 @Repository
 public interface ShiftRotationPolicyRepository extends JpaRepository<ShiftRotationPolicy, Long> {
 
-    @Query("SELECT p FROM ShiftRotationPolicy p WHERE p.active = true AND (p.endDate IS NULL OR p.endDate >= :windowStart)")
-    List<ShiftRotationPolicy> findActivePoliciesValidFrom(@Param("windowStart") LocalDate windowStart);
-
     List<ShiftRotationPolicy> findByActiveTrue();
 
     @Query("SELECT p FROM ShiftRotationPolicy p JOIN FETCH p.employee")

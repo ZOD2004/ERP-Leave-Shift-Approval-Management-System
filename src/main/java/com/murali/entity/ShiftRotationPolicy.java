@@ -25,13 +25,13 @@ public class ShiftRotationPolicy {
     @Column(name = "start_date", nullable = false)
     private LocalDate startDate;
 
-    @Column(name = "end_date")
-    private LocalDate endDate;
-
     @Column(name = "is_active")
     private Boolean active = true;
 
-    @OneToMany(mappedBy = "policy", fetch = FetchType.LAZY)
+    @Column(name = "generated_until")
+    private LocalDate generatedUntil;
+
+    @OneToMany(mappedBy = "policy", fetch = FetchType.LAZY,cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("sequenceOrder ASC")
     private List<RotationSequence> sequences = new ArrayList<>();
 }

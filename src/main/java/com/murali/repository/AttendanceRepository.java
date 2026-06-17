@@ -65,4 +65,6 @@ public interface AttendanceRepository extends JpaRepository<Attendance, Long> {
         )
     """)
     List<Attendance> findIncompleteAttendancesForDate(@Param("date") LocalDate date);
+
+    List<Attendance> findByEmployeeIdInAndAttendanceDate(List<Long> employeeIds, LocalDate attendanceDate);
 }

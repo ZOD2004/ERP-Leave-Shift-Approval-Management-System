@@ -31,15 +31,13 @@ public class AttendanceCorrectionService {
 
     @Transactional
     public void evaluateAndRouteAnomaly(Attendance attendance) {
-        LeaveRequest leaveRequest = leaveRequestRepository.findApprovedLeaveForEmployeeOnDate(
-                attendance.getEmployee().getId(), attendance.getAttendanceDate()).orElse(null);
+        LeaveRequest leaveRequest = leaveRequestRepository.findApprovedLeaveForEmployeeOnDate(attendance.getEmployee().getId(), attendance.getAttendanceDate()).orElse(null);
 
         attendanceProcessService.recalculateTimeline(attendance, attendance.getShiftAssignment().getShift(), leaveRequest);
 
         String currentStatus = attendance.getStatus() != null ? attendance.getStatus().toString() : "";
         if ("PRESENT".equals(currentStatus) || "HALF_DAY_LEAVE".equals(currentStatus)) {
-            log.info("Missing punch ignored for Employee {}. Worked {} mins, met requirement.",
-                    attendance.getEmployee().getId(), attendance.getTotalWorkedMinutes());
+            log.info("Missing punch ignored for Employee {}. Worked {} mins, met requirement.", attendance.getEmployee().getId(), attendance.getTotalWorkedMinutes());
         } else {
             autoCreateCorrection(attendance);
         }
@@ -58,19 +56,16 @@ public class AttendanceCorrectionService {
         correction.setStatus("PENDING");
 
         correctionRepository.save(correction);
-        log.info("Auto-triggered Attendance Correction for employee {}, routed to manager {}",
-                attendance.getEmployee().getId(), approver.getUsername());
+        log.info("Auto-triggered Attendance Correction for employee {}, routed to manager {}", attendance.getEmployee().getId(), approver.getUsername());
 
-        String newState = String.format("{ \"status\": \"PENDING\", \"attendanceId\": %d, \"approverId\": %d }",
-                attendance.getId(), approver.getId());
+        String newState = String.format("{ \"status\": \"PENDING\", \"attendanceId\": %d, \"approverId\": %d }", attendance.getId(), approver.getId());
 
         auditLogService.saveAuditLog(correction.getId(), "CREATE", "AttendanceCorrection", null, newState);
     }
 
     @Transactional
     public void resolveCorrection(Long correctionId, String action, LocalDateTime manualCheckOutTime, String comments, Long actingUserId) {
-        AttendanceCorrection correction = correctionRepository.findById(correctionId)
-                .orElseThrow(() -> new IllegalArgumentException("Correction record not found"));
+        AttendanceCorrection correction = correctionRepository.findById(correctionId).orElseThrow(() -> new IllegalArgumentException("Correction record not found"));
 
         if (!correction.getApprover().getId().equals(actingUserId)) {
             throw new SecurityException("You are not authorized to resolve this anomaly.");
@@ -80,9 +75,7 @@ public class AttendanceCorrectionService {
         String oldStatus = correction.getStatus();
         String safeComments = (comments != null) ? comments.replace("\"", "\\\"") : "";
 
-        LeaveRequest leaveRequest = leaveRequestRepository.findApprovedLeaveForEmployeeOnDate(
-                attendance.getEmployee().getId(), attendance.getAttendanceDate()
-        ).orElse(null);
+        LeaveRequest leaveRequest = leaveRequestRepository.findApprovedLeaveForEmployeeOnDate(attendance.getEmployee().getId(), attendance.getAttendanceDate()).orElse(null);
 
         if ("APPROVED".equalsIgnoreCase(action)) {
             if (manualCheckOutTime == null) {
@@ -101,8 +94,7 @@ public class AttendanceCorrectionService {
             correction.setStatus("APPROVED");
 
             String oldState = String.format("{ \"status\": \"%s\", \"checkOut\": null }", oldStatus);
-            String newState = String.format("{ \"status\": \"APPROVED\", \"checkOut\": \"%s\", \"comments\": \"%s\" }",
-                    manualCheckOutTime.toString(), safeComments);
+            String newState = String.format("{ \"status\": \"APPROVED\", \"checkOut\": \"%s\", \"comments\": \"%s\" }", manualCheckOutTime.toString(), safeComments);
 
             auditLogService.saveAuditLog(correction.getId(), "UPDATE", "AttendanceCorrection", oldState, newState);
 
@@ -117,8 +109,7 @@ public class AttendanceCorrectionService {
             }
 
             LeaveType halfDayLeave = leaveTypeRepository.findByNameContainingIgnoreCaseOrCodeContainingIgnoreCase("Half Day Leave", "HDL-001").getFirst();
-            leaveBalanceService.deductPenalty(attendance.getEmployee(),halfDayLeave,
-                    BigDecimal.valueOf(0.5),attendance.getAttendanceDate().getYear(),"Missing Check-out Rejected by Manager");
+            leaveBalanceService.deductPenalty(attendance.getEmployee(), halfDayLeave, BigDecimal.valueOf(0.5), attendance.getAttendanceDate().getYear(), "Missing Check-out Rejected by Manager");
 
             correction.setStatus("REJECTED");
 

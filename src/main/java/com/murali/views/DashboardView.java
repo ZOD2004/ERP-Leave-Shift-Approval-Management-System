@@ -704,9 +704,6 @@ public class DashboardView extends VerticalLayout {
                 } else if (cell.isHoliday()) {
                     badge.setText("H");
                     badge.getElement().getThemeList().add("error");
-                } else if (cell.isOffDay()) {
-                    badge.setText("Off");
-                    badge.getElement().getThemeList().add("contrast");
                 } else if (cell.getAssignment() != null) {
                     String shiftName = cell.getAssignment().getShiftName();
                     String shortCode = shiftName.length() > 3 ? shiftName.substring(0, 3) : shiftName;

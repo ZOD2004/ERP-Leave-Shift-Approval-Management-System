@@ -101,4 +101,10 @@ public interface ShiftAssignmentRepository extends JpaRepository<ShiftAssignment
     @EntityGraph(attributePaths = {"employee", "shift"})
     @Query("SELECT sa FROM ShiftAssignment sa WHERE sa.endDate >= CURRENT_DATE")
     Page<ShiftAssignment> findAllAssignments(Pageable pageable);
+
+    @Query("SELECT sa FROM ShiftAssignment sa WHERE sa.shift.id = :shiftId AND sa.startDate <= :targetDate AND sa.endDate >= :targetDate")
+    List<ShiftAssignment> findAssignmentsByShiftAndDate(Long shiftId, LocalDate targetDate);
+
+    @Query("SELECT DISTINCT sa.employee.id FROM ShiftAssignment sa WHERE sa.employee.id IN :employeeIds AND sa.startDate <= :targetDate AND sa.endDate >= :targetDate")
+    List<Long> findEmployeeIdsWithAssignmentOnDate(List<Long> employeeIds, LocalDate targetDate);
 }

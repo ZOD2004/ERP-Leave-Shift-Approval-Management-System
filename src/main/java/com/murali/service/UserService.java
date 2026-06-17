@@ -27,12 +27,7 @@ public class UserService {
     private final EmployeeRepository employeeRepository;
     private final AuditLogService auditLoggingService;
 
-    public UserService(UserRepository userRepository,
-                       PasswordEncoder passwordEncoder,
-                       DepartmentRepository departmentRepository,
-                       RoleRepository roleRepository,
-                       EmployeeRepository employeeRepository,
-                       AuditLogService auditLoggingService) {
+    public UserService(UserRepository userRepository, PasswordEncoder passwordEncoder, DepartmentRepository departmentRepository, RoleRepository roleRepository, EmployeeRepository employeeRepository, AuditLogService auditLoggingService) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.departmentRepository = departmentRepository;
@@ -50,9 +45,7 @@ public class UserService {
             Optional<User> existingOpt = userRepository.findById(user.getId());
             if (existingOpt.isPresent()) {
                 User existing = existingOpt.get();
-                oldState = String.format("{ \"username\": \"%s\", \"email\": \"%s\", \"isActive\": %b, \"roleId\": %d }",
-                        existing.getUsername(), existing.getEmail(), existing.getActive(),
-                        existing.getRole() != null ? existing.getRole().getId() : null);
+                oldState = String.format("{ \"username\": \"%s\", \"email\": \"%s\", \"isActive\": %b, \"roleId\": %d }", existing.getUsername(), existing.getEmail(), existing.getActive(), existing.getRole() != null ? existing.getRole().getId() : null);
             }
         }
 
@@ -62,9 +55,7 @@ public class UserService {
 
         User savedUser = userRepository.save(user);
 
-        String newState = String.format("{ \"username\": \"%s\", \"email\": \"%s\", \"isActive\": %b, \"roleId\": %d }",
-                savedUser.getUsername(), savedUser.getEmail(), savedUser.getActive(),
-                savedUser.getRole() != null ? savedUser.getRole().getId() : null);
+        String newState = String.format("{ \"username\": \"%s\", \"email\": \"%s\", \"isActive\": %b, \"roleId\": %d }", savedUser.getUsername(), savedUser.getEmail(), savedUser.getActive(), savedUser.getRole() != null ? savedUser.getRole().getId() : null);
         String action = isNew ? "CREATED" : "UPDATED";
 
         log.info("User {} successfully. ID: {}", action, savedUser.getId());
@@ -79,14 +70,11 @@ public class UserService {
 
     @Transactional
     public void delete(User user) {
-        User managedUser = userRepository.findById(user.getId())
-                .orElseThrow(() -> new RuntimeException("User not found with ID: " + user.getId()));
+        User managedUser = userRepository.findById(user.getId()).orElseThrow(() -> new RuntimeException("User not found with ID: " + user.getId()));
 
         Long userId = managedUser.getId();
         String username = managedUser.getUsername();
-        String oldState = String.format("{ \"username\": \"%s\", \"email\": \"%s\", \"isActive\": %b, \"roleId\": %d }",
-                managedUser.getUsername(), managedUser.getEmail(), managedUser.getActive(),
-                managedUser.getRole() != null ? managedUser.getRole().getId() : null);
+        String oldState = String.format("{ \"username\": \"%s\", \"email\": \"%s\", \"isActive\": %b, \"roleId\": %d }", managedUser.getUsername(), managedUser.getEmail(), managedUser.getActive(), managedUser.getRole() != null ? managedUser.getRole().getId() : null);
 
         employeeRepository.findByUserId(userId).ifPresent(employee -> {
             employee.setUser(null);
@@ -108,16 +96,14 @@ public class UserService {
         for (Employee empPayload : employees) {
 
             if (empPayload.getDepartment() != null && empPayload.getDepartment().getId() != null) {
-                Department existingDept = departmentRepository.findById(empPayload.getDepartment().getId())
-                        .orElseThrow(() -> new RuntimeException("Department not found for ID: " + empPayload.getDepartment().getId()));
+                Department existingDept = departmentRepository.findById(empPayload.getDepartment().getId()).orElseThrow(() -> new RuntimeException("Department not found for ID: " + empPayload.getDepartment().getId()));
                 empPayload.setDepartment(existingDept);
             }
 
             User userPayload = empPayload.getUser();
             if (userPayload != null) {
                 if (userPayload.getRole() != null && userPayload.getRole().getId() != null) {
-                    Role existingRole = roleRepository.findById(userPayload.getRole().getId())
-                            .orElseThrow(() -> new RuntimeException("Role not found for ID: " + userPayload.getRole().getId()));
+                    Role existingRole = roleRepository.findById(userPayload.getRole().getId()).orElseThrow(() -> new RuntimeException("Role not found for ID: " + userPayload.getRole().getId()));
                     userPayload.setRole(existingRole);
                 }
                 if (userPayload.getPasswordHash() != null && !userPayload.getPasswordHash().startsWith("$2a$")) {
@@ -128,8 +114,7 @@ public class UserService {
                 empPayload.setUser(savedUser);
             }
             if (empPayload.getManager() != null && empPayload.getManager().getEmployeeCode() != null) {
-                Employee existingManager = employeeRepository.findByEmployeeCode(empPayload.getManager().getEmployeeCode())
-                        .orElseThrow(() -> new RuntimeException("Manager not found for code: " + empPayload.getManager().getEmployeeCode()));
+                Employee existingManager = employeeRepository.findByEmployeeCode(empPayload.getManager().getEmployeeCode()).orElseThrow(() -> new RuntimeException("Manager not found for code: " + empPayload.getManager().getEmployeeCode()));
                 empPayload.setManager(existingManager);
             } else {
                 empPayload.setManager(null);

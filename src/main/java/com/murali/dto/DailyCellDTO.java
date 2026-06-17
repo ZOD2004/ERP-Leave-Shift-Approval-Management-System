@@ -15,7 +15,7 @@ public class DailyCellDTO {
     private String employeeName;
 
     private boolean isHoliday;
-    private boolean isOffDay;
+    private boolean intentionalOffDay;
 
     private boolean isOnLeave;
     private LeaveSession leaveSession; // FULL_DAY, FIRST_HALF, SECOND_HALF

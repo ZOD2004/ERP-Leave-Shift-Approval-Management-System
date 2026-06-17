@@ -12,15 +12,13 @@ import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.dialog.Dialog;
 import com.vaadin.flow.component.grid.Grid;
 import com.vaadin.flow.component.grid.GridVariant;
+import com.vaadin.flow.component.html.Div;
 import com.vaadin.flow.component.html.H2;
 import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.icon.VaadinIcon;
 import com.vaadin.flow.component.notification.Notification;
 import com.vaadin.flow.component.notification.NotificationVariant;
-import com.vaadin.flow.component.orderedlayout.FlexComponent;
-import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
-import com.vaadin.flow.component.orderedlayout.Scroller;
-import com.vaadin.flow.component.orderedlayout.VerticalLayout;
+import com.vaadin.flow.component.orderedlayout.*;
 import com.vaadin.flow.component.tabs.Tab;
 import com.vaadin.flow.component.tabs.Tabs;
 import com.vaadin.flow.component.textfield.TextArea;
@@ -36,7 +34,7 @@ import java.time.LocalTime;
 
 @RolesAllowed({"ROLE_SUPER_ADMIN", "ROLE_HR_ADMIN", "ROLE_MANAGER", "ROLE_DEPT_HEAD"})
 @PageTitle("Approval Inbox")
-@Route(value = "approvals", layout = MainLayout.class) // Adjust layout class if needed
+@Route(value = "approvals", layout = MainLayout.class)
 public class ManagerApprovalView extends VerticalLayout {
 
     private final ApprovalRoutingService approvalRoutingService;
@@ -99,9 +97,6 @@ public class ManagerApprovalView extends VerticalLayout {
         add(title, tabs, leaveWrapper, correctionWrapper);
     }
 
-    // ==========================================
-    // LEAVE APPROVAL LOGIC
-    // ==========================================
 
     private HorizontalLayout createLeaveToolbar() {
         TextField searchField = new TextField();
@@ -122,6 +117,10 @@ public class ManagerApprovalView extends VerticalLayout {
     private void configureLeaveGrid() {
         leaveGrid.addThemeVariants(GridVariant.LUMO_ROW_STRIPES, GridVariant.LUMO_NO_BORDER);
         leaveGrid.setSizeFull();
+        leaveGrid.setPartNameGenerator(approval ->
+                approval.getApprovalType() == ApprovalType.CANCELLATION
+                        ? "cancellation-row"
+                        : null);
 
         leaveGrid.addComponentColumn(approval -> createEmployeeBadge(approval.getLeaveRequest().getEmployee()))
                 .setHeader("Employee").setFlexGrow(1).setAutoWidth(true);
@@ -256,6 +255,8 @@ public class ManagerApprovalView extends VerticalLayout {
         HorizontalLayout footerLayout = new HorizontalLayout(cancelBtn, rejectBtn, approveBtn);
         footerLayout.setJustifyContentMode(FlexComponent.JustifyContentMode.END);
         footerLayout.setWidthFull();
+        footerLayout.setSpacing(true);
+//        footerLayout.setFlexWrap(FlexLayout.FlexWrap.WRAP);
 
         dialog.getFooter().add(footerLayout);
         dialog.open();
@@ -316,7 +317,8 @@ public class ManagerApprovalView extends VerticalLayout {
     private void openCorrectionDialog(AttendanceCorrection correction) {
         Dialog dialog = new Dialog();
         dialog.setHeaderTitle("Resolve Missing Check-out");
-        dialog.setWidth("450px");
+        dialog.setWidth("600px");
+        dialog.setMaxWidth("95vw");
 
         Attendance attendance = correction.getAttendance();
         ShiftAssignment assignment = attendance.getShiftAssignment();
@@ -408,7 +410,10 @@ public class ManagerApprovalView extends VerticalLayout {
         Button cancelBtn = new Button("Cancel", e -> dialog.close());
         cancelBtn.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
 
-        HorizontalLayout footerLayout = new HorizontalLayout(cancelBtn, rejectBtn, approveBtn);
+        HorizontalLayout footerLayout = new HorizontalLayout();
+        footerLayout.add(cancelBtn);
+        footerLayout.addAndExpand(new Div());
+        footerLayout.add(rejectBtn, approveBtn);
         footerLayout.setJustifyContentMode(FlexComponent.JustifyContentMode.END);
         footerLayout.setWidthFull();
 

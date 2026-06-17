@@ -14,6 +14,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 
 @Service
@@ -26,23 +27,23 @@ public class ApprovalRoutingService {
     private final LeaveApprovalRuleService ruleService;
     private final AuditLogService auditLogService;
     private final UserRepository userRepository;
-    private final AttendanceCronJobService attendanceCronJobService;
     private final DurationEngineService durationEngineService;
+    private final AttendanceProcessService attendanceProcessService;
 
     public static final String ACTION_REJECTED = "REJECTED";
     public static final String ACTION_APPROVED = "APPROVED";
     public static final String ACTION_PENDING = "PENDING";
     public static final String ACTION_CANCELLED_BY_SIBLING = "HANDLED_BY_SIBLING";
 
-    public ApprovalRoutingService(LeaveApprovalRepository leaveApprovalRepository, LeaveRequestRepository leaveRequestRepository, LeaveBalanceService leaveBalanceService, LeaveApprovalRuleService ruleService, AuditLogService auditLogService, UserRepository userRepository, AttendanceCronJobService attendanceCronJobService, DurationEngineService durationEngineService) {
+    public ApprovalRoutingService(LeaveApprovalRepository leaveApprovalRepository, LeaveRequestRepository leaveRequestRepository, LeaveBalanceService leaveBalanceService, LeaveApprovalRuleService ruleService, AuditLogService auditLogService, UserRepository userRepository, DurationEngineService durationEngineService, AttendanceProcessService attendanceProcessService) {
         this.leaveApprovalRepository = leaveApprovalRepository;
         this.leaveRequestRepository = leaveRequestRepository;
         this.leaveBalanceService = leaveBalanceService;
         this.ruleService = ruleService;
         this.auditLogService = auditLogService;
         this.userRepository = userRepository;
-        this.attendanceCronJobService = attendanceCronJobService;
         this.durationEngineService = durationEngineService;
+        this.attendanceProcessService = attendanceProcessService;
     }
 
     @Transactional
@@ -265,7 +266,9 @@ public class ApprovalRoutingService {
         request.setStatus(LeaveRequestService.STATUS_APPROVED);
         leaveRequestRepository.save(request);
 
-        leaveBalanceService.deduct(request);
+        BigDecimal approvedAlready = leaveBalanceService.calculateApprovedSupersededDays(request);
+        BigDecimal delta = request.getDurationDays().subtract(approvedAlready);
+        leaveBalanceService.deduct(request, delta);
 
         // REPLACEMENT BLOCK in finalizeApproval
         if (request.getSupersededLeaveIds() != null && !request.getSupersededLeaveIds().isEmpty()) {
@@ -286,7 +289,7 @@ public class ApprovalRoutingService {
 
                     // 3. Rollback using the captured status
                     if (previousStatus.equals(LeaveRequestService.STATUS_APPROVED)) {
-                        leaveBalanceService.rollbackDeduction(oldReq);
+                        // NO BALANCE ACTION: Approved leaves already contributed to the new merged request
                     } else {
                         leaveBalanceService.releasePendingHold(oldReq);
                     }
@@ -296,7 +299,7 @@ public class ApprovalRoutingService {
         LocalDate cursor = request.getStartDate();
         while (!cursor.isAfter(request.getEndDate())) {
             if (!cursor.isAfter(LocalDate.now())) {
-                attendanceCronJobService.recalculateAttendanceForDate(request.getEmployee().getId(), cursor);
+                attendanceProcessService.recalculateAttendanceForDate(request.getEmployee().getId(), cursor);
             }
             cursor = cursor.plusDays(1);
         }
@@ -311,7 +314,8 @@ public class ApprovalRoutingService {
         request.setStatus(LeaveRequestService.STATUS_REJECTED);
         leaveRequestRepository.save(request);
 
-        leaveBalanceService.releasePendingHold(request);
+        BigDecimal heldAmount = leaveBalanceService.calculateHeldAmount(request);
+        leaveBalanceService.releasePendingHold(request, heldAmount);
         cancelPendingApprovals(request.getId());
 
         String newRequestState = String.format("{ \"status\": \"%s\" }", LeaveRequestService.STATUS_REJECTED);
@@ -388,7 +392,14 @@ public class ApprovalRoutingService {
 
     @Transactional(readOnly = true)
     public List<LeaveApproval> getPendingApprovalsForUser(Long userId) {
-        return leaveApprovalRepository.findByApproverIdAndAction(userId, ACTION_PENDING);
+
+        List<LeaveApproval> inbox = new ArrayList<>();
+
+        inbox.addAll(leaveApprovalRepository.findPendingOriginalApprovals(userId, ApprovalType.ORIGINAL, List.of(CancellationStatus.NONE, CancellationStatus.REJECTED)));
+
+        inbox.addAll(leaveApprovalRepository.findPendingCancellationApprovals(userId, ApprovalType.CANCELLATION, CancellationStatus.PENDING));
+
+        return inbox;
     }
 
     private List<LeaveApprovalRule> getRulesForEffectiveChain(LeaveRequest request) {
@@ -454,8 +465,9 @@ public class ApprovalRoutingService {
         auditLogService.saveAuditLog(existingRequest.getId(), "WORKFLOW_UPGRADED", "LeaveRequest", oldReqState, newReqState);
     }
 
+    @Transactional(readOnly = true)
     public List<LeaveApproval> getApprovedOriginals(Long leaveRequestId) {
-        return leaveApprovalRepository.findApprovedOriginals(leaveRequestId);
+        return leaveApprovalRepository.findApprovedOriginals(leaveRequestId, ApprovalType.ORIGINAL);
     }
 
     @Transactional
@@ -510,20 +522,22 @@ public class ApprovalRoutingService {
         leaveRequestRepository.save(request);
 
         if (previousStatus.equals(LeaveRequestService.STATUS_APPROVED)) {
+            // Full refund as decided for approved cancelled leaves
             leaveBalanceService.rollbackDeduction(request);
 
             LocalDate cursor = request.getStartDate();
             while (!cursor.isAfter(request.getEndDate())) {
                 if (!cursor.isAfter(LocalDate.now())) {
-                    attendanceCronJobService.recalculateAttendanceForDate(request.getEmployee().getId(), cursor);
+                    attendanceProcessService.recalculateAttendanceForDate(request.getEmployee().getId(), cursor);
                 }
                 cursor = cursor.plusDays(1);
             }
         } else {
-            leaveBalanceService.releasePendingHold(request);
+            BigDecimal heldAmount = leaveBalanceService.calculateHeldAmount(request);
+            leaveBalanceService.releasePendingHold(request, heldAmount);
 
             // Because the leave is now dead, we must permanently cancel any ORIGINAL pending tasks that were frozen
-            List<LeaveApproval> pending = leaveApprovalRepository.findByLeaveRequestIdAndAction(request.getId(), ACTION_PENDING);
+        List<LeaveApproval> pending = leaveApprovalRepository.findByLeaveRequestIdAndAction(request.getId(), ACTION_PENDING);
             for (LeaveApproval a : pending) {
                 if (a.getApprovalType() == ApprovalType.ORIGINAL) {
                     a.setAction("CANCELLED");

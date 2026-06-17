@@ -33,46 +33,37 @@ public class ShiftAssignmentService {
     private final LeaveRequestRepository leaveRequestRepository;
     private final EmployeeRepository employeeRepository;
     private final ShiftRepository shiftRepository;
-    private final AttendanceCronJobService attendanceCronJobService;
     private final AuditLogService auditLoggingService;
     private final TimeLogRepository timeLogRepository;
+    private final ShiftRotationPolicyRepository policyRepository;
+    private final AttendanceProcessService attendanceProcessService;
 
-    public ShiftAssignmentService(ShiftAssignmentRepository shiftAssignmentRepository,
-                                  HolidayRepository holidayRepository,
-                                  LeaveRequestRepository leaveRequestRepository,
-                                  EmployeeRepository employeeRepository,
-                                  ShiftRepository shiftRepository,
-                                  AttendanceCronJobService attendanceCronJobService,
-                                  AuditLogService auditLoggingService, TimeLogRepository timeLogRepository) {
+    public ShiftAssignmentService(ShiftAssignmentRepository shiftAssignmentRepository, HolidayRepository holidayRepository, LeaveRequestRepository leaveRequestRepository, EmployeeRepository employeeRepository, ShiftRepository shiftRepository, AuditLogService auditLoggingService, TimeLogRepository timeLogRepository, ShiftRotationPolicyRepository policyRepository, AttendanceProcessService attendanceProcessService) {
         this.shiftAssignmentRepository = shiftAssignmentRepository;
         this.holidayRepository = holidayRepository;
         this.leaveRequestRepository = leaveRequestRepository;
         this.employeeRepository = employeeRepository;
         this.shiftRepository = shiftRepository;
-        this.attendanceCronJobService = attendanceCronJobService;
         this.auditLoggingService = auditLoggingService;
         this.timeLogRepository = timeLogRepository;
+        this.policyRepository = policyRepository;
+        this.attendanceProcessService = attendanceProcessService;
     }
 
     public BatchPreviewResponse previewBatchAssignments(List<Long> employeeIds, Long shiftId, LocalDate startDate, LocalDate endDate) {
         BatchPreviewResponse response = new BatchPreviewResponse();
 
-        Shift shift = shiftRepository.findById(shiftId)
-                .orElseThrow(() -> new IllegalArgumentException("Shift not found with ID: " + shiftId));
+        Shift shift = shiftRepository.findById(shiftId).orElseThrow(() -> new IllegalArgumentException("Shift not found with ID: " + shiftId));
 
-        Map<Long, Employee> employeeMap = employeeRepository.findAllById(employeeIds).stream()
-                .collect(Collectors.toMap(Employee::getId, emp -> emp));
+        Map<Long, Employee> employeeMap = employeeRepository.findAllById(employeeIds).stream().collect(Collectors.toMap(Employee::getId, emp -> emp));
 
         Set<LocalDate> holidayDates = new HashSet<>(holidayRepository.findHolidayDatesBetween(startDate, endDate));
 
-        List<LeaveRequest> leaves = leaveRequestRepository.findApprovedLeavesForEmployeesInRange(
-                employeeIds, "APPROVED", startDate, endDate);
+        List<LeaveRequest> leaves = leaveRequestRepository.findApprovedLeavesForEmployeesInRange(employeeIds, "APPROVED", startDate, endDate);
 
-        Map<Long, List<LeaveRequest>> leavesByEmployee = leaves.stream()
-                .collect(Collectors.groupingBy(l -> l.getEmployee().getId()));
+        Map<Long, List<LeaveRequest>> leavesByEmployee = leaves.stream().collect(Collectors.groupingBy(l -> l.getEmployee().getId()));
 
-        List<ShiftAssignment> existingAssignments = shiftAssignmentRepository
-                .findByEmployeeIdInAndDateRange(employeeIds, startDate, endDate);
+        List<ShiftAssignment> existingAssignments = shiftAssignmentRepository.findByEmployeeIdInAndDateRange(employeeIds, startDate, endDate);
 
         LocalDate currentDate = startDate;
         Map<Long, List<LocalDate>> validDaysPerEmployee = new HashMap<>();
@@ -81,8 +72,7 @@ public class ShiftAssignmentService {
             boolean isHoliday = holidayDates.contains(currentDate);
             String currentDayName = currentDate.getDayOfWeek().name();
 
-            boolean isShiftWorkingDay = shift.getWorkingDays().stream()
-                    .anyMatch(wd -> wd.name().equalsIgnoreCase(currentDayName));
+            boolean isShiftWorkingDay = shift.getWorkingDays().stream().anyMatch(wd -> wd.name().equalsIgnoreCase(currentDayName));
 
             for (Long empId : employeeIds) {
                 Employee employee = employeeMap.get(empId);
@@ -93,7 +83,12 @@ public class ShiftAssignmentService {
                 boolean hasExistingShift = isEmployeeAssignedOnDate(existingAssignments, empId, currentDate);
                 boolean isInvalidDay = !isShiftWorkingDay;
 
-                if (activeLeave != null || hasExistingShift || isHoliday || isInvalidDay) {
+                boolean isSingleDayOverride = startDate.equals(endDate);
+
+                boolean blocksAssignment = activeLeave != null || hasExistingShift ||
+                        (!isSingleDayOverride && (isHoliday || isInvalidDay));
+
+                if (blocksAssignment) {
 
                     ShiftConflictDTO conflict = createConflictBase(employee, shift, currentDate);
 
@@ -104,14 +99,11 @@ public class ShiftAssignmentService {
                         } else {
                             conflict.setConflictType("Half-Day Leave (" + session.name() + ")");
                         }
-                    }
-                    else if (hasExistingShift) {
+                    } else if (hasExistingShift) {
                         conflict.setConflictType("Overlap");
-                    }
-                    else if (isHoliday) {
+                    } else if (isHoliday) {
                         conflict.setConflictType("Holiday");
-                    }
-                    else {
+                    } else {
                         conflict.setConflictType("Non-Working Day");
                     }
 
@@ -134,10 +126,8 @@ public class ShiftAssignmentService {
         Set<Long> employeeIds = finalCleanAssignments.stream().map(ShiftAssignmentDTO::getEmployeeId).collect(Collectors.toSet());
         Set<Long> shiftIds = finalCleanAssignments.stream().map(ShiftAssignmentDTO::getShiftId).collect(Collectors.toSet());
 
-        Map<Long, Employee> employeeMap = employeeRepository.findAllById(employeeIds).stream()
-                .collect(Collectors.toMap(Employee::getId, emp -> emp));
-        Map<Long, Shift> shiftMap = shiftRepository.findAllById(shiftIds).stream()
-                .collect(Collectors.toMap(Shift::getId, shift -> shift));
+        Map<Long, Employee> employeeMap = employeeRepository.findAllById(employeeIds).stream().collect(Collectors.toMap(Employee::getId, emp -> emp));
+        Map<Long, Shift> shiftMap = shiftRepository.findAllById(shiftIds).stream().collect(Collectors.toMap(Shift::getId, shift -> shift));
 
         List<ShiftAssignment> assignmentsToSave = new ArrayList<>();
 
@@ -166,10 +156,8 @@ public class ShiftAssignmentService {
 
     @Transactional
     public void assignOverrideShift(ShiftAssignmentDTO dto) {
-        Employee employee = employeeRepository.findById(dto.getEmployeeId())
-                .orElseThrow(() -> new EntityNotFoundException("Employee not found"));
-        Shift shift = shiftRepository.findById(dto.getShiftId())
-                .orElseThrow(() -> new ShiftNotFoundException("Shift not found"));
+        Employee employee = employeeRepository.findById(dto.getEmployeeId()).orElseThrow(() -> new EntityNotFoundException("Employee not found"));
+        Shift shift = shiftRepository.findById(dto.getShiftId()).orElseThrow(() -> new ShiftNotFoundException("Shift not found"));
 
         punchHoleInExistingShifts(employee.getId(), dto.getStartDate(), dto.getEndDate());
 
@@ -180,15 +168,13 @@ public class ShiftAssignmentService {
         newAssignment.setEndDate(dto.getEndDate());
 
         ShiftAssignment saved = shiftAssignmentRepository.saveAndFlush(newAssignment);
-        auditLoggingService.saveAuditLog(saved.getId(), "HOLE_PUNCH_CREATED", "shift_assignments", null,
-                String.format("{ \"shiftId\": %d, \"startDate\": \"%s\", \"endDate\": \"%s\" }", shift.getId(), dto.getStartDate(), dto.getEndDate()));
+        auditLoggingService.saveAuditLog(saved.getId(), "HOLE_PUNCH_CREATED", "shift_assignments", null, String.format("{ \"shiftId\": %d, \"startDate\": \"%s\", \"endDate\": \"%s\" }", shift.getId(), dto.getStartDate(), dto.getEndDate()));
 
         triggerAttendanceRecalculationIfPast(employee.getId(), dto.getStartDate(), dto.getEndDate());
     }
 
     private void punchHoleInExistingShifts(Long employeeId, LocalDate newStart, LocalDate newEnd) {
-        List<ShiftAssignment> overlaps = shiftAssignmentRepository.findByEmployeeIdInAndDateRange(
-                List.of(employeeId), newStart, newEnd);
+        List<ShiftAssignment> overlaps = shiftAssignmentRepository.findByEmployeeIdInAndDateRange(List.of(employeeId), newStart, newEnd);
 
         for (ShiftAssignment old : overlaps) {
             LocalDate oldStart = old.getStartDate();
@@ -197,17 +183,22 @@ public class ShiftAssignmentService {
             if (!newStart.isAfter(oldStart) && !newEnd.isBefore(oldEnd)) {
                 shiftAssignmentRepository.delete(old);
                 shiftAssignmentRepository.flush();
-            } else if (newStart.isAfter(oldStart) && newEnd.isBefore(oldEnd)) {
-                ShiftAssignment remainder = new ShiftAssignment();
-                old.setEndDate(newStart.minusDays(1));
-                shiftAssignmentRepository.save(old);
-                shiftAssignmentRepository.saveAndFlush(remainder);
-            } else if (newStart.isAfter(oldStart) && newEnd.isBefore(oldEnd)) {
+            } else if (!newStart.isAfter(oldStart) && newEnd.isBefore(oldEnd)) {
                 old.setStartDate(newEnd.plusDays(1));
                 shiftAssignmentRepository.saveAndFlush(old);
             } else if (newStart.isAfter(oldStart) && !newEnd.isBefore(oldEnd)) {
                 old.setEndDate(newStart.minusDays(1));
                 shiftAssignmentRepository.saveAndFlush(old);
+            } else if (newStart.isAfter(oldStart) && newEnd.isBefore(oldEnd)) {
+                ShiftAssignment remainder = new ShiftAssignment();
+                remainder.setEmployee(old.getEmployee());
+                remainder.setShift(old.getShift());
+                remainder.setStartDate(newEnd.plusDays(1));
+                remainder.setEndDate(old.getEndDate());
+
+                old.setEndDate(newStart.minusDays(1));
+                shiftAssignmentRepository.save(old);
+                shiftAssignmentRepository.saveAndFlush(remainder);
             }
 
             triggerAttendanceRecalculationIfPast(employeeId, oldStart, oldEnd);
@@ -216,19 +207,16 @@ public class ShiftAssignmentService {
 
     @Transactional
     public void updateSingleAssignment(ShiftAssignmentDTO dto) {
-        ShiftAssignment existing = shiftAssignmentRepository.findById(dto.getId())
-                .orElseThrow(() -> new EntityNotFoundException("Shift Assignment not found with ID: " + dto.getId()));
+        ShiftAssignment existing = shiftAssignmentRepository.findById(dto.getId()).orElseThrow(() -> new EntityNotFoundException("Shift Assignment not found with ID: " + dto.getId()));
 
-        boolean hasConflict = shiftAssignmentRepository.existsConflictExcludingAssignment(
-                dto.getEmployeeId(), dto.getStartDate(), dto.getEndDate(), dto.getId());
-        if (hasConflict) throw new ShiftConflictException("Cannot update boundaries: Overlaps with another assigned shift.");
+        boolean hasConflict = shiftAssignmentRepository.existsConflictExcludingAssignment(dto.getEmployeeId(), dto.getStartDate(), dto.getEndDate(), dto.getId());
+        if (hasConflict)
+            throw new ShiftConflictException("Cannot update boundaries: Overlaps with another assigned shift.");
 
-        String oldState = String.format("{ \"shiftId\": %d, \"startDate\": \"%s\", \"endDate\": \"%s\" }",
-                existing.getShift().getId(), existing.getStartDate(), existing.getEndDate());
+        String oldState = String.format("{ \"shiftId\": %d, \"startDate\": \"%s\", \"endDate\": \"%s\" }", existing.getShift().getId(), existing.getStartDate(), existing.getEndDate());
 
         if (!existing.getShift().getId().equals(dto.getShiftId())) {
-            Shift newShift = shiftRepository.findById(dto.getShiftId())
-                    .orElseThrow(() -> new ShiftNotFoundException("Shift not found with ID: " + dto.getShiftId()));
+            Shift newShift = shiftRepository.findById(dto.getShiftId()).orElseThrow(() -> new ShiftNotFoundException("Shift not found with ID: " + dto.getShiftId()));
             existing.setShift(newShift);
         }
 
@@ -236,30 +224,26 @@ public class ShiftAssignmentService {
         existing.setEndDate(dto.getEndDate());
         ShiftAssignment saved = shiftAssignmentRepository.saveAndFlush(existing);
 
-        auditLoggingService.saveAuditLog(saved.getId(), "UPDATED", "shift_assignments", oldState,
-                String.format("{ \"shiftId\": %d, \"startDate\": \"%s\", \"endDate\": \"%s\" }",
-                        saved.getShift().getId(), saved.getStartDate(), saved.getEndDate()));
+        auditLoggingService.saveAuditLog(saved.getId(), "UPDATED", "shift_assignments", oldState, String.format("{ \"shiftId\": %d, \"startDate\": \"%s\", \"endDate\": \"%s\" }", saved.getShift().getId(), saved.getStartDate(), saved.getEndDate()));
 
         triggerAttendanceRecalculationIfPast(saved.getEmployee().getId(), dto.getStartDate(), dto.getEndDate());
     }
 
     @Transactional
     public void deleteAssignment(Long id) {
-        ShiftAssignment existing = shiftAssignmentRepository.findById(id)
-                .orElseThrow(() -> new ShiftNotFoundException("Assignment not found"));
+        ShiftAssignment existing = shiftAssignmentRepository.findById(id).orElseThrow(() -> new ShiftNotFoundException("Assignment not found"));
 
         Long empId = existing.getEmployee().getId();
         LocalDate start = existing.getStartDate();
         LocalDate end = existing.getEndDate();
 
         shiftAssignmentRepository.deleteById(id);
-        auditLoggingService.saveAuditLog(id, "DELETED", "shift_assignments",
-                String.format("{ \"shiftId\": %d }", existing.getShift().getId()), null);
+        auditLoggingService.saveAuditLog(id, "DELETED", "shift_assignments", String.format("{ \"shiftId\": %d }", existing.getShift().getId()), null);
 
         triggerAttendanceRecalculationIfPast(empId, start, end);
     }
 
-    public Page<ShiftAssignmentDTO> fetchAssignmentsForGrid(int offset, int limit, LocalDate filterDate, String employeeNameSearch){
+    public Page<ShiftAssignmentDTO> fetchAssignmentsForGrid(int offset, int limit, LocalDate filterDate, String employeeNameSearch) {
         Pageable pageable = PageRequest.of(offset / limit, limit, Sort.by("startDate").ascending());
         Page<ShiftAssignment> page;
 
@@ -275,7 +259,7 @@ public class ShiftAssignmentService {
         return page.map(this::mapToDTO);
     }
 
-    public List<ShiftAssignmentDTO> fetchAssignmentsForCalendar(LocalDate viewStartDate, LocalDate viewEndDate){
+    public List<ShiftAssignmentDTO> fetchAssignmentsForCalendar(LocalDate viewStartDate, LocalDate viewEndDate) {
         List<ShiftAssignment> assignments = shiftAssignmentRepository.findOverlappingAssignmentsInRange(viewStartDate, viewEndDate);
         return mapToDTOList(filterOutApprovedFullDayLeaves(assignments));
     }
@@ -321,15 +305,13 @@ public class ShiftAssignmentService {
         LocalDate cursor = start;
         LocalDate today = LocalDate.now();
         while (!cursor.isAfter(end) && !cursor.isAfter(today)) {
-            attendanceCronJobService.recalculateAttendanceForDate(employeeId, cursor);
+            attendanceProcessService.recalculateAttendanceForDate(employeeId, cursor);
             cursor = cursor.plusDays(1);
         }
     }
 
     private boolean isEmployeeAssignedOnDate(List<ShiftAssignment> existingAssignments, Long empId, LocalDate targetDate) {
-        return existingAssignments.stream().anyMatch(a ->
-                a.getEmployee().getId().equals(empId) &&
-                        !targetDate.isBefore(a.getStartDate()) && !targetDate.isAfter(a.getEndDate()));
+        return existingAssignments.stream().anyMatch(a -> a.getEmployee().getId().equals(empId) && !targetDate.isBefore(a.getStartDate()) && !targetDate.isAfter(a.getEndDate()));
     }
 
     private ShiftAssignmentDTO createReadyDTO(Employee employee, Shift shift, LocalDate start, LocalDate end) {
@@ -374,25 +356,23 @@ public class ShiftAssignmentService {
     }
 
     private LeaveRequest getActiveLeaveForDate(List<LeaveRequest> leaves, LocalDate targetDate) {
-        return leaves.stream()
-                .filter(l -> !targetDate.isBefore(l.getStartDate()) && !targetDate.isAfter(l.getEndDate()))
-                .findFirst().orElse(null);
+        return leaves.stream().filter(l -> !targetDate.isBefore(l.getStartDate()) && !targetDate.isAfter(l.getEndDate())).findFirst().orElse(null);
     }
 
     private LeaveSession getSessionForDate(LeaveRequest request, LocalDate targetDate) {
         if (request == null) return null;
 
-       if (targetDate.equals(request.getStartDate()) && targetDate.equals(request.getEndDate())) {
+        if (targetDate.equals(request.getStartDate()) && targetDate.equals(request.getEndDate())) {
             return request.getStartSession();
         }
 
-       if (targetDate.equals(request.getStartDate())) {
+        if (targetDate.equals(request.getStartDate())) {
             return request.getStartSession();
         }
-       if (targetDate.equals(request.getEndDate())) {
+        if (targetDate.equals(request.getEndDate())) {
             return request.getEndSession();
         }
-       return LeaveSession.FULL_DAY;
+        return LeaveSession.FULL_DAY;
     }
 
     private boolean isFullDayLeave(LeaveRequest leave, LocalDate date) {
@@ -410,7 +390,16 @@ public class ShiftAssignmentService {
         List<LeaveRequest> leaves = leaveRequestRepository.findApprovedLeavesForEmployeesInRange(empIds, "APPROVED", minDate, maxDate);
         Map<Long, List<LeaveRequest>> leavesByEmployee = leaves.stream().collect(Collectors.groupingBy(l -> l.getEmployee().getId()));
 
-        return assignments;
+        return assignments.stream()
+                .filter(assignment -> {
+                    List<LeaveRequest> empLeaves = leavesByEmployee.getOrDefault(assignment.getEmployee().getId(), Collections.emptyList());
+
+                    return empLeaves.stream().noneMatch(leave ->
+                            !assignment.getStartDate().isBefore(leave.getStartDate()) &&
+                                    !assignment.getEndDate().isAfter(leave.getEndDate()) &&
+                                    getSessionForDate(leave, assignment.getStartDate()) == LeaveSession.FULL_DAY
+                    );
+                }).toList();
     }
 
     @Transactional(readOnly = true)
@@ -422,18 +411,20 @@ public class ShiftAssignmentService {
         }
         return stats;
     }
+
     public List<DailyCellDTO> getResolvedCalendarData(LocalDate startDate, LocalDate endDate) {
-         List<Employee> activeEmployees = employeeRepository.findByActiveTrue();
+        List<Employee> activeEmployees = employeeRepository.findByActiveTrue();
         List<Long> empIds = activeEmployees.stream().map(Employee::getId).toList();
 
         List<ShiftAssignment> rawAssignments = shiftAssignmentRepository.findByEmployeeIdInAndDateRange(empIds, startDate, endDate);
         Set<LocalDate> holidayDates = new HashSet<>(holidayRepository.findHolidayDatesBetween(startDate, endDate));
         List<LeaveRequest> leaves = leaveRequestRepository.findApprovedLeavesForEmployeesInRange(empIds, "APPROVED", startDate, endDate);
 
-        Map<Long, List<ShiftAssignment>> assignmentsByEmp = rawAssignments.stream()
-                .collect(Collectors.groupingBy(a -> a.getEmployee().getId()));
-        Map<Long, List<LeaveRequest>> leavesByEmp = leaves.stream()
-                .collect(Collectors.groupingBy(l -> l.getEmployee().getId()));
+        Map<Long, List<ShiftAssignment>> assignmentsByEmp = rawAssignments.stream().collect(Collectors.groupingBy(a -> a.getEmployee().getId()));
+        Map<Long, List<LeaveRequest>> leavesByEmp = leaves.stream().collect(Collectors.groupingBy(l -> l.getEmployee().getId()));
+
+        Map<Long, ShiftRotationPolicy> policyByEmp = policyRepository.findByActiveTrue().stream()
+                .collect(Collectors.toMap(p -> p.getEmployee().getId(), p -> p));
 
         List<DailyCellDTO> resolvedData = new ArrayList<>();
 
@@ -457,37 +448,28 @@ public class ShiftAssignmentService {
                 }
 
                 final LocalDate currentDay = startCur;
-                List<ShiftAssignment> assignmentsToday = empAssignments.stream()
-                        .filter(a -> !currentDay.isBefore(a.getStartDate()) && !currentDay.isAfter(a.getEndDate()))
-                        .toList();
+                List<ShiftAssignment> assignmentsToday = empAssignments.stream().filter(a -> !currentDay.isBefore(a.getStartDate()) && !currentDay.isAfter(a.getEndDate())).toList();
 
                 ShiftAssignment bestAssignment = null;
                 if (!assignmentsToday.isEmpty()) {
-
-                    bestAssignment = assignmentsToday.stream()
-                            .filter(a -> a.getStartDate().equals(a.getEndDate()))
-                            .findFirst()
-                            .orElse(assignmentsToday.get(0));
+                    bestAssignment = assignmentsToday.stream().filter(a -> a.getStartDate().equals(a.getEndDate())).findFirst().orElse(assignmentsToday.get(0));
                 }
 
                 if (bestAssignment != null) {
                     cell.setAssignment(mapToDTO(bestAssignment));
-                    cell.setOvertimeOverride(bestAssignment.getStartDate().equals(bestAssignment.getEndDate()));
-
-                   if (!cell.isOvertimeOverride()) {
-                        String currentDayName = startCur.getDayOfWeek().name();
-                        boolean isWorkingDay = bestAssignment.getShift().getWorkingDays().stream()
-                                .anyMatch(w -> w.name().equals(currentDayName));
-
-                        if (!isWorkingDay) {
-                            cell.setOffDay(true);
-                        }
-                    }
-                }
-
-                if (cell.isOvertimeOverride()) {
                     cell.setHoliday(false);
-                    cell.setOffDay(false);
+                } else if (!cell.isHoliday()) {
+                    // IF NO ASSIGNMENT AND NO HOLIDAY: Check if this gap is intentional
+                    ShiftRotationPolicy policy = policyByEmp.get(emp.getId());
+                    LocalDate generatedUntil = policy != null ? policy.getGeneratedUntil() : emp.getDefaultShiftGeneratedUntil();
+
+                    boolean isPast = startCur.isBefore(LocalDate.now());
+                    boolean isGenerated = generatedUntil != null && !startCur.isAfter(generatedUntil);
+
+                    // If it's in the past, or if the cron job has already evaluated this date, it's an Intentional Off Day
+                    if (isPast || isGenerated) {
+                        cell.setIntentionalOffDay(true);
+                    }
                 }
 
                 resolvedData.add(cell);
@@ -502,10 +484,8 @@ public class ShiftAssignmentService {
         LocalDate today = LocalDate.now();
         LocalDate earliestDeletableDate = today;
 
-        LocalDateTime startOfDay = today.atStartOfDay();
-        LocalDateTime endOfDay = today.atTime(LocalTime.MAX);
+        List<TimeLog> todayPunches = timeLogRepository.findByEmployeeIdAndAttendanceDate(employeeId, today);
 
-        List<TimeLog> todayPunches = timeLogRepository.findPunchesInShiftWindow(employeeId, startOfDay, endOfDay);
         if (!todayPunches.isEmpty()) {
             earliestDeletableDate = today.plusDays(1);
         }
@@ -514,24 +494,19 @@ public class ShiftAssignmentService {
             throw new IllegalArgumentException("Cannot delete past shifts or active shifts where the employee has already punched in.");
         }
 
-        LocalDate actualDeleteStart = requestedStart.isBefore(earliestDeletableDate)
-                ? earliestDeletableDate
-                : requestedStart;
+        LocalDate actualDeleteStart = requestedStart.isBefore(earliestDeletableDate) ? earliestDeletableDate : requestedStart;
 
         punchHoleInExistingShifts(employeeId, actualDeleteStart, requestedEnd);
 
-        auditLoggingService.saveAuditLog(null, "RANGE_DELETED", "shift_assignments", null,
-                String.format("{ \"employeeId\": %d, \"actualStart\": \"%s\", \"actualEnd\": \"%s\", \"requestedStart\": \"%s\" }",
-                        employeeId, actualDeleteStart, requestedEnd, requestedStart));
+        auditLoggingService.saveAuditLog(null, "RANGE_DELETED", "shift_assignments", null, String.format("{ \"employeeId\": %d, \"actualStart\": \"%s\", \"actualEnd\": \"%s\", \"requestedStart\": \"%s\" }", employeeId, actualDeleteStart, requestedEnd, requestedStart));
 
         triggerAttendanceRecalculationIfPast(employeeId, actualDeleteStart, requestedEnd);
     }
+
     @Transactional
     public void editOrMoveShiftSegment(Long employeeId, LocalDate originalDate, LocalDate newDate, Long shiftId) {
-        Employee employee = employeeRepository.findById(employeeId)
-                .orElseThrow(() -> new EntityNotFoundException("Employee not found"));
-        Shift shift = shiftRepository.findById(shiftId)
-                .orElseThrow(() -> new ShiftNotFoundException("Shift not found"));
+        Employee employee = employeeRepository.findById(employeeId).orElseThrow(() -> new EntityNotFoundException("Employee not found"));
+        Shift shift = shiftRepository.findById(shiftId).orElseThrow(() -> new ShiftNotFoundException("Shift not found"));
 
         LocalDate today = LocalDate.now();
         if (!originalDate.isAfter(today) || !newDate.isAfter(today)) {
@@ -542,7 +517,7 @@ public class ShiftAssignmentService {
             deleteAssignmentRange(employeeId, originalDate, originalDate);
         }
 
-       punchHoleInExistingShifts(employeeId, newDate, newDate);
+        punchHoleInExistingShifts(employeeId, newDate, newDate);
 
         ShiftAssignment newAssignment = new ShiftAssignment();
         newAssignment.setEmployee(employee);
@@ -552,9 +527,7 @@ public class ShiftAssignmentService {
 
         ShiftAssignment saved = shiftAssignmentRepository.saveAndFlush(newAssignment);
 
-        auditLoggingService.saveAuditLog(saved.getId(), "SHIFT_MOVED_EDITED", "shift_assignments", null,
-                String.format("{ \"employeeId\": %d, \"oldDate\": \"%s\", \"newDate\": \"%s\", \"shiftId\": %d }",
-                        employeeId, originalDate, newDate, shift.getId()));
+        auditLoggingService.saveAuditLog(saved.getId(), "SHIFT_MOVED_EDITED", "shift_assignments", null, String.format("{ \"employeeId\": %d, \"oldDate\": \"%s\", \"newDate\": \"%s\", \"shiftId\": %d }", employeeId, originalDate, newDate, shift.getId()));
 
         if (!originalDate.equals(newDate)) {
             triggerAttendanceRecalculationIfPast(employeeId, originalDate, originalDate);

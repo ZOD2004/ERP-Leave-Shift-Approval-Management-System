@@ -35,5 +35,4 @@ public class ShiftAssignment {
 
     //removed overrideStartTime,overrideEndTime,overrideApplied this was handled in shift itself
     // there was no need to have this since shift is divided into 2 session and leave can be based on that
-
 }

@@ -17,3 +17,7 @@
     background-color: #343a40;
     color: white;
 }
+
+vaadin-grid::part(cancellation-row) {
+    background-color: rgba(255, 0, 0, 0.06);
+}

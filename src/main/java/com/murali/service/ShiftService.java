@@ -96,4 +96,8 @@ public class ShiftService {
     public List<Shift> search(String searchTerm) {
         return shiftRepository.findByNameContainingIgnoreCase(searchTerm);
     }
+
+    public List<Shift> findAll() {
+        return shiftRepository.findAll();
+    }
 }

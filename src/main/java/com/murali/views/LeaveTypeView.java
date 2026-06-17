@@ -165,7 +165,6 @@ public class LeaveTypeView extends VerticalLayout {
         try {
             binder.writeBean(currentLeaveType);
 
-            // Route to correct service method based on ID
             if (currentLeaveType.getId() == null) {
                 leaveTypeService.addLeaveType(currentLeaveType);
             } else {

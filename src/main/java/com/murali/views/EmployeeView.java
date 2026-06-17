@@ -46,6 +46,7 @@ public class EmployeeView extends VerticalLayout {
     private final UserService userService;
     private final LeaveTypeRepository leaveTypeRepository;
     private final LeaveBalanceService leaveBalanceService;
+    private final ShiftService shiftService;
 
     private final Grid<Employee> grid = new Grid<>(Employee.class, false);
     private final TextField searchField = new TextField();
@@ -61,6 +62,7 @@ public class EmployeeView extends VerticalLayout {
     private final TextField employeeCode = new TextField("Employee Code");
     private final ComboBox<Department> department = new ComboBox<>("Department");
     private final ComboBox<Employee> manager = new ComboBox<>("Reporting Manager");
+    private final ComboBox<Shift> defaultShift = new ComboBox<>("Default Shift");
 
     private final Button saveBtn = new Button("Save Employee");
     private final Button cancelBtn = new Button("Cancel");
@@ -75,13 +77,14 @@ public class EmployeeView extends VerticalLayout {
     private boolean isExistingUserLinked = false;
 
     public EmployeeView(EmployeeService employeeService, DepartmentService deptService,
-                        RoleService roleService, UserService userService, LeaveTypeRepository leaveTypeRepository, LeaveBalanceService leaveBalanceService) {
+                        RoleService roleService, UserService userService, LeaveTypeRepository leaveTypeRepository, LeaveBalanceService leaveBalanceService, ShiftService shiftService) {
         this.employeeService = employeeService;
         this.deptService = deptService;
         this.roleService = roleService;
         this.userService = userService;
         this.leaveTypeRepository = leaveTypeRepository;
         this.leaveBalanceService = leaveBalanceService;
+        this.shiftService = shiftService;
 
         setSizeFull();
         configureGrid();
@@ -115,6 +118,8 @@ public class EmployeeView extends VerticalLayout {
         grid.addColumn(emp -> emp.getManager() != null ? emp.getManager().getFirstName() : "None")
                 .setHeader("Manager");
 
+        grid.addColumn(emp -> emp.getDefaultShift() != null ? emp.getDefaultShift().getName() : "None")
+                .setHeader("Shift");
         grid.addComponentColumn(employee -> {
             Button editBtn = new Button(new Icon(VaadinIcon.EDIT));
             editBtn.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
@@ -165,6 +170,9 @@ public class EmployeeView extends VerticalLayout {
 
         manager.setItemLabelGenerator(e -> e.getFirstName() + " (" + e.getEmployeeCode() + ")");
         manager.setClearButtonVisible(true);
+        defaultShift.setItems(shiftService.findAll());
+        defaultShift.setItemLabelGenerator(Shift::getName);
+        defaultShift.setClearButtonVisible(true);
 
         department.addValueChangeListener(event -> {
             Department selectedDept = event.getValue();
@@ -213,13 +221,14 @@ public class EmployeeView extends VerticalLayout {
         employeeBinder.forField(employeeCode).asRequired("Required").bind(Employee::getEmployeeCode, Employee::setEmployeeCode);
         employeeBinder.forField(department).asRequired("Required").bind(Employee::getDepartment, Employee::setDepartment);
         employeeBinder.forField(manager).bind(Employee::getManager, Employee::setManager);
+        employeeBinder.forField(defaultShift).bind(Employee::getDefaultShift, Employee::setDefaultShift);
 
         applicableLeavesField.setItems(leaveTypeRepository.findAll());
         applicableLeavesField.setItemLabelGenerator(LeaveType::getName);
         applicableLeavesField.setPlaceholder("Defaults to ALL if left blank");
 
         FormLayout userLayout = new FormLayout(username, email, password, role);
-        FormLayout empLayout = new FormLayout(employeeCode, firstName, departmentWrapper, manager);
+        FormLayout empLayout = new FormLayout(employeeCode, firstName, departmentWrapper, manager, defaultShift);
 
         VerticalLayout dialogBody = new VerticalLayout(
                 new H3("User Identity"), userLayout,

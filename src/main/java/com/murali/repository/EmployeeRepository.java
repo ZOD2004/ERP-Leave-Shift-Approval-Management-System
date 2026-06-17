@@ -37,6 +37,7 @@ public interface EmployeeRepository extends JpaRepository<Employee, Long> {
         JOIN FETCH e.user u
         LEFT JOIN FETCH e.department
         LEFT JOIN FETCH e.manager
+        LEFT JOIN FETCH e.defaultShift 
         WHERE u.active = true
     """)
     List<Employee> findByActiveTrue();
@@ -47,6 +48,7 @@ public interface EmployeeRepository extends JpaRepository<Employee, Long> {
         JOIN FETCH e.user u
         LEFT JOIN FETCH e.department
         LEFT JOIN FETCH e.manager
+        LEFT JOIN FETCH e.defaultShift
         WHERE u.active = true
         AND (
             LOWER(e.firstName) LIKE LOWER(CONCAT('%', :searchTerm, '%'))
@@ -84,4 +86,6 @@ public interface EmployeeRepository extends JpaRepository<Employee, Long> {
             "LEFT JOIN FETCH e.manager " +
             "WHERE e.id = :id")
     Optional<Employee> findByIdWithDepartmentAndManager(@Param("id") Long id);
+
+    List<Employee> findByDefaultShiftIdAndUser_ActiveTrue(Long shiftId);
 }

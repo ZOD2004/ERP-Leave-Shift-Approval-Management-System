@@ -15,6 +15,7 @@ import com.vaadin.flow.component.html.H3;
 import com.vaadin.flow.component.html.Hr;
 import com.vaadin.flow.component.notification.Notification;
 import com.vaadin.flow.component.notification.NotificationVariant;
+import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.textfield.PasswordField;
 import com.vaadin.flow.component.textfield.TextField;
@@ -35,11 +36,9 @@ public class ProfileView extends VerticalLayout {
         this.userService = userService;
         this.securityService = securityService;
 
-        setSizeFull();
-        addClassNames(LumoUtility.Padding.LARGE);
-
-        // Limit the width so the form doesn't stretch across massive monitors
-        setMaxWidth("800px");
+        setWidthFull(); setMaxWidth("800px");
+        setAlignItems(Alignment.STRETCH);
+        addClassNames(LumoUtility.Padding.LARGE, LumoUtility.Margin.Horizontal.AUTO);
 
         User currentUser = securityService.getAuthenticatedUser();
         Employee currentEmployee = securityService.getCurrentEmployee();
@@ -103,12 +102,15 @@ public class ProfileView extends VerticalLayout {
             detailsLayout.add(empCode, firstName, dept, manager);
         }
 
+        detailsLayout.setWidthFull();
+        card.setWidthFull();
         card.add(sectionTitle, new Hr(), detailsLayout);
         return card;
     }
 
     private VerticalLayout createPasswordCard(String username) {
         VerticalLayout card = new VerticalLayout();
+        card.setWidthFull(); // Constrain card container
         card.addClassNames(
                 LumoUtility.Background.BASE,
                 LumoUtility.Border.ALL, LumoUtility.BorderColor.CONTRAST_10,
@@ -121,11 +123,21 @@ public class ProfileView extends VerticalLayout {
         sectionTitle.addClassNames(LumoUtility.Margin.Top.NONE);
 
         FormLayout passwordLayout = new FormLayout();
-        passwordLayout.setResponsiveSteps(new FormLayout.ResponsiveStep("0", 1), new FormLayout.ResponsiveStep("500px", 2));
+        // Explicitly make the form fields scale cleanly down to 1 column on tiny viewports
+        passwordLayout.setResponsiveSteps(
+                new FormLayout.ResponsiveStep("0", 1),
+                new FormLayout.ResponsiveStep("500px", 2)
+        );
+        passwordLayout.setWidthFull();
 
         PasswordField oldPassword = new PasswordField("Current Password");
         PasswordField newPassword = new PasswordField("New Password");
         PasswordField confirmPassword = new PasswordField("Confirm New Password");
+
+        // Explicitly set all individual components to fill their layout cells safely
+        oldPassword.setWidthFull();
+        newPassword.setWidthFull();
+        confirmPassword.setWidthFull();
 
         Button saveButton = new Button("Update Password", e -> {
             if (newPassword.getValue().isEmpty()) {
@@ -154,11 +166,21 @@ public class ProfileView extends VerticalLayout {
         });
         saveButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
 
-        // Make the save button span full width or align nicely
+        // Layout configuration logic:
         passwordLayout.add(oldPassword, newPassword, confirmPassword);
-        passwordLayout.setColspan(oldPassword, 2); // Put old password on its own row
 
-        card.add(sectionTitle, new Hr(), passwordLayout, saveButton);
+        // Spanning rules:
+        passwordLayout.setColspan(oldPassword, 2);     // Takes row 1 entirely
+        passwordLayout.setColspan(newPassword, 1);     // Takes row 2, column 1
+        passwordLayout.setColspan(confirmPassword, 1); // Takes row 2, column 2
+
+        // Wraps button separately inside a layout container to avoid grid overflow clipping
+        HorizontalLayout buttonLayout = new HorizontalLayout(saveButton);
+        buttonLayout.setWidthFull();
+        buttonLayout.setPadding(false);
+        buttonLayout.setMargin(false);
+
+        card.add(sectionTitle, new Hr(), passwordLayout, buttonLayout);
         return card;
     }
 }

@@ -3,8 +3,10 @@ package com.murali.repository;
 import com.murali.entity.LeaveBalanceTransaction;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 @Repository
@@ -14,4 +16,6 @@ public interface LeaveBalanceTransactionRepository extends JpaRepository<LeaveBa
             "JOIN FETCH tx.leaveType lt " +
             "ORDER BY tx.createdAt DESC")
     List<LeaveBalanceTransaction> findAllWithDetails();
+    @Query("SELECT COALESCE(SUM(t.days), 0) FROM LeaveBalanceTransaction t WHERE t.referenceId = :referenceId AND t.transactionType = :transactionType")
+    BigDecimal sumDaysByReferenceIdAndTransactionType(@Param("referenceId") Long referenceId, @Param("transactionType") String transactionType);
 }

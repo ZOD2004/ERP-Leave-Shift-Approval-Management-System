@@ -240,6 +240,23 @@ public class AttendanceProcessService {
         if (targetDate.equals(request.getEndDate())) return request.getEndSession();
         return LeaveSession.FULL_DAY;
     }
+    @Transactional
+    public void recalculateAttendanceForDate(Long employeeId, LocalDate targetDate) {
+        Attendance attendance = attendanceRepository.findByEmployeeIdAndAttendanceDate(employeeId, targetDate).orElse(null);
+        if (attendance == null) {
+            log.warn("Cannot recalculate: No attendance record found for Employee {} on {}", employeeId, targetDate);
+            return;
+        }
+
+        ShiftAssignment assignment = shiftAssignmentRepository.findAssignmentByEmployeeAndDate(employeeId, targetDate).orElse(null);
+        if (assignment == null) return;
+
+        LeaveRequest leaveRequest = leaveRequestRepository.findApprovedLeaveForEmployeeOnDate(employeeId, targetDate).orElse(null);
+
+        recalculateTimeline(attendance, assignment.getShift(), leaveRequest);
+
+        log.info("Successfully recalculated attendance for Employee {} on {}", employeeId, targetDate);
+    }
 
 
 }

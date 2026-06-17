@@ -59,4 +59,10 @@ public class GlobalExceptionHandler extends Exception{
         return new ResponseEntity<>(errorDetails, HttpStatus.CONFLICT);
     }
 
+    @ExceptionHandler(LeaveMergeException.class)
+    public ResponseEntity<ErrorDetails> LeaveMergeException(LeaveMergeException e, WebRequest request){
+        ErrorDetails errorDetails = new ErrorDetails(e.getMessage(), request.getDescription(true), LocalDateTime.now());
+        return new ResponseEntity<>(errorDetails, HttpStatus.CONFLICT);
+    }
+
 }

@@ -139,4 +139,11 @@ public interface LeaveRequestRepository extends JpaRepository<LeaveRequest, Long
             @Param("dayBefore") LocalDate dayBefore,
             @Param("dayAfter") LocalDate dayAfter
     );
+    @Query(value = """
+        SELECT * FROM leave_requests lr 
+        WHERE :leaveId = ANY(string_to_array(lr.superseded_leave_ids, ',')) 
+          AND lr.status NOT IN ('REJECTED', 'CANCELLED', 'DRAFT') 
+        LIMIT 1
+        """, nativeQuery = true)
+    Optional<LeaveRequest> findActiveSupersedingLeave(@Param("leaveId") String leaveId);
 }

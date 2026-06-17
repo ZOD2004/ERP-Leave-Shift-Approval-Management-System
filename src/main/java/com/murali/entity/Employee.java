@@ -7,6 +7,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -39,6 +40,13 @@ public class Employee{
 
     @Column(name = "first_name", nullable = false, length = 100)
     private String firstName;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "default_shift_id")
+    private Shift defaultShift;
+
+    @Column(name = "default_shift_generated_until")
+    private LocalDate defaultShiftGeneratedUntil;
 
     //removed Set<LeaveType> applicableLeaveTypes since leave Balance already has this data in it
 

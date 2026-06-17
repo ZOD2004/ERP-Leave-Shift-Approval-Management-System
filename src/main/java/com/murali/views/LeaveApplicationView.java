@@ -130,6 +130,7 @@ public class LeaveApplicationView extends VerticalLayout {
         title.addClassNames(LumoUtility.Margin.Top.LARGE, LumoUtility.Margin.Bottom.SMALL);
 
         historyGrid.addColumn(LeaveRequest::getStartDate).setHeader("Start").setAutoWidth(true);
+        historyGrid.addColumn(LeaveRequest::getEndDate).setHeader("End").setAutoWidth(true);
 
         historyGrid.addColumn(req -> req.getLeaveType() != null ? req.getLeaveType().getName() : "").setHeader("Type").setAutoWidth(true);
 
@@ -426,6 +427,7 @@ public class LeaveApplicationView extends VerticalLayout {
                 LeaveDurationResultDTO result = durationEngineService.calculateLeaveDuration(start, end, currentEmployee, startSess, endSess, type.getApplySandwichRule());
                 durationDays.setValue(result.getNetLeaveDays().doubleValue());
             } catch (Exception ex) {
+                ex.printStackTrace();
                 durationDays.clear();
                 Notification.show("Calculation Error: " + ex.getMessage(), 4000, Notification.Position.MIDDLE).addThemeVariants(NotificationVariant.LUMO_ERROR);
             }

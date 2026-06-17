@@ -1,7 +1,6 @@
 package com.murali.util;
 
 
-
 import com.murali.entity.Employee;
 import com.murali.entity.User;
 import com.murali.exception.EmployeeNotFoundException;
@@ -19,8 +18,7 @@ public class SecurityService {
     private final EmployeeService employeeService;
     private final UserRepository userRepository;
 
-    public SecurityService(EmployeeService employeeService,
-                           UserRepository userRepository) {
+    public SecurityService(EmployeeService employeeService, UserRepository userRepository) {
         this.employeeService = employeeService;
         this.userRepository = userRepository;
     }
@@ -30,26 +28,20 @@ public class SecurityService {
     }
 
     public CustomUserDetails getPrincipal() {
-
         Authentication auth = getAuthentication();
-
-        if (auth == null ||!auth.isAuthenticated() || auth instanceof AnonymousAuthenticationToken) {
+        if (auth == null || !auth.isAuthenticated() || auth instanceof AnonymousAuthenticationToken) {
             return null;
         }
-
         return (CustomUserDetails) auth.getPrincipal();
     }
 
     public User getAuthenticatedUser() {
-
         CustomUserDetails principal = getPrincipal();
 
         if (principal == null) {
             return null;
         }
-        return userRepository.findWithRoleById(principal.getUserId())
-                .orElseThrow(() ->
-                        new RuntimeException("Authenticated user not found"));
+        return userRepository.findWithRoleById(principal.getUserId()).orElseThrow(() -> new RuntimeException("Authenticated user not found"));
     }
 
     public Employee getCurrentEmployee() {
@@ -59,40 +51,28 @@ public class SecurityService {
         if (principal == null || principal.getEmployeeId() == null) {
             throw new EmployeeNotFoundException("No employee linked to current user");
         }
-        return employeeService.findByIdWithDetails(principal.getEmployeeId())
-                .orElseThrow(() ->
-                        new EmployeeNotFoundException("Employee with id : "+ principal.getEmployeeId()+ " not found"));
+        return employeeService.findByIdWithDetails(principal.getEmployeeId()).orElseThrow(() -> new EmployeeNotFoundException("Employee with id : " + principal.getEmployeeId() + " not found"));
 
     }
 
     public Long getCurrentEmployeeId() {
-
         CustomUserDetails principal = getPrincipal();
-
         if (principal == null) {
             return null;
         }
-
         return principal.getEmployeeId();
     }
 
     public Long getCurrentUserId() {
-
         CustomUserDetails principal = getPrincipal();
-
         if (principal == null) {
             return null;
         }
-
         return principal.getUserId();
     }
 
     public boolean hasRole(String role) {
-
         Authentication auth = getAuthentication();
-
-        return auth.getAuthorities()
-                .stream()
-                .anyMatch(a -> a.getAuthority().equals(role));
+        return auth.getAuthorities().stream().anyMatch(a -> a.getAuthority().equals(role));
     }
 }

@@ -3,6 +3,7 @@ package com.murali.views;
 import com.murali.entity.NavMenuItem;
 import com.murali.entity.User;
 import com.murali.service.NavigationService;
+import com.murali.util.SecurityService;
 import com.vaadin.flow.component.applayout.AppLayout;
 import com.vaadin.flow.component.avatar.Avatar;
 import com.vaadin.flow.component.button.Button;
@@ -31,99 +32,28 @@ import org.springframework.security.web.authentication.logout.SecurityContextLog
 
 import java.util.List;
 
-//TODO : dont commitpls
+
 @PermitAll
 public class MainLayout extends AppLayout {
 
     private final NavigationService navService;
+    private final SecurityService securityService;
     private H1 viewTitle;
-    private Icon toggleIcon;
 
-    public MainLayout(NavigationService navService) {
+    public MainLayout(NavigationService navService, SecurityService securityService) {
         this.navService = navService;
+        this.securityService = securityService;
 
         setPrimarySection(Section.DRAWER);
         addDrawerContent();
-//        addHeaderContent();
-    }
-
-    private void addHeaderContent() {
-        viewTitle = new H1();
-        viewTitle.addClassNames(LumoUtility.FontSize.LARGE, LumoUtility.Margin.NONE);
-
-        HorizontalLayout topRow = new HorizontalLayout(viewTitle);
-        topRow.setWidthFull();
-        topRow.expand(viewTitle);
-        topRow.setAlignItems(FlexComponent.Alignment.CENTER);
-        topRow.addClassNames(LumoUtility.Padding.Horizontal.MEDIUM, LumoUtility.Height.MEDIUM);
-
-        toggleIcon = VaadinIcon.CHEVRON_LEFT.create();
-        Button toggleButton = new Button(toggleIcon, e -> {
-            setDrawerOpened(!isDrawerOpened());
-            updateToggleIcon();
-        });
-        toggleButton.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
-
-        VerticalLayout navWrapper = new VerticalLayout(topRow);
-        navWrapper.setPadding(false);
-        navWrapper.setSpacing(false);
-
-        toggleButton.getStyle().set("position", "fixed");
-        toggleButton.getStyle().set("bottom", "10px");
-        toggleButton.getStyle().set("left", "10px");
-        toggleButton.getStyle().set("z-index", "10");
-
-        addToNavbar(true, topRow, toggleButton);
-    }
-
-    private Footer createFooter() {
-        Footer layout = new Footer();
-        layout.addClassNames(
-                LumoUtility.Display.FLEX,
-                LumoUtility.AlignItems.CENTER,
-                LumoUtility.Padding.SMALL,
-                LumoUtility.Border.TOP,
-                LumoUtility.BorderColor.CONTRAST_10);
-
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        String currentUsername = (auth != null) ? auth.getName() : "USER";
-
-        Avatar avatar = new Avatar(currentUsername);
-        avatar.addClassNames(LumoUtility.Margin.Right.SMALL);
-
-        Span name = new Span(currentUsername);
-        name.addClassNames(LumoUtility.FontWeight.MEDIUM, LumoUtility.FontSize.XSMALL, LumoUtility.Flex.GROW);
-
-        HorizontalLayout avatarLayout = new HorizontalLayout(avatar, name);
-        avatarLayout.setAlignItems(FlexComponent.Alignment.CENTER);
-        avatarLayout.setSpacing(false);
-
-        MenuBar userMenu = new MenuBar();
-        userMenu.addThemeVariants(MenuBarVariant.LUMO_TERTIARY_INLINE);
-
-        MenuItem avatarItem = userMenu.addItem(avatarLayout);
-        SubMenu avatarSubMenu = avatarItem.getSubMenu();
-
-        avatarSubMenu.addItem("My Profile", e -> getUI().ifPresent(ui -> ui.navigate("profile")));
-
-        avatarSubMenu.addItem("Log out", e -> {
-            SecurityContextLogoutHandler logoutHandler = new SecurityContextLogoutHandler();
-            logoutHandler.logout(
-                    com.vaadin.flow.server.VaadinServletRequest.getCurrent().getHttpServletRequest(),
-                    null,
-                    null
-            );
-        });
-
-        layout.add(userMenu);
-        return layout;
+        addHeaderContent();
     }
 
     private void addDrawerContent() {
         SideNav nav = createNavigation();
         Scroller scroller = new Scroller(nav);
 
-        addToDrawer(scroller, createFooter());
+        addToDrawer(scroller);
     }
 
     private SideNav createNavigation() {
@@ -132,7 +62,7 @@ public class MainLayout extends AppLayout {
 
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         List<NavMenuItem> menuItems = navService.getMenuItemsForUser(auth);
-        nav.addItem(new SideNavItem("My Dashboard","dashboard",VaadinIcon.DASHBOARD.create()));
+        nav.addItem(new SideNavItem("My Dashboard", "dashboard", VaadinIcon.DASHBOARD.create()));
 
         for (NavMenuItem item : menuItems) {
             try {
@@ -145,11 +75,50 @@ public class MainLayout extends AppLayout {
         return nav;
     }
 
-    private void updateToggleIcon() {
-        if (isDrawerOpened()) {
-            toggleIcon.getElement().setAttribute("icon", "vaadin:chevron-left");
-        } else {
-            toggleIcon.getElement().setAttribute("icon", "vaadin:chevron-right");
+    private void addHeaderContent() {
+        viewTitle = new H1();
+        viewTitle.addClassNames(LumoUtility.FontSize.LARGE, LumoUtility.Margin.NONE);
+
+        String currentUsername = "USER";
+        String currentRole = "ROLE";
+
+        if (securityService.getPrincipal() != null) {
+            currentUsername = securityService.getPrincipal().getUsername();
+            currentRole = securityService.getPrincipal().getRole();
         }
+
+        Span nameSpan = new Span(currentUsername);
+        nameSpan.addClassNames(LumoUtility.FontWeight.MEDIUM, LumoUtility.FontSize.MEDIUM);
+
+        Span roleSpan = new Span(currentRole);
+        roleSpan.addClassNames(LumoUtility.FontSize.XSMALL, LumoUtility.TextColor.SECONDARY);
+
+        VerticalLayout profileClickZone = new VerticalLayout(nameSpan, roleSpan);
+        profileClickZone.setPadding(false);
+        profileClickZone.setSpacing(false);
+        profileClickZone.getStyle().set("cursor", "pointer");
+
+        profileClickZone.addClickListener(e -> getUI().ifPresent(ui -> ui.navigate("profile")));
+
+        Button logoutButton = new Button("Logout", VaadinIcon.SIGN_OUT.create(), e -> {
+            SecurityContextLogoutHandler logoutHandler = new SecurityContextLogoutHandler();
+            logoutHandler.logout(com.vaadin.flow.server.VaadinServletRequest.getCurrent().getHttpServletRequest(), null, null);
+        });
+        logoutButton.addThemeVariants(ButtonVariant.LUMO_TERTIARY, ButtonVariant.LUMO_ERROR);
+        logoutButton.addThemeVariants(ButtonVariant.LUMO_TERTIARY, ButtonVariant.LUMO_ERROR);
+        logoutButton.setTooltipText("Log out");
+
+        HorizontalLayout userHeaderMenu = new HorizontalLayout(profileClickZone, logoutButton);
+        userHeaderMenu.setAlignItems(FlexComponent.Alignment.CENTER);
+        userHeaderMenu.setSpacing(true);
+
+        HorizontalLayout topRow = new HorizontalLayout(viewTitle, userHeaderMenu);
+        topRow.setWidthFull();
+        topRow.expand(viewTitle);
+        topRow.setAlignItems(FlexComponent.Alignment.CENTER);
+        topRow.addClassNames(LumoUtility.Padding.Horizontal.MEDIUM, LumoUtility.Height.MEDIUM);
+
+        addToNavbar(true, topRow);
     }
+
 }
