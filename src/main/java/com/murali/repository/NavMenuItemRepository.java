@@ -14,7 +14,6 @@ import java.util.Optional;
 public interface NavMenuItemRepository extends JpaRepository<NavMenuItem, Long> {
 
     Optional<NavMenuItem> findByPath(String path);
-
     @Query("SELECT nmr.navMenuItem FROM NavMenuRole nmr WHERE nmr.roleName = :roleName")
     List<NavMenuItem> findByRoleName(@Param("roleName") String roleName);
 }

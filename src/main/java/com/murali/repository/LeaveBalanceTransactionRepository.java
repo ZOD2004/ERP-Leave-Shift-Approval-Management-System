@@ -11,11 +11,6 @@ import java.util.List;
 
 @Repository
 public interface LeaveBalanceTransactionRepository extends JpaRepository<LeaveBalanceTransaction, Long> {
-    @Query("SELECT tx FROM LeaveBalanceTransaction tx " +
-            "JOIN FETCH tx.employee e " +
-            "JOIN FETCH tx.leaveType lt " +
-            "ORDER BY tx.createdAt DESC")
+    @Query("SELECT tx FROM LeaveBalanceTransaction tx " + "JOIN FETCH tx.employee e " + "JOIN FETCH tx.leaveType lt " + "ORDER BY tx.createdAt DESC")
     List<LeaveBalanceTransaction> findAllWithDetails();
-    @Query("SELECT COALESCE(SUM(t.days), 0) FROM LeaveBalanceTransaction t WHERE t.referenceId = :referenceId AND t.transactionType = :transactionType")
-    BigDecimal sumDaysByReferenceIdAndTransactionType(@Param("referenceId") Long referenceId, @Param("transactionType") String transactionType);
 }

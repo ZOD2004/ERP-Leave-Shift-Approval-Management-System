@@ -1,7 +1,7 @@
 package com.murali.repository;
 
 import com.murali.entity.Attendance;
-import com.murali.entity.enums.AttendanceStatus;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -14,57 +14,19 @@ public interface AttendanceRepository extends JpaRepository<Attendance, Long> {
 
     Optional<Attendance> findByEmployeeIdAndAttendanceDate(Long employeeId, LocalDate attendanceDate);
 
-    List<Attendance> findByEmployeeIdAndAttendanceDateBetween(Long employeeId, LocalDate startDate, LocalDate endDate);
 
-    @Query("SELECT a FROM Attendance a WHERE a.attendanceDate = :date")
-    List<Attendance> findAllByAttendanceDate(@Param("date") LocalDate date);
-
-    Optional<Attendance> findByEmployee_IdAndAttendanceDate(Long employeeId, LocalDate attendanceDate);
-
-    @Query("SELECT a FROM Attendance a " +
-            "LEFT JOIN FETCH a.shiftAssignment sa " +
-            "LEFT JOIN FETCH sa.shift " +
-            "WHERE a.employee.id = :employeeId " +
-            "AND a.attendanceDate BETWEEN :startDate AND :endDate " +
-            "ORDER BY a.attendanceDate DESC")
-    List<Attendance> findAttendanceHistoryByEmployee(
-            @Param("employeeId") Long employeeId,
-            @Param("startDate") LocalDate startDate,
-            @Param("endDate") LocalDate endDate);
-
-    @Query("""
-        SELECT a
-        FROM Attendance a
-        LEFT JOIN FETCH a.employee e
-        LEFT JOIN FETCH e.user
-        LEFT JOIN FETCH a.shiftAssignment sa
-        LEFT JOIN FETCH sa.shift
-        WHERE a.employee.id IN :employeeIds
-        AND a.attendanceDate = :attendanceDate
-    """)
-    List<Attendance> findByEmployeeIdsAndAttendanceDate(
-            @Param("employeeIds") List<Long> employeeIds,
-            @Param("attendanceDate") LocalDate attendanceDate
-    );
+    @EntityGraph(attributePaths = {"shiftAssignment.shift"})
+    @Query("SELECT a FROM Attendance a " + "WHERE a.employee.id = :employeeId " + "AND a.attendanceDate BETWEEN :startDate AND :endDate " + "ORDER BY a.attendanceDate DESC")
+    List<Attendance> findAttendanceHistoryByEmployee(@Param("employeeId") Long employeeId, @Param("startDate") LocalDate startDate, @Param("endDate") LocalDate endDate);
 
 
-    @Query("SELECT COUNT(a) FROM Attendance a WHERE " +
-            "(a.attendanceDate BETWEEN :startDate AND :endDate) AND " +
-            "(a.status = com.murali.entity.enums.AttendanceStatus.MISSING_CHECKOUT OR " +
-            "(a.firstCheckIn IS NOT NULL AND a.lastCheckOut IS NULL))")
-    long countMissingPunches(@Param("startDate") LocalDate startDate,
-                             @Param("endDate") LocalDate endDate);
+    @EntityGraph(attributePaths = {"employee.user", "shiftAssignment.shift"})
+    @Query(" SELECT a FROM Attendance a WHERE a.employee.id IN :employeeIds AND a.attendanceDate = :attendanceDate")
+    List<Attendance> findByEmployeeIdsAndAttendanceDate(@Param("employeeIds") List<Long> employeeIds, @Param("attendanceDate") LocalDate attendanceDate);
 
-    @Query("""
-        SELECT a FROM Attendance a 
-        WHERE a.attendanceDate = :date 
-        AND a.status IN (
-            com.murali.entity.enums.AttendanceStatus.WORKING, 
-            com.murali.entity.enums.AttendanceStatus.PARTIAL_DAY, 
-            com.murali.entity.enums.AttendanceStatus.PENDING
-        )
-    """)
-    List<Attendance> findIncompleteAttendancesForDate(@Param("date") LocalDate date);
+
+    @Query("SELECT COUNT(a) FROM Attendance a WHERE " + "(a.attendanceDate BETWEEN :startDate AND :endDate) AND " + "(a.status = com.murali.entity.enums.AttendanceStatus.MISSING_CHECKOUT OR " + "(a.firstCheckIn IS NOT NULL AND a.lastCheckOut IS NULL))")
+    long countMissingPunches(@Param("startDate") LocalDate startDate, @Param("endDate") LocalDate endDate);
 
     List<Attendance> findByEmployeeIdInAndAttendanceDate(List<Long> employeeIds, LocalDate attendanceDate);
 }

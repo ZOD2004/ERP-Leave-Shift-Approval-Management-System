@@ -13,79 +13,53 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 
+import org.springframework.data.jpa.repository.EntityGraph;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+import org.springframework.stereotype.Repository;
+
+import java.util.List;
+import java.util.Optional;
+
 @Repository
 public interface EmployeeRepository extends JpaRepository<Employee, Long> {
 
-    @Query("""
-        SELECT DISTINCT e
-        FROM Employee e
-        LEFT JOIN FETCH e.department d
-        LEFT JOIN FETCH e.user u
-        LEFT JOIN FETCH u.role r
-        WHERE u.active = true 
-          AND (
-               u.username IN ('super', 'hr') 
-               OR r.name IN ('ROLE_MANAGER', 'ROLE_DEPT_HEAD') 
-               OR d.id = :departmentId
-          )
-    """)
+    @EntityGraph(attributePaths = {"department", "user.role"})
+    @Query("SELECT DISTINCT e FROM Employee e LEFT JOIN e.department d LEFT JOIN e.user u LEFT JOIN u.role r WHERE u.active = true AND (u.username IN ('super', 'hr') OR r.name IN ('ROLE_MANAGER', 'ROLE_DEPT_HEAD') OR d.id = :departmentId)")
     List<Employee> findAvailableManagers(@Param("departmentId") Long departmentId);
 
-    @Query("""
-        SELECT e
-        FROM Employee e
-        JOIN FETCH e.user u
-        LEFT JOIN FETCH e.department
-        LEFT JOIN FETCH e.manager
-        LEFT JOIN FETCH e.defaultShift 
-        WHERE u.active = true
-    """)
+    @EntityGraph(attributePaths = {"user", "department", "manager", "defaultShift"})
+    @Query("SELECT e FROM Employee e JOIN e.user u WHERE u.active = true")
     List<Employee> findByActiveTrue();
 
+    @EntityGraph(attributePaths = {"user", "department", "manager", "defaultShift"})
     @Query("""
-        SELECT DISTINCT e
-        FROM Employee e
-        JOIN FETCH e.user u
-        LEFT JOIN FETCH e.department
-        LEFT JOIN FETCH e.manager
-        LEFT JOIN FETCH e.defaultShift
-        WHERE u.active = true
-        AND (
-            LOWER(e.firstName) LIKE LOWER(CONCAT('%', :searchTerm, '%'))
-            OR LOWER(e.employeeCode) LIKE LOWER(CONCAT('%', :searchTerm, '%'))
-        )
-    """)
+                SELECT DISTINCT e
+                FROM Employee e
+                JOIN e.user u
+                WHERE u.active = true
+                AND (
+                    LOWER(e.firstName) LIKE LOWER(CONCAT('%', :searchTerm, '%'))
+                    OR LOWER(e.employeeCode) LIKE LOWER(CONCAT('%', :searchTerm, '%'))
+                )
+            """)
     List<Employee> searchActiveEmployees(@Param("searchTerm") String searchTerm);
 
     Optional<Employee> findByEmployeeCode(String employeeCode);
 
-    @Query("SELECT e.id FROM Employee e JOIN e.user u WHERE u.active = true")
-    List<Long> findAllActiveEmployeeIds();
-    @Query("""
-        SELECT e
-        FROM Employee e
-        LEFT JOIN FETCH e.user
-        LEFT JOIN FETCH e.department
-        WHERE e.manager.id = :managerId
-    """)
+    @EntityGraph(attributePaths = {"user", "department"})
+    @Query("SELECT e FROM Employee e WHERE e.manager.id = :managerId")
     List<Employee> findReportingEmployees(@Param("managerId") Long managerId);
 
-    @Query("""
-    SELECT e 
-    FROM Employee e 
-    LEFT JOIN FETCH e.department 
-    LEFT JOIN FETCH e.manager 
-    WHERE e.user.id = :userId
-""")
+    @EntityGraph(attributePaths = {"department", "manager"})
+    @Query("SELECT e FROM Employee e WHERE e.user.id = :userId")
     Optional<Employee> findByUserId(@Param("userId") Long userId);
 
     boolean existsByDepartmentId(Long deptId);
 
-    @Query("SELECT e FROM Employee e " +
-            "LEFT JOIN FETCH e.department " +
-            "LEFT JOIN FETCH e.manager " +
-            "WHERE e.id = :id")
+    @EntityGraph(attributePaths = {"department", "manager"})
+    @Query("SELECT e FROM Employee e WHERE e.id = :id")
     Optional<Employee> findByIdWithDepartmentAndManager(@Param("id") Long id);
 
-    List<Employee> findByDefaultShiftIdAndUser_ActiveTrue(Long shiftId);
 }

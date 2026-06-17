@@ -14,6 +14,5 @@ import java.util.List;
 public interface AuditLogRepository extends JpaRepository<AuditLog, Long> {
     @Query("SELECT a FROM AuditLog a ORDER BY a.id DESC")
     List<AuditLog> findRecentLogs(Pageable pageable);
-    List<AuditLog> findAllByOrderByTimestampDesc();
 
 }

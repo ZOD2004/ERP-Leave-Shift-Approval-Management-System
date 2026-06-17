@@ -17,9 +17,6 @@ public interface LeaveApprovalRuleRepository extends JpaRepository<LeaveApproval
     List<LeaveApprovalRule> findAll();
 
     @EntityGraph(attributePaths = {"leaveType", "requiredRole"})
-    @Query("SELECT r FROM LeaveApprovalRule r WHERE r.leaveType.id = :leaveTypeId " +
-            "AND :duration >= r.minDays AND :duration <= r.maxDays " +
-            "ORDER BY r.approvalLevel ASC")
-    List<LeaveApprovalRule> findApplicableRules(@Param("leaveTypeId") Long leaveTypeId,
-                                                @Param("duration") BigDecimal duration);
+    @Query("SELECT r FROM LeaveApprovalRule r WHERE r.leaveType.id = :leaveTypeId " + "AND :duration >= r.minDays AND :duration <= r.maxDays " + "ORDER BY r.approvalLevel ASC")
+    List<LeaveApprovalRule> findApplicableRules(@Param("leaveTypeId") Long leaveTypeId, @Param("duration") BigDecimal duration);
 }

@@ -18,16 +18,9 @@ public interface ShiftRotationPolicyRepository extends JpaRepository<ShiftRotati
     @Query("SELECT p FROM ShiftRotationPolicy p JOIN FETCH p.employee")
     List<ShiftRotationPolicy> findAllWithEmployee();
 
-    @Query("SELECT p FROM ShiftRotationPolicy p " +
-            "JOIN FETCH p.employee " +
-            "LEFT JOIN FETCH p.sequences s " +
-            "LEFT JOIN FETCH s.shift " +
-            "WHERE p.id = :id")
+    @Query("SELECT p FROM ShiftRotationPolicy p " + "JOIN FETCH p.employee " + "LEFT JOIN FETCH p.sequences s " + "LEFT JOIN FETCH s.shift " + "WHERE p.id = :id")
     Optional<ShiftRotationPolicy> findByIdWithSequences(@Param("id") Long id);
 
-    @Query("SELECT p FROM ShiftRotationPolicy p " +
-            "LEFT JOIN FETCH p.sequences s " +
-            "LEFT JOIN FETCH s.shift " +
-            "WHERE p.employee.id = :employeeId AND p.active = true")
+    @Query("SELECT p FROM ShiftRotationPolicy p " + "LEFT JOIN FETCH p.sequences s " + "LEFT JOIN FETCH s.shift " + "WHERE p.employee.id = :employeeId AND p.active = true")
     Optional<ShiftRotationPolicy> findActivePolicyWithSequencesByEmployeeId(@Param("employeeId") Long employeeId);
 }

@@ -11,7 +11,6 @@ import java.util.Optional;
 public interface LeaveTypeRepository extends JpaRepository<LeaveType,Long> {
     List<LeaveType> findByNameContainingIgnoreCaseOrCodeContainingIgnoreCase(String name, String code);
     List<LeaveType> findAll();
-
     Optional<LeaveType> findByCode(String code);
 
 }
