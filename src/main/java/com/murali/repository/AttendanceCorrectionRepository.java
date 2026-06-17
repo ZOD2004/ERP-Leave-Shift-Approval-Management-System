@@ -8,12 +8,17 @@ import org.springframework.data.repository.query.Param;
 
 import java.util.List;
 
+import org.springframework.data.jpa.repository.EntityGraph;
+
 public interface AttendanceCorrectionRepository extends JpaRepository<AttendanceCorrection, Long> {
 
-    @Query("SELECT ac FROM AttendanceCorrection ac JOIN FETCH ac.attendance a JOIN FETCH a.employee e WHERE ac.approver.id = :approverId AND ac.status = 'PENDING'")
+    @EntityGraph(attributePaths = {"attendance", "attendance.employee", "attendance.shiftAssignment", "attendance.shiftAssignment.shift"})
+    @Query("SELECT ac FROM AttendanceCorrection ac WHERE ac.approver.id = :approverId AND ac.status = 'PENDING'")
     List<AttendanceCorrection> findPendingCorrectionsForManager(@Param("approverId") Long approverId);
 
-    @Query("SELECT ac FROM AttendanceCorrection ac JOIN FETCH ac.attendance a JOIN FETCH a.employee e WHERE ac.status = 'PENDING'")
+
+    @EntityGraph(attributePaths = {"attendance", "attendance.employee", "attendance.shiftAssignment", "attendance.shiftAssignment.shift"})
+    @Query("SELECT ac FROM AttendanceCorrection ac WHERE ac.status = 'PENDING'")
     List<AttendanceCorrection> findAllPendingCorrectionsGlobally();
 
     long countByStatus(String status);

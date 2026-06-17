@@ -37,7 +37,7 @@ public class AttendanceCronJobService {
     private LocalDateTime lastRunTime;
     private String lastRunStatus = "WAITING";
 
-    @Scheduled(cron = "0 0 * * * ?")
+    @Scheduled(cron = "0 25 18 * * ?")
     @Transactional
     public void rollingShiftSweeper() {
         LocalDateTime now = LocalDateTime.now();
@@ -95,11 +95,13 @@ public class AttendanceCronJobService {
 
     private void processWorkingDay(Employee emp, ShiftAssignment assignment, LocalDate targetDate, Attendance attendance, List<LeaveRequest> empLeaves, LocalDateTime now) {
         Shift shift = assignment.getShift();
-        LocalDateTime shiftEndDT = (shift.getCrossesMidnight() != null && shift.getCrossesMidnight()) ? targetDate.plusDays(1).atTime(shift.getEndTime()) : targetDate.atTime(shift.getEndTime());
+        LocalDateTime shiftEndDT = (shift.getCrossesMidnight() != null && shift.getCrossesMidnight())
+                ? targetDate.plusDays(1).atTime(shift.getEndTime())
+                : targetDate.atTime(shift.getEndTime());
 
-        LocalDateTime triggerTime = shiftEndDT.plusHours(4);
-
-        if (now.isAfter(triggerTime) && now.isBefore(triggerTime.plusHours(24))) {
+        // CHANGED: Removed triggerTime = shiftEndDT.plusHours(4);
+        // It now evaluates immediately if the current time is past the shift end time.
+        if (now.isAfter(shiftEndDT) && now.isBefore(shiftEndDT.plusHours(24))) {
 
             if (attendance != null && attendance.getFirstCheckIn() != null) {
                 if (AttendanceStatus.WORKING.equals(attendance.getStatus()) || AttendanceStatus.PARTIAL_DAY.equals(attendance.getStatus())) {
