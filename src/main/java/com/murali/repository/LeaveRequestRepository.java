@@ -45,11 +45,10 @@ public interface LeaveRequestRepository extends JpaRepository<LeaveRequest, Long
     @Query("SELECT lr FROM LeaveRequest lr WHERE lr.employee.id = :employeeId " + "AND (lr.status = 'APPROVED' OR lr.status LIKE 'PENDING%') " + "AND (lr.endDate = :dayBefore OR lr.startDate = :dayAfter)")
     List<LeaveRequest> findAdjacentLeaves(@Param("employeeId") Long employeeId, @Param("dayBefore") LocalDate dayBefore, @Param("dayAfter") LocalDate dayAfter);
 
-    @Query(value = """
-            SELECT * FROM leave_requests lr 
-            WHERE :leaveId = ANY(string_to_array(lr.superseded_leave_ids, ',')) 
-              AND lr.status NOT IN ('REJECTED', 'CANCELLED', 'DRAFT') 
-            LIMIT 1
-            """, nativeQuery = true)
-    Optional<LeaveRequest> findActiveSupersedingLeave(@Param("leaveId") String leaveId);
+    @Query("""
+            SELECT lr.parentLeave FROM LeaveRequest lr 
+            WHERE lr.id = :leaveId 
+              AND lr.parentLeave.status NOT IN ('REJECTED', 'CANCELLED', 'DRAFT')
+           """)
+    Optional<LeaveRequest> findActiveParentLeave(@Param("leaveId") Long leaveId);
 }

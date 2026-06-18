@@ -154,24 +154,6 @@ public class ShiftAssignmentService {
         auditLoggingService.saveAuditLog(null, "BATCH_CREATED", "shift_assignments", null, String.format("{ \"batchSize\": %d }", assignmentsToSave.size()));
     }
 
-    @Transactional
-    public void assignOverrideShift(ShiftAssignmentDTO dto) {
-        Employee employee = employeeRepository.findById(dto.getEmployeeId()).orElseThrow(() -> new EntityNotFoundException("Employee not found"));
-        Shift shift = shiftRepository.findById(dto.getShiftId()).orElseThrow(() -> new ShiftNotFoundException("Shift not found"));
-
-        punchHoleInExistingShifts(employee.getId(), dto.getStartDate(), dto.getEndDate());
-
-        ShiftAssignment newAssignment = new ShiftAssignment();
-        newAssignment.setEmployee(employee);
-        newAssignment.setShift(shift);
-        newAssignment.setStartDate(dto.getStartDate());
-        newAssignment.setEndDate(dto.getEndDate());
-
-        ShiftAssignment saved = shiftAssignmentRepository.saveAndFlush(newAssignment);
-        auditLoggingService.saveAuditLog(saved.getId(), "HOLE_PUNCH_CREATED", "shift_assignments", null, String.format("{ \"shiftId\": %d, \"startDate\": \"%s\", \"endDate\": \"%s\" }", shift.getId(), dto.getStartDate(), dto.getEndDate()));
-
-        triggerAttendanceRecalculationIfPast(employee.getId(), dto.getStartDate(), dto.getEndDate());
-    }
 
     private void punchHoleInExistingShifts(Long employeeId, LocalDate newStart, LocalDate newEnd) {
         List<ShiftAssignment> overlaps = shiftAssignmentRepository.findByEmployeeIdInAndDateRange(List.of(employeeId), newStart, newEnd);
@@ -180,16 +162,16 @@ public class ShiftAssignmentService {
             LocalDate oldStart = old.getStartDate();
             LocalDate oldEnd = old.getEndDate();
 
-            if (!newStart.isAfter(oldStart) && !newEnd.isBefore(oldEnd)) {
+            if (!newStart.isAfter(oldStart) && !newEnd.isBefore(oldEnd)) {//newStart <= oldStart AND newEnd >= oldEnd
                 shiftAssignmentRepository.delete(old);
                 shiftAssignmentRepository.flush();
-            } else if (!newStart.isAfter(oldStart) && newEnd.isBefore(oldEnd)) {
+            } else if (!newStart.isAfter(oldStart) && newEnd.isBefore(oldEnd)) { //newStart <= oldStart AND newEnd < oldEnd
                 old.setStartDate(newEnd.plusDays(1));
                 shiftAssignmentRepository.saveAndFlush(old);
-            } else if (newStart.isAfter(oldStart) && !newEnd.isBefore(oldEnd)) {
+            } else if (newStart.isAfter(oldStart) && !newEnd.isBefore(oldEnd)) {//newStart > oldStart AND newEnd >= oldEnd
                 old.setEndDate(newStart.minusDays(1));
                 shiftAssignmentRepository.saveAndFlush(old);
-            } else if (newStart.isAfter(oldStart) && newEnd.isBefore(oldEnd)) {
+            } else if (newStart.isAfter(oldStart) && newEnd.isBefore(oldEnd)) {//newStart > oldStart AND newEnd < oldEnd
                 ShiftAssignment remainder = new ShiftAssignment();
                 remainder.setEmployee(old.getEmployee());
                 remainder.setShift(old.getShift());
@@ -375,10 +357,6 @@ public class ShiftAssignmentService {
         return LeaveSession.FULL_DAY;
     }
 
-    private boolean isFullDayLeave(LeaveRequest leave, LocalDate date) {
-        if (leave == null) return false;
-        return getSessionForDate(leave, date) == LeaveSession.FULL_DAY;
-    }
 
     private List<ShiftAssignment> filterOutApprovedFullDayLeaves(List<ShiftAssignment> assignments) {
         if (assignments == null || assignments.isEmpty()) return assignments;
@@ -482,19 +460,19 @@ public class ShiftAssignmentService {
     @Transactional
     public void deleteAssignmentRange(Long employeeId, LocalDate requestedStart, LocalDate requestedEnd) {
         LocalDate today = LocalDate.now();
-        LocalDate earliestDeletableDate = today;
+        LocalDate earlyDate = today;
 
         List<TimeLog> todayPunches = timeLogRepository.findByEmployeeIdAndAttendanceDate(employeeId, today);
 
         if (!todayPunches.isEmpty()) {
-            earliestDeletableDate = today.plusDays(1);
+            earlyDate = today.plusDays(1);
         }
 
-        if (requestedEnd.isBefore(earliestDeletableDate)) {
+        if (requestedEnd.isBefore(earlyDate)) {
             throw new IllegalArgumentException("Cannot delete past shifts or active shifts where the employee has already punched in.");
         }
 
-        LocalDate actualDeleteStart = requestedStart.isBefore(earliestDeletableDate) ? earliestDeletableDate : requestedStart;
+        LocalDate actualDeleteStart = requestedStart.isBefore(earlyDate) ? earlyDate : requestedStart;
 
         punchHoleInExistingShifts(employeeId, actualDeleteStart, requestedEnd);
 

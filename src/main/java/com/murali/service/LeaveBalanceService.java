@@ -223,24 +223,23 @@ public class LeaveBalanceService {
     public List<LeaveBalanceTransaction> findAllWithDetails() {
         return transactionRepository.findAllWithDetails();
     }
-    public BigDecimal calculateApprovedSupersededDays(LeaveRequest request) {
-        BigDecimal result = BigDecimal.ZERO;
-        if (request.getSupersededLeaveIds() == null || request.getSupersededLeaveIds().isBlank()) {
-            return result;
+    @Transactional(readOnly = true)
+    public BigDecimal calculateApprovedMergedDays(LeaveRequest request) {
+        if (request.getMergedLeaves() == null || request.getMergedLeaves().isEmpty()) {
+            return BigDecimal.ZERO;
         }
-        String[] ids = request.getSupersededLeaveIds().split(",");
-        for (String idStr : ids) {
-            LeaveRequest oldReq = leaveRequestRepository.findById(Long.valueOf(idStr.trim())).orElse(null);
-            if (oldReq != null && "APPROVED".equals(oldReq.getStatus())) {
-                result = result.add(oldReq.getDurationDays());
-            }
-        }
-        return result;
+
+        return request.getMergedLeaves().stream()
+                .filter(mergedReq -> "APPROVED".equals(mergedReq.getStatus()))
+                .map(LeaveRequest::getDurationDays)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
+    @Transactional(readOnly = true)
     public BigDecimal calculateHeldAmount(LeaveRequest request) {
-        BigDecimal approvedDuration = calculateApprovedSupersededDays(request);
+        BigDecimal approvedDuration = calculateApprovedMergedDays(request);
         BigDecimal held = request.getDurationDays().subtract(approvedDuration);
+
         return held.compareTo(BigDecimal.ZERO) > 0 ? held : BigDecimal.ZERO;
     }
 }

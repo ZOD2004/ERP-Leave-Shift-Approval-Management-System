@@ -11,6 +11,8 @@ import org.hibernate.annotations.CreationTimestamp;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.List;
 
 @Getter
 @Setter
@@ -67,8 +69,12 @@ public class LeaveRequest {
     @Column(name = "sandwich_penalty_days", precision = 4, scale = 1)
     private BigDecimal sandwichPenaltyDays = BigDecimal.ZERO;
 
-    @Column(name = "superseded_leave_ids")
-    private String supersededLeaveIds;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "parent_leave_id")
+    private LeaveRequest parentLeave;
+
+    @OneToMany(mappedBy = "parentLeave")
+    private List<LeaveRequest> mergedLeaves = new ArrayList<>();
 
     @Enumerated(EnumType.STRING)
     @Column(name = "cancellation_status", length = 20)

@@ -682,7 +682,6 @@ public class ShiftAssignmentView extends VerticalLayout {
 
         VerticalLayout layout = new VerticalLayout();
 
-        // --- HARD CONFLICTS GRID (Holidays, Full Leaves, Overlaps) ---
         if (!currentBatchPreview.getHardConflicts().isEmpty()) {
             layout.add(new H4("Hard Conflicts (Will be Skipped)"));
 
@@ -692,19 +691,14 @@ public class ShiftAssignmentView extends VerticalLayout {
             hardConflictGrid.addColumn(ShiftConflictDTO::getConflictDate).setHeader("Date");
             hardConflictGrid.addColumn(ShiftConflictDTO::getConflictType).setHeader("Reason");
 
-            // "Skip" Action just visually removes it from the grid and DOES NOT schedule it
             hardConflictGrid.addComponentColumn(conflict -> {
                 Button skipBtn = new Button("Skip", new Icon(VaadinIcon.CLOSE));
                 skipBtn.addThemeVariants(ButtonVariant.LUMO_ERROR, ButtonVariant.LUMO_TERTIARY);
                 skipBtn.addClickListener(e -> {
-
-                    // 1. Remove it from the conflict list
                     currentBatchPreview.getHardConflicts().remove(conflict);
 
-                    // 2. Refresh the UI
                     hardConflictGrid.getDataProvider().refreshAll();
 
-                    // NOTE: We absolutely DO NOT add it to currentBatchPreview.getReadyToSave() here!
                 });
                 return skipBtn;
             }).setHeader("Action");
@@ -744,7 +738,6 @@ public class ShiftAssignmentView extends VerticalLayout {
         }
     }
 
-    // FIX: Added 'clickedDate' parameter to track the exact cell opened
     private void openEditDialog(ShiftAssignmentDTO assignment, LocalDate clickedDate) {
         Dialog editDialog = new Dialog();
         editDialog.setHeaderTitle("Edit Shift for " + assignment.getEmployeeName());
@@ -812,7 +805,6 @@ public class ShiftAssignmentView extends VerticalLayout {
         editDialog.getFooter().add(footerLayout);
         editDialog.open();
     }
-    // --- Replace confirmDelete with this ---
 
     private void openPartialDeleteDialog(ShiftAssignmentDTO assignment, LocalDate defaultStart, LocalDate defaultEnd) {
         if (assignment.getEndDate().isBefore(LocalDate.now())) {
@@ -882,18 +874,15 @@ public class ShiftAssignmentView extends VerticalLayout {
     }
 
     private void handleEmptyCellClick(DailyCellDTO cell) {
-        // 1. Lock to specific employee
         employeeService.findById(cell.getEmployeeId()).ifPresent(employeeCombo::setValue);
         employeeCombo.setReadOnly(true);
 
-        // 2. Lock to specific date
         dialogTabs.setSelectedTab(singleTab);
         dialogTabs.setVisible(false);
         singleDatePicker.setValue(cell.getDate());
         singleDatePicker.setReadOnly(true);
 
 
-        // 3. FILTER SHIFTS BY DAY OF WEEK
         String dayName = cell.getDate().getDayOfWeek().name();
         List<Shift> validShifts = shiftService.getShifts().stream().filter(s -> s.getWorkingDays().stream().anyMatch(wd -> wd.name().equalsIgnoreCase(dayName))).toList();
         shiftCombo.setItems(validShifts);

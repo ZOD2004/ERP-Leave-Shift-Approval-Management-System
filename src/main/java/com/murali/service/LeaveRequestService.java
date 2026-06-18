@@ -5,7 +5,6 @@ import com.murali.entity.*;
 import com.murali.entity.enums.CancellationStatus;
 import com.murali.entity.enums.LeaveSession;
 import com.murali.exception.LeaveMergeException;
-import com.murali.exception.PastDateException;
 import com.murali.repository.EmployeeRepository;
 import com.murali.repository.LeaveRequestRepository;
 import lombok.extern.slf4j.Slf4j;
@@ -36,7 +35,6 @@ public class LeaveRequestService {
     public static final String STATUS_CANCELLED = "CANCELLED";
     public static final String STATUS_DRAFT = "DRAFT";
 
-    private static final List<String> BACKDATED_ALLOWED_CODES = List.of("EMG-001", "SL-001");
 
     public LeaveRequestService(LeaveRequestRepository leaveRequestRepository, DurationEngineService durationEngineService, LeaveBalanceService leaveBalanceService, LeaveApprovalRuleService ruleService, EmployeeRepository employeeRepository, ApprovalRoutingService approvalRoutingService, AuditLogService auditLoggingService, AttendanceProcessService attendanceProcessService) {
         this.leaveRequestRepository = leaveRequestRepository;
@@ -50,7 +48,7 @@ public class LeaveRequestService {
     }
 
     @Transactional
-    public void submitLeaveRequest(Long existingDraftId, Employee detachedEmployee, LeaveType leaveType, LocalDate inputStartDate, LocalDate inputEndDate, String reason, Integer currentYear, LeaveSession inputStartSession, LeaveSession inputEndSession, boolean applySandwichRule, List<Long> supersededLeaveIds) {
+    public void submitLeaveRequest(Long existingDraftId, Employee detachedEmployee, LeaveType leaveType, LocalDate inputStartDate, LocalDate inputEndDate, String reason, Integer currentYear, LeaveSession inputStartSession, LeaveSession inputEndSession, List<Long> mergedLeaveIds) {
 
         Employee employee = employeeRepository.findById(detachedEmployee.getId()).orElseThrow(() -> new IllegalArgumentException("Employee not found"));
 
@@ -63,13 +61,14 @@ public class LeaveRequestService {
         LeaveSession endSession = inputEndSession;
 
         List<LeaveRequest> pendingLeavesToCancelImmediately = new ArrayList<>();
-        BigDecimal alreadyDeductedFromApproved = BigDecimal.ZERO;
+        List<LeaveRequest> allLeavesToLink = new ArrayList<>();
+        BigDecimal alreadyDeducted = BigDecimal.ZERO;
 
-        if (supersededLeaveIds != null && !supersededLeaveIds.isEmpty()) {
-            request.setSupersededLeaveIds(supersededLeaveIds.stream().map(String::valueOf).collect(Collectors.joining(",")));
+        if (mergedLeaveIds != null && !mergedLeaveIds.isEmpty()) {
 
-            for (Long id : supersededLeaveIds) {
+            for (Long id : mergedLeaveIds) {
                 LeaveRequest oldReq = leaveRequestRepository.findById(id).orElseThrow();
+                allLeavesToLink.add(oldReq);
                 if (!oldReq.getLeaveType().getId().equals(leaveType.getId())) {
                     throw new IllegalArgumentException("Merged leaves must be of the exact same Leave Type.");
                 }
@@ -85,7 +84,7 @@ public class LeaveRequestService {
                 }
 
                 if (oldReq.getStatus().equals(STATUS_APPROVED)) {
-                    alreadyDeductedFromApproved = alreadyDeductedFromApproved.add(oldReq.getDurationDays());
+                    alreadyDeducted = alreadyDeducted.add(oldReq.getDurationDays());
                 } else if (oldReq.getStatus().startsWith(STATUS_PENDING)) {
                     pendingLeavesToCancelImmediately.add(oldReq);
                 }
@@ -93,8 +92,8 @@ public class LeaveRequestService {
         }
 
         boolean hasOverlap;
-        if (supersededLeaveIds != null && !supersededLeaveIds.isEmpty()) {
-            hasOverlap = leaveRequestRepository.hasOverlappingLeaveIgnoring(employee.getId(), startDate, endDate, supersededLeaveIds);
+        if (mergedLeaveIds != null && !mergedLeaveIds.isEmpty()) {
+            hasOverlap = leaveRequestRepository.hasOverlappingLeaveIgnoring(employee.getId(), startDate, endDate, mergedLeaveIds);
         } else {
             hasOverlap = leaveRequestRepository.hasOverlappingLeave(employee.getId(), startDate, endDate);
         }
@@ -108,25 +107,22 @@ public class LeaveRequestService {
         BigDecimal duration = durationResult.getNetLeaveDays();
         BigDecimal sandwichPenaltyDays = durationResult.getSandwichPenaltyDays() != null ? durationResult.getSandwichPenaltyDays() : BigDecimal.ZERO;
 
-        if (startDate.isBefore(LocalDate.now()) && !BACKDATED_ALLOWED_CODES.contains(leaveType.getCode().toUpperCase())) {
-            throw new PastDateException("Back-dating is only permitted for Sick or Emergency leaves.");
-        }
 
         LocalDate previousWorkingDay = durationEngineService.getPreviousWorkingDay(startDate, employee);
         LocalDate nextWorkingDay = durationEngineService.getNextWorkingDay(endDate, employee);
 
         List<LeaveRequest> adjacentLeaves = leaveRequestRepository.findAdjacentLeaves(employee.getId(), previousWorkingDay, nextWorkingDay);
 
-        BigDecimal effectiveChainDuration = duration;
+        BigDecimal totalDuration = duration;
         List<LeaveRequest> adjacentPendingLeavesToUpgrade = new ArrayList<>();
-        long crossRequestPenaltyDays = 0;
+        long penaltyDays = 0;
 
         for (LeaveRequest adj : adjacentLeaves) {
-            if (supersededLeaveIds != null && supersededLeaveIds.contains(adj.getId())) {
+            if (mergedLeaveIds != null && mergedLeaveIds.contains(adj.getId())) {
                 continue;
             }
 
-            effectiveChainDuration = effectiveChainDuration.add(adj.getDurationDays());
+            totalDuration = totalDuration.add(adj.getDurationDays());
 
             if (adj.getStatus().startsWith(STATUS_PENDING)) {
                 adjacentPendingLeavesToUpgrade.add(adj);
@@ -135,21 +131,21 @@ public class LeaveRequestService {
             if (leaveType.getApplySandwichRule()) {
                 if (adj.getEndDate().isBefore(startDate)) {
                     long gap = java.time.temporal.ChronoUnit.DAYS.between(adj.getEndDate(), startDate) - 1;
-                    if (gap > 0) crossRequestPenaltyDays += gap;
+                    if (gap > 0) penaltyDays += gap;
                 } else if (adj.getStartDate().isAfter(endDate)) {
                     long gap = java.time.temporal.ChronoUnit.DAYS.between(endDate, adj.getStartDate()) - 1;
-                    if (gap > 0) crossRequestPenaltyDays += gap;
+                    if (gap > 0) penaltyDays += gap;
                 }
             }
         }
 
-        if (crossRequestPenaltyDays > 0) {
-            duration = duration.add(BigDecimal.valueOf(crossRequestPenaltyDays));
-            sandwichPenaltyDays = sandwichPenaltyDays.add(BigDecimal.valueOf(crossRequestPenaltyDays));
-            reason = String.format("[SANDWICH PENALTY: %d gap days] - ", crossRequestPenaltyDays) + reason;
+        if (penaltyDays > 0) {
+            duration = duration.add(BigDecimal.valueOf(penaltyDays));
+            sandwichPenaltyDays = sandwichPenaltyDays.add(BigDecimal.valueOf(penaltyDays));
+            reason = String.format("[SANDWICH PENALTY: %d gap days] - ", penaltyDays) + reason;
         }
 
-        BigDecimal netDurationToHold = duration.subtract(alreadyDeductedFromApproved);
+        BigDecimal netDurationToHold = duration.subtract(alreadyDeducted);
         if (netDurationToHold.compareTo(BigDecimal.ZERO) < 0) {
             netDurationToHold = BigDecimal.ZERO;
         }
@@ -166,7 +162,7 @@ public class LeaveRequestService {
             reason = "[WARNING: NEGATIVE BALANCE REQUEST] - " + reason;
         }
 
-        List<LeaveApprovalRule> applicableRules = ruleService.getApplicableRules(leaveType.getId(), effectiveChainDuration);
+        List<LeaveApprovalRule> applicableRules = ruleService.getApplicableRules(leaveType.getId(), totalDuration);
         if (applicableRules.isEmpty()) {
             throw new IllegalStateException("System Configuration Error: No rules found.");
         }
@@ -186,12 +182,16 @@ public class LeaveRequestService {
         request.setCancellationStatus(CancellationStatus.NONE);
 
         LeaveRequest savedRequest = leaveRequestRepository.save(request);
+        for (LeaveRequest oldReqToLink : allLeavesToLink) {
+            oldReqToLink.setParentLeave(savedRequest);
+            leaveRequestRepository.save(oldReqToLink);
+        }
 
         leaveBalanceService.holdPendingBalance(savedRequest, netDurationToHold);
         approvalRoutingService.generateApprovalWorkflow(savedRequest, applicableRules);
 
         for (LeaveRequest pendingAdj : adjacentPendingLeavesToUpgrade) {
-            List<LeaveApprovalRule> upgradedRules = ruleService.getApplicableRules(pendingAdj.getLeaveType().getId(), effectiveChainDuration);
+            List<LeaveApprovalRule> upgradedRules = ruleService.getApplicableRules(pendingAdj.getLeaveType().getId(), totalDuration);
             approvalRoutingService.upgradePendingWorkflow(pendingAdj, upgradedRules, savedRequest.getId());
         }
 
@@ -239,15 +239,15 @@ public class LeaveRequestService {
     }
 
     @Transactional
-    public void systemBypassCancelLeave(Long leaveRequestId, Long requestingEmployeeId, Integer currentYear) {
+    public void systemCancelLeave(Long leaveRequestId, Long requestingEmployeeId) {
         LeaveRequest request = leaveRequestRepository.findById(leaveRequestId).orElseThrow(() -> new IllegalArgumentException("Leave request not found"));
 
         if (!request.getEmployee().getId().equals(requestingEmployeeId)) {
             throw new SecurityException("You do not have permission to cancel this leave.");
         }
 
-        leaveRequestRepository.findActiveSupersedingLeave(String.valueOf(leaveRequestId)).ifPresent(parentLeave -> {
-            throw new LeaveMergeException("This leave cannot be cancelled because it is merged into an active leave request (ID: " + parentLeave.getId() + "). Please cancel the merged request instead.");
+        leaveRequestRepository.findActiveParentLeave(leaveRequestId).ifPresent(parentLeave -> {
+            throw new IllegalStateException("This leave cannot be cancelled because it is merged into an active leave request (ID: " + parentLeave.getId() + "). Please cancel the merged request instead.");
         });
 
         String currentStatus = request.getStatus();
@@ -264,15 +264,14 @@ public class LeaveRequestService {
             approvalRoutingService.cancelPendingApprovals(request.getId());
         } else if (currentStatus.equals(STATUS_APPROVED)) {
             request.setStatus(STATUS_CANCELLED);
-            // Full refund as decided for approved cancelled leaves
             leaveBalanceService.rollbackDeduction(request);
 
-            LocalDate cursor = request.getStartDate();
-            while (!cursor.isAfter(request.getEndDate())) {
-                if (cursor.isBefore(LocalDate.now()) || cursor.equals(LocalDate.now())) {
-                    attendanceProcessService.recalculateAttendanceForDate(request.getEmployee().getId(), cursor);
+            LocalDate startDate = request.getStartDate();
+            while (!startDate.isAfter(request.getEndDate())) {
+                if (startDate.isBefore(LocalDate.now()) || startDate.equals(LocalDate.now())) {
+                    attendanceProcessService.recalculateAttendanceForDate(request.getEmployee().getId(), startDate);
                 }
-                cursor = cursor.plusDays(1);
+                startDate = startDate.plusDays(1);
             }
         }
 
@@ -287,8 +286,8 @@ public class LeaveRequestService {
         if (!request.getEmployee().getId().equals(requestingEmployeeId)) {
             throw new SecurityException("You do not have permission to cancel this leave.");
         }
-        leaveRequestRepository.findActiveSupersedingLeave(String.valueOf(leaveRequestId)).ifPresent(parentLeave -> {
-            throw new LeaveMergeException("This leave is currently merged into an active request (ID: " + parentLeave.getId() + "). You must cancel that request instead.");
+        leaveRequestRepository.findActiveParentLeave(leaveRequestId).ifPresent(parentLeave -> {
+            throw new IllegalStateException("This leave is currently merged into an active request (ID: " + parentLeave.getId() + "). You must cancel that request instead.");
         });
 
         String currentStatus = request.getStatus();
@@ -300,14 +299,11 @@ public class LeaveRequestService {
             throw new IllegalStateException("A cancellation request is already pending for this leave.");
         }
 
-        // Fetch anyone who has already approved it
         List<LeaveApproval> approvedOriginals = approvalRoutingService.getApprovedOriginals(request.getId());
 
         if (approvedOriginals.isEmpty()) {
-            // "Zero Approvers Edge Case" -> Auto-cancel instantly
-            systemBypassCancelLeave(leaveRequestId, requestingEmployeeId, currentYear);
+            systemCancelLeave(leaveRequestId, requestingEmployeeId);
         } else {
-            // "In-Flight" or "Approved" -> Trigger workflow, which automatically freezes original steps
             request.setCancellationStatus(CancellationStatus.PENDING);
             leaveRequestRepository.save(request);
 
@@ -318,7 +314,7 @@ public class LeaveRequestService {
     }
 
     @Transactional
-    public LeaveRequest saveOrUpdateDraft(Long draftId, Employee detachedEmployee, LeaveType leaveType, LocalDate startDate, LocalDate endDate, String reason, LeaveSession startSession, LeaveSession endSession, boolean applySandwichRule) {
+    public LeaveRequest saveDraft(Long draftId, Employee detachedEmployee, LeaveType leaveType, LocalDate startDate, LocalDate endDate, String reason, LeaveSession startSession, LeaveSession endSession, boolean applySandwichRule) {
 
         Employee employee = employeeRepository.findById(detachedEmployee.getId()).orElseThrow(() -> new IllegalArgumentException("Employee not found"));
 
@@ -363,7 +359,7 @@ public class LeaveRequestService {
     }
 
     @Transactional(readOnly = true)
-    public List<LeaveRequest> getMergeableConflicts(Long employeeId, LocalDate startDate, LocalDate endDate) {
+    public List<LeaveRequest> getMergeConflicts(Long employeeId, LocalDate startDate, LocalDate endDate) {
         Employee emp = employeeRepository.findById(employeeId).orElseThrow();
         LocalDate prevDay = durationEngineService.getPreviousWorkingDay(startDate, emp);
         LocalDate nextDay = durationEngineService.getNextWorkingDay(endDate, emp);

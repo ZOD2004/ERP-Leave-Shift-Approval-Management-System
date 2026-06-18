@@ -49,9 +49,7 @@ public class LeaveApplicationView extends VerticalLayout {
     // Services
     private final LeaveRequestService leaveRequestService;
     private final LeaveTypeService leaveTypeService;
-    private final EmployeeService employeeService;
     private final DurationEngineService durationEngineService;
-    private final SecurityService securityService;
     private final LeaveBalanceService leaveBalanceService;
     private final ApprovalRoutingService approvalRoutingService;
 
@@ -64,7 +62,6 @@ public class LeaveApplicationView extends VerticalLayout {
     private final DatePicker endDate = new DatePicker("End Date");
     private final NumberField durationDays = new NumberField("Net Duration (Days)");
     private final TextArea reason = new TextArea("Reason for Leave");
-    private final RadioButtonGroup<LeaveSession> leaveSessionGroup = new RadioButtonGroup<>("Session");
     private final ComboBox<LeaveSession> startSessionBox = new ComboBox<>("Start Date Session");
     private final ComboBox<LeaveSession> endSessionBox = new ComboBox<>("End Date Session");
     private final boolean applySandwichRule = true;
@@ -76,13 +73,11 @@ public class LeaveApplicationView extends VerticalLayout {
     private final VerticalLayout draftSection = new VerticalLayout();
     private LeaveRequest currentDraft = null;
 
-    public LeaveApplicationView(LeaveRequestService leaveRequestService, LeaveTypeService leaveTypeService, EmployeeService employeeService, DurationEngineService durationEngineService, SecurityService securityService, LeaveBalanceService leaveBalanceService, ApprovalRoutingService approvalRoutingService) {
+    public LeaveApplicationView(LeaveRequestService leaveRequestService, LeaveTypeService leaveTypeService, DurationEngineService durationEngineService, SecurityService securityService, LeaveBalanceService leaveBalanceService, ApprovalRoutingService approvalRoutingService) {
 
         this.leaveRequestService = leaveRequestService;
         this.leaveTypeService = leaveTypeService;
-        this.employeeService = employeeService;
         this.durationEngineService = durationEngineService;
-        this.securityService = securityService;
         this.leaveBalanceService = leaveBalanceService;
         this.currentEmployee = securityService.getCurrentEmployee();
         this.approvalRoutingService = approvalRoutingService;
@@ -344,7 +339,7 @@ public class LeaveApplicationView extends VerticalLayout {
 
             try {
                 Long draftId = currentDraft != null ? currentDraft.getId() : null;
-                leaveRequestService.saveOrUpdateDraft(draftId, currentEmployee, leaveType.getValue(), startDate.getValue(), endDate.getValue(), reason.getValue(), startSessionBox.getValue(), endSessionBox.getValue(), applySandwichRule);
+                leaveRequestService.saveDraft(draftId, currentEmployee, leaveType.getValue(), startDate.getValue(), endDate.getValue(), reason.getValue(), startSessionBox.getValue(), endSessionBox.getValue(), applySandwichRule);
                 Notification.show("Draft saved successfully.", 3000, Notification.Position.TOP_END).addThemeVariants(NotificationVariant.LUMO_SUCCESS);
 
                 this.currentDraft = null;
@@ -471,7 +466,7 @@ public class LeaveApplicationView extends VerticalLayout {
                 return false;
             }
 
-            List<LeaveRequest> conflicts = leaveRequestService.getMergeableConflicts(currentEmployee.getId(), startDate.getValue(), endDate.getValue());
+            List<LeaveRequest> conflicts = leaveRequestService.getMergeConflicts(currentEmployee.getId(), startDate.getValue(), endDate.getValue());
             if (!conflicts.isEmpty()) {
                 showMergeConflictDialog(conflicts);
                 return false;
@@ -490,7 +485,7 @@ public class LeaveApplicationView extends VerticalLayout {
         try {
             Long draftId = this.currentDraft != null ? this.currentDraft.getId() : null;
 
-            leaveRequestService.submitLeaveRequest(draftId, currentEmployee, leaveType.getValue(), startDate.getValue(), endDate.getValue(), reason.getValue(), LocalDate.now().getYear(), startSessionBox.getValue(), endSessionBox.getValue() != null ? endSessionBox.getValue() : LeaveSession.FULL_DAY, applySandwichRule, supersededIds);
+            leaveRequestService.submitLeaveRequest(draftId, currentEmployee, leaveType.getValue(), startDate.getValue(), endDate.getValue(), reason.getValue(), LocalDate.now().getYear(), startSessionBox.getValue(), endSessionBox.getValue() != null ? endSessionBox.getValue() : LeaveSession.FULL_DAY, supersededIds);
 
             Notification.show("Leave request submitted successfully!", 4000, Notification.Position.TOP_END).addThemeVariants(NotificationVariant.LUMO_SUCCESS);
 

@@ -82,7 +82,6 @@ public class DurationEngineService {
                 }
 
             } else if (employee.getDefaultShift() != null) {
-
                 if (defaultGeneratedUntil != null && !currentDate.isAfter(defaultGeneratedUntil)) {
                     isOffDay = true;
                 } else {
@@ -163,8 +162,7 @@ public class DurationEngineService {
     }
 
     private LocalDate findWorkingDay(LocalDate start, Employee detachedEmployee, int stepDays) {
-        Employee employee = employeeRepository.findById(detachedEmployee.getId())
-                .orElseThrow(() -> new IllegalArgumentException("Employee not found"));
+        Employee employee = employeeRepository.findById(detachedEmployee.getId()).orElseThrow(() -> new IllegalArgumentException("Employee not found"));
         LocalDate current = start.plusDays(stepDays);
         int safeguard = 0;
         ShiftRotationPolicy activePolicy = shiftRotationPolicyRepository.findActivePolicyWithSequencesByEmployeeId(employee.getId()).orElse(null);

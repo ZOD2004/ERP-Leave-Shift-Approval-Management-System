@@ -32,14 +32,13 @@ public class AttendanceCronJobService {
     private final AttendanceCorrectionService attendanceCorrectionService;
     private final LeaveBalanceService leaveBalanceService;
     private final ShiftRotationService shiftRotationService;
-    private final AttendanceProcessService attendanceProcessService;
 
     private LocalDateTime lastRunTime;
     private String lastRunStatus = "WAITING";
 
     @Scheduled(cron = "0 25 18 * * ?")
     @Transactional
-    public void rollingShiftSweeper() {
+    public void attendanceRunner() {
         LocalDateTime now = LocalDateTime.now();
         LocalDate today = LocalDate.now();
         LocalDate yesterday = today.minusDays(1);
@@ -62,7 +61,7 @@ public class AttendanceCronJobService {
                 attendances.addAll(attendanceRepository.findByEmployeeIdInAndAttendanceDate(empIds, date));
             }
 
-            Map<Long, Map<LocalDate, ShiftAssignment>> assignmentMap = buildAssignmentMap(assignments, datesToCheck);
+            Map<Long, Map<LocalDate, ShiftAssignment>> assignmentMap = buildAssignMap(assignments, datesToCheck);
             Map<Long, Map<LocalDate, Attendance>> attendanceMap = buildAttendanceMap(attendances);
             Map<Long, List<LeaveRequest>> leaveMap = leaves.stream().collect(Collectors.groupingBy(lr -> lr.getEmployee().getId()));
             Map<Long, ShiftRotationPolicy> policyMap = policies.stream().collect(Collectors.toMap(p -> p.getEmployee().getId(), p -> p, (p1, p2) -> p1));
@@ -99,8 +98,6 @@ public class AttendanceCronJobService {
                 ? targetDate.plusDays(1).atTime(shift.getEndTime())
                 : targetDate.atTime(shift.getEndTime());
 
-        // CHANGED: Removed triggerTime = shiftEndDT.plusHours(4);
-        // It now evaluates immediately if the current time is past the shift end time.
         if (now.isAfter(shiftEndDT) && now.isBefore(shiftEndDT.plusHours(24))) {
 
             if (attendance != null && attendance.getFirstCheckIn() != null) {
@@ -148,7 +145,7 @@ public class AttendanceCronJobService {
     private void processNonWorkingDay(Employee emp, LocalDate targetDate, Attendance attendance, List<LocalDate> holidays, ShiftRotationPolicy policy) {
 
         if (attendance == null || attendance.getFirstCheckIn() == null) {
-            AttendanceStatus exactStatus = determineNonWorkingStatus(emp, targetDate, holidays, policy);
+            AttendanceStatus exactStatus = workingStatus(emp, targetDate, holidays, policy);
 
             Attendance attRecord = (attendance != null) ? attendance : new Attendance();
             attRecord.setEmployee(emp);
@@ -162,7 +159,7 @@ public class AttendanceCronJobService {
         }
     }
 
-    private AttendanceStatus determineNonWorkingStatus(Employee employee, LocalDate targetDate, List<LocalDate> holidays, ShiftRotationPolicy policy) {
+    private AttendanceStatus workingStatus(Employee employee, LocalDate targetDate, List<LocalDate> holidays, ShiftRotationPolicy policy) {
         if (holidays.contains(targetDate)) {
             return AttendanceStatus.PUBLIC_HOLIDAY;
         }
@@ -193,7 +190,7 @@ public class AttendanceCronJobService {
                 return AttendanceStatus.OFF_DAY;
             }
         }
-        return AttendanceStatus.OFF_DAY;
+        return AttendanceStatus.MISSING_SHIFT;
     }
 
     private void deductPenalty(Employee employee, String leaveTypeName, double days, int year, String desc) {
@@ -201,7 +198,7 @@ public class AttendanceCronJobService {
         leaveBalanceService.deductPenalty(employee, type, java.math.BigDecimal.valueOf(days), year, desc);
     }
 
-    private Map<Long, Map<LocalDate, ShiftAssignment>> buildAssignmentMap(List<ShiftAssignment> assignments, List<LocalDate> targetDates) {
+    private Map<Long, Map<LocalDate, ShiftAssignment>> buildAssignMap(List<ShiftAssignment> assignments, List<LocalDate> targetDates) {
         Map<Long, Map<LocalDate, ShiftAssignment>> map = new HashMap<>();
         for (ShiftAssignment sa : assignments) {
             map.computeIfAbsent(sa.getEmployee().getId(), k -> new HashMap<>());

@@ -33,7 +33,7 @@ public class ShiftRotationService {
 
     @Scheduled(cron = "0 0 2 * * ?")
     @Transactional
-    public void dailyTopUpRotations() {
+    public void shiftGenerator() {
         log.info("Starting Daily Shift Rotation & Default Shift Top-Up Job.");
 
         List<Employee> activeEmployees = employeeRepository.findByActiveTrue();
@@ -57,7 +57,7 @@ public class ShiftRotationService {
                     LocalDate startGenerationFrom = employee.getDefaultShiftGeneratedUntil() != null ? employee.getDefaultShiftGeneratedUntil().plusDays(1) : LocalDate.now();
 
                     if (startGenerationFrom.isBefore(LocalDate.now().plusDays(7))) {
-                        gapFillDefaultShift(employee, startGenerationFrom, targetMinimumRunway);
+                        fillDefaultShift(employee, startGenerationFrom, targetMinimumRunway);
                     }
                 }
             } catch (Exception e) {
@@ -68,17 +68,15 @@ public class ShiftRotationService {
     }
 
     @Transactional
-    public ShiftRotationPolicy createAndKickstartPolicy(ShiftRotationPolicy policy) {
+    public void createAndKickstartPolicy(ShiftRotationPolicy policy) {
         validatePolicy(policy);
 
-        // Ensure starting state is clean
         policy.setGeneratedUntil(null);
         ShiftRotationPolicy savedPolicy = policyRepository.save(policy);
 
         LocalDate targetRunway = savedPolicy.getStartDate().plusDays(GENERATION_DAYS_AHEAD);
         processPolicyForWindow(savedPolicy, savedPolicy.getStartDate(), targetRunway);
 
-        return savedPolicy;
     }
 
     private void processPolicyForWindow(ShiftRotationPolicy policy, LocalDate start, LocalDate targetMinimumRunway) {
@@ -86,21 +84,19 @@ public class ShiftRotationService {
 
         int totalCycleDays = calculateCycleDays(policy);
 
-        // STRETCH TO FINISH LOOP: Calculate exact days needed to cleanly finish the N-day sequence
         long daysToRunway = ChronoUnit.DAYS.between(start, targetMinimumRunway);
         if (daysToRunway <= 0) daysToRunway = 1;
         int cyclesNeeded = (int) Math.ceil((double) daysToRunway / totalCycleDays);
         LocalDate actualEnd = start.plusDays((long) cyclesNeeded * totalCycleDays - 1);
 
-        // Fetch existing assignments to respect HR overrides
         List<ShiftAssignment> existingAssignments = assignmentRepository.findByEmployeeIdInAndDateRange(List.of(policy.getEmployee().getId()), start, actualEnd);
         Set<LocalDate> occupiedDates = extractOccupiedDates(existingAssignments, start, actualEnd);
         Set<LocalDate> holidayDates = new HashSet<>(holidayRepository.findHolidayDatesBetween(start, actualEnd));
 
         List<ShiftAssignmentDTO> newAssignments = new ArrayList<>();
         Shift currentShift = null;
-        LocalDate chunkStart = null;
-        LocalDate chunkEnd = null;
+        LocalDate realStart = null;
+        LocalDate realEnd = null;
 
         for (LocalDate date = start; !date.isAfter(actualEnd); date = date.plusDays(1)) {
             boolean isOccupied = occupiedDates.contains(date);
@@ -109,47 +105,43 @@ public class ShiftRotationService {
             boolean isOffDay = activeSequence == null || activeSequence.getSegmentType() == RotationSegmentType.OFF || holidayDates.contains(date);
 
             if (isOccupied || isOffDay) {
-                // Break chunk and save
                 if (currentShift != null) {
-                    newAssignments.add(createAssignmentDTO(policy.getEmployee(), currentShift, chunkStart, chunkEnd));
+                    newAssignments.add(createAssignmentDTO(policy.getEmployee(), currentShift, realStart, realEnd));
                     currentShift = null;
                 }
                 continue;
             }
 
             Shift shiftForDay = activeSequence.getShift();
-
-            // Chunking logic (combining consecutive matching days into one assignment)
             if (currentShift == null) {
                 currentShift = shiftForDay;
-                chunkStart = date;
-                chunkEnd = date;
+                realStart = date;
+                realEnd = date;
             } else if (!currentShift.getId().equals(shiftForDay.getId())) {
-                newAssignments.add(createAssignmentDTO(policy.getEmployee(), currentShift, chunkStart, chunkEnd));
+                newAssignments.add(createAssignmentDTO(policy.getEmployee(), currentShift, realStart, realEnd));
                 currentShift = shiftForDay;
-                chunkStart = date;
-                chunkEnd = date;
+                realStart = date;
+                realEnd = date;
             } else {
-                chunkEnd = date; // Extend chunk
+                realEnd = date;
             }
         }
 
         if (currentShift != null) {
-            newAssignments.add(createAssignmentDTO(policy.getEmployee(), currentShift, chunkStart, chunkEnd));
+            newAssignments.add(createAssignmentDTO(policy.getEmployee(), currentShift, realStart, realEnd));
         }
 
         if (!newAssignments.isEmpty()) {
-            shiftAssignmentService.saveResolvedBatch(newAssignments, false); // false = respect HR existing
+            shiftAssignmentService.saveResolvedBatch(newAssignments, false);
         }
 
-        // Advance the tracker so the cron job knows where to pick up next time
         policy.setGeneratedUntil(actualEnd);
         policyRepository.save(policy);
 
         log.info("Policy applied for Employee {} up to {}", policy.getEmployee().getId(), actualEnd);
     }
 
-    private void gapFillDefaultShift(Employee employee, LocalDate start, LocalDate end) {
+    private void fillDefaultShift(Employee employee, LocalDate start, LocalDate end) {
         List<ShiftAssignment> existingAssignments = assignmentRepository.findByEmployeeIdInAndDateRange(List.of(employee.getId()), start, end);
         Set<LocalDate> occupiedDates = extractOccupiedDates(existingAssignments, start, end);
         Set<LocalDate> holidayDates = new HashSet<>(holidayRepository.findHolidayDatesBetween(start, end));
@@ -157,37 +149,37 @@ public class ShiftRotationService {
         Shift defaultShift = employee.getDefaultShift();
         List<ShiftAssignmentDTO> newAssignments = new ArrayList<>();
 
-        LocalDate chunkStart = null;
-        LocalDate chunkEnd = null;
-        boolean inChunk = false;
+        LocalDate realStart = null;
+        LocalDate realEnd = null;
+        boolean in = false;
 
         for (LocalDate date = start; !date.isAfter(end); date = date.plusDays(1)) {
             String dayName = date.getDayOfWeek().name();
             boolean isWorkingDay = defaultShift.getWorkingDays().stream().anyMatch(wd -> wd.name().equalsIgnoreCase(dayName));
 
             if (occupiedDates.contains(date) || holidayDates.contains(date) || !isWorkingDay) {
-                if (inChunk) {
-                    newAssignments.add(createAssignmentDTO(employee, defaultShift, chunkStart, chunkEnd));
-                    inChunk = false;
+                if (in) {
+                    newAssignments.add(createAssignmentDTO(employee, defaultShift, realStart, realEnd));
+                    in = false;
                 }
                 continue;
             }
 
-            if (!inChunk) {
-                chunkStart = date;
-                chunkEnd = date;
-                inChunk = true;
+            if (!in) {
+                realStart = date;
+                realEnd = date;
+                in = true;
             } else {
-                chunkEnd = date; // extend
+                realEnd = date;
             }
         }
 
-        if (inChunk) {
-            newAssignments.add(createAssignmentDTO(employee, defaultShift, chunkStart, chunkEnd));
+        if (in) {
+            newAssignments.add(createAssignmentDTO(employee, defaultShift, realStart, realEnd));
         }
 
         if (!newAssignments.isEmpty()) {
-            shiftAssignmentService.saveResolvedBatch(newAssignments, false); // false = respect HR overrides
+            shiftAssignmentService.saveResolvedBatch(newAssignments, false);
             employee.setDefaultShiftGeneratedUntil(end);
             employeeRepository.save(employee);
         }
@@ -254,14 +246,6 @@ public class ShiftRotationService {
         return dates;
     }
 
-    private ShiftAssignment createAssignment(Employee employee, Shift shift, LocalDate start, LocalDate end) {
-        ShiftAssignment sa = new ShiftAssignment();
-        sa.setEmployee(employee);
-        sa.setShift(shift);
-        sa.setStartDate(start);
-        sa.setEndDate(end);
-        return sa;
-    }
 
     @Transactional(readOnly = true)
     public List<ShiftRotationPolicy> getAllPolicies() {

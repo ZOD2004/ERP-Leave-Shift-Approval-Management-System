@@ -14,7 +14,6 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 
 @Service
@@ -171,7 +170,7 @@ public class ApprovalRoutingService {
             }
         } else {
             if (ACTION_REJECTED.equals(normalizedAction)) {
-                handleRejection(request, actor.getUsername());
+                handleRejection(request);
             } else {
                 handleAdvancement(request, actor);
             }
@@ -212,35 +211,30 @@ public class ApprovalRoutingService {
                 List<User> nextApprovers = resolveApprovers(request.getEmployee(), requiredRole);
                 int actorHighestWeight = getHighestRoleWeight(actor);
 
-                // SCENARIO 1: The actor who just approved IS the exact person who would approve the next step anyway.
-                // (e.g., The employee's Manager is also the Dept Head. Prevents asking them to approve twice).
-                boolean actorIsNextApprover = nextApprovers.stream().anyMatch(u -> u.getId().equals(actor.getId()));
+                boolean nextApprover = nextApprovers.stream().anyMatch(u -> u.getId().equals(actor.getId()));
 
-                // SCENARIO 2: The specific target (Manager/HOD) is physically missing from the database,
-                // AND the actor who just approved has enough authority to override the fallback pool.
-                boolean specificApproverMissing = false;
+                boolean missingApprover = false;
                 if ("ROLE_MANAGER".equals(requiredRole.getName())) {
-                    specificApproverMissing = (request.getEmployee().getManager() == null || request.getEmployee().getManager().getUser() == null);
+                    missingApprover = (request.getEmployee().getManager() == null || request.getEmployee().getManager().getUser() == null);
                 } else if ("ROLE_DEPT_HEAD".equals(requiredRole.getName())) {
-                    specificApproverMissing = (request.getEmployee().getDepartment() == null || request.getEmployee().getDepartment().getHod() == null || request.getEmployee().getDepartment().getHod().getUser() == null);
+                    missingApprover = (request.getEmployee().getDepartment() == null || request.getEmployee().getDepartment().getHod() == null || request.getEmployee().getDepartment().getHod().getUser() == null);
                 }
 
-                boolean actorOutranksFallback = (actorHighestWeight >= requiredRole.getHierarchyWeight());
+                boolean biggerLvlActor = (actorHighestWeight >= requiredRole.getHierarchyWeight());
 
-                if (actorIsNextApprover || (specificApproverMissing && actorOutranksFallback)) {
+                if (nextApprover || (missingApprover && biggerLvlActor)) {
                     shouldBypass = true;
                 }
             }
 
             if (shouldBypass) {
                 log.info("Smart Bypass triggered for Level {} on request {}.", nextLevel, request.getId());
-                createBypassedApprovalRecord(request, actor, nextLevel);
+                byPassActor(request, actor, nextLevel);
                 request.setCurrentLevel(nextLevel);
                 handleAdvancement(request, actor);
                 return;
             }
 
-            // If no bypass conditions are met, strictly generate the next level!
             request.setCurrentLevel(nextLevel);
             request.setStatus("PENDING LVL " + nextLevel);
             leaveRequestRepository.save(request);
@@ -250,65 +244,48 @@ public class ApprovalRoutingService {
             String newRequestState = String.format("{ \"status\": \"%s\", \"currentLevel\": %d }", request.getStatus(), nextLevel);
             auditLogService.saveAuditLog(request.getId(), "WORKFLOW_ADVANCED", "LeaveRequest", oldRequestState, newRequestState);
         } else {
-            finalizeApproval(request, actor.getUsername());
+            finalizeApproval(request);
         }
     }
-//    How this behaves now:
-//    HOD Exists: If Tier 1 is approved, and the HOD exists, it will strictly generate a PENDING LVL 2 task and go to the HOD.
-//
-//    HOD is Missing: If Tier 1 is approved by someone with high authority, and the HOD position is empty, it skips Level 2 and moves straight to Level 3.
-//
-//    Manager IS the HOD: If the HOD approves Tier 1, it realizes the HOD is the next person in line anyway, and intelligently skips Tier 2 so they don't get duplicate notifications.
 
-    private void finalizeApproval(LeaveRequest request, String actorUsername) {
+    private void finalizeApproval(LeaveRequest request) {
         String oldRequestState = String.format("{ \"status\": \"%s\" }", request.getStatus());
 
         request.setStatus(LeaveRequestService.STATUS_APPROVED);
         leaveRequestRepository.save(request);
 
-        BigDecimal approvedAlready = leaveBalanceService.calculateApprovedSupersededDays(request);
-        BigDecimal delta = request.getDurationDays().subtract(approvedAlready);
-        leaveBalanceService.deduct(request, delta);
+        BigDecimal approvedAlready = leaveBalanceService.calculateApprovedMergedDays(request);
+        BigDecimal diff = request.getDurationDays().subtract(approvedAlready);
+        leaveBalanceService.deduct(request, diff);
 
-        // REPLACEMENT BLOCK in finalizeApproval
-        if (request.getSupersededLeaveIds() != null && !request.getSupersededLeaveIds().isEmpty()) {
-            String[] ids = request.getSupersededLeaveIds().split(",");
-            for (String idStr : ids) {
-                Long oldId = Long.valueOf(idStr.trim());
-                LeaveRequest oldReq = leaveRequestRepository.findById(oldId).orElse(null);
-
-                if (oldReq != null && !oldReq.getStatus().equals(LeaveRequestService.STATUS_CANCELLED)) {
-
-                    // 1. Capture the status BEFORE changing it
+        if (request.getMergedLeaves() != null && !request.getMergedLeaves().isEmpty()) {
+            for (LeaveRequest oldReq : request.getMergedLeaves()) {
+                if (!oldReq.getStatus().equals(LeaveRequestService.STATUS_CANCELLED)) {
                     String previousStatus = oldReq.getStatus();
 
-                    // 2. Cancel it
                     oldReq.setStatus(LeaveRequestService.STATUS_CANCELLED);
-                    oldReq.setReason(oldReq.getReason() + " [SUPERSEDED BY REQUEST ID: " + request.getId() + "]");
+                    oldReq.setReason(oldReq.getReason() + " [MERGED INTO REQUEST ID: " + request.getId() + "]");
                     leaveRequestRepository.save(oldReq);
 
-                    // 3. Rollback using the captured status
-                    if (previousStatus.equals(LeaveRequestService.STATUS_APPROVED)) {
-                        // NO BALANCE ACTION: Approved leaves already contributed to the new merged request
-                    } else {
+                    if (!previousStatus.equals(LeaveRequestService.STATUS_APPROVED)) {
                         leaveBalanceService.releasePendingHold(oldReq);
                     }
                 }
             }
         }
-        LocalDate cursor = request.getStartDate();
-        while (!cursor.isAfter(request.getEndDate())) {
-            if (!cursor.isAfter(LocalDate.now())) {
-                attendanceProcessService.recalculateAttendanceForDate(request.getEmployee().getId(), cursor);
+        LocalDate startDate = request.getStartDate();
+        while (!startDate.isAfter(request.getEndDate())) {
+            if (!startDate.isAfter(LocalDate.now())) {
+                attendanceProcessService.recalculateAttendanceForDate(request.getEmployee().getId(), startDate);
             }
-            cursor = cursor.plusDays(1);
+            startDate = startDate.plusDays(1);
         }
 
         String newRequestState = String.format("{ \"status\": \"%s\" }", LeaveRequestService.STATUS_APPROVED);
         auditLogService.saveAuditLog(request.getId(), "WORKFLOW_FINALIZE_APPROVED", "LeaveRequest", oldRequestState, newRequestState);
     }
 
-    private void handleRejection(LeaveRequest request, String actorUsername) {
+    private void handleRejection(LeaveRequest request) {
         String oldRequestState = String.format("{ \"status\": \"%s\" }", request.getStatus());
 
         request.setStatus(LeaveRequestService.STATUS_REJECTED);
@@ -424,7 +401,7 @@ public class ApprovalRoutingService {
         return 0;
     }
 
-    private void createBypassedApprovalRecord(LeaveRequest request, User higherAuthorityActor, int skippedLevel) {
+    private void byPassActor(LeaveRequest request, User higherAuthorityActor, int skippedLevel) {
         LeaveApproval bypassedApproval = new LeaveApproval();
         bypassedApproval.setLeaveRequest(request);
         bypassedApproval.setApprover(higherAuthorityActor);
@@ -476,12 +453,10 @@ public class ApprovalRoutingService {
         createApprovalRecord(request, firstApprover.getApprover(), firstApprover.getApprovalLevel(), ApprovalType.CANCELLATION);
     }
 
-    // ADD THESE THREE METHODS
     private void handleCancellationRejection(LeaveRequest request, User actor) {
         request.setCancellationStatus(CancellationStatus.REJECTED);
         leaveRequestRepository.save(request);
 
-        // Cancel any lingering CANCELLATION steps, but leave original ones frozen/alive
         List<LeaveApproval> pending = leaveApprovalRepository.findByLeaveRequestIdAndAction(request.getId(), ACTION_PENDING);
         for (LeaveApproval a : pending) {
             if (a.getApprovalType() == ApprovalType.CANCELLATION) {
@@ -505,11 +480,9 @@ public class ApprovalRoutingService {
         }
 
         if (nextOriginal != null) {
-            // Still more approvers to ask, generate next sequential cancellation step
             createApprovalRecord(request, nextOriginal.getApprover(), nextOriginal.getApprovalLevel(), ApprovalType.CANCELLATION);
             auditLogService.saveAuditLog(request.getId(), "CANCELLATION_ADVANCED", "LeaveRequest", null, "{ \"cancellationLevel\": " + nextOriginal.getApprovalLevel() + " }");
         } else {
-            // Everyone agreed to cancel it! Finalize it.
             finalizeCancellation(request, actor);
         }
     }
@@ -522,21 +495,19 @@ public class ApprovalRoutingService {
         leaveRequestRepository.save(request);
 
         if (previousStatus.equals(LeaveRequestService.STATUS_APPROVED)) {
-            // Full refund as decided for approved cancelled leaves
             leaveBalanceService.rollbackDeduction(request);
 
-            LocalDate cursor = request.getStartDate();
-            while (!cursor.isAfter(request.getEndDate())) {
-                if (!cursor.isAfter(LocalDate.now())) {
-                    attendanceProcessService.recalculateAttendanceForDate(request.getEmployee().getId(), cursor);
+            LocalDate startDate = request.getStartDate();
+            while (!startDate.isAfter(request.getEndDate())) {
+                if (!startDate.isAfter(LocalDate.now())) {
+                    attendanceProcessService.recalculateAttendanceForDate(request.getEmployee().getId(), startDate);
                 }
-                cursor = cursor.plusDays(1);
+                startDate = startDate.plusDays(1);
             }
         } else {
             BigDecimal heldAmount = leaveBalanceService.calculateHeldAmount(request);
             leaveBalanceService.releasePendingHold(request, heldAmount);
 
-            // Because the leave is now dead, we must permanently cancel any ORIGINAL pending tasks that were frozen
         List<LeaveApproval> pending = leaveApprovalRepository.findByLeaveRequestIdAndAction(request.getId(), ACTION_PENDING);
             for (LeaveApproval a : pending) {
                 if (a.getApprovalType() == ApprovalType.ORIGINAL) {
