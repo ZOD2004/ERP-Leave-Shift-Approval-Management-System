@@ -30,4 +30,5 @@ public class LeaveType {
     @Column(name = "apply_sandwich_rule", nullable = false)
     private Boolean applySandwichRule = false;
 
+
 }

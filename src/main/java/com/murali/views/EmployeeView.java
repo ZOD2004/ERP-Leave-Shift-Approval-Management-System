@@ -1,9 +1,14 @@
 package com.murali.views;
 
 import com.murali.entity.*;
+import com.murali.exception.HodConflictException;
+import com.murali.exception.HodDeleteConflictException;
+import com.murali.exception.ManagerDeleteConflictException;
+import com.murali.exception.ManagerPromotionConflictException;
 import com.murali.repository.LeaveTypeRepository;
 import com.murali.service.*;
-import com.vaadin.flow.component.UI;
+import com.vaadin.flow.component.AbstractField;
+import com.vaadin.flow.component.HasValue;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.combobox.ComboBox;
@@ -13,6 +18,7 @@ import com.vaadin.flow.component.formlayout.FormLayout;
 import com.vaadin.flow.component.grid.Grid;
 import com.vaadin.flow.component.html.H2;
 import com.vaadin.flow.component.html.H3;
+import com.vaadin.flow.component.html.Paragraph;
 import com.vaadin.flow.component.icon.Icon;
 import com.vaadin.flow.component.icon.VaadinIcon;
 import com.vaadin.flow.component.notification.Notification;
@@ -21,21 +27,20 @@ import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.textfield.PasswordField;
 import com.vaadin.flow.component.textfield.TextField;
-import com.vaadin.flow.data.binder.BeanValidationBinder;
 import com.vaadin.flow.data.binder.Binder;
 import com.vaadin.flow.data.binder.ValidationException;
 import com.vaadin.flow.data.value.ValueChangeMode;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
 import jakarta.annotation.security.RolesAllowed;
-import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
 
 import java.time.LocalDate;
 import java.util.stream.Collectors;
 
-@Route(value = "add-employees",layout = MainLayout.class)
+import java.util.List;
+import java.util.Set;
+
+@Route(value = "add-employees", layout = MainLayout.class)
 @PageTitle("Employee Directory")
 @RolesAllowed({"ROLE_SUPER_ADMIN", "ROLE_HR_ADMIN"})
 public class EmployeeView extends VerticalLayout {
@@ -43,16 +48,15 @@ public class EmployeeView extends VerticalLayout {
     private final EmployeeService employeeService;
     private final DepartmentService deptService;
     private final RoleService roleService;
-    private final UserService userService;
     private final LeaveTypeRepository leaveTypeRepository;
-    private final LeaveBalanceService leaveBalanceService;
     private final ShiftService shiftService;
+    private final LeaveBalanceService leaveBalanceService;
 
     private final Grid<Employee> grid = new Grid<>(Employee.class, false);
     private final TextField searchField = new TextField();
     private final Button addBtn = new Button("Onboard New Employee", new Icon(VaadinIcon.PLUS));
-
     private final Dialog formDialog = new Dialog();
+
     private final TextField username = new TextField("Username");
     private final PasswordField password = new PasswordField("Password");
     private final TextField email = new TextField("Email");
@@ -63,6 +67,7 @@ public class EmployeeView extends VerticalLayout {
     private final ComboBox<Department> department = new ComboBox<>("Department");
     private final ComboBox<Employee> manager = new ComboBox<>("Reporting Manager");
     private final ComboBox<Shift> defaultShift = new ComboBox<>("Default Shift");
+    private final MultiSelectComboBox<LeaveType> applicableLeavesField = new MultiSelectComboBox<>("Applicable Leave Types");
 
     private final Button saveBtn = new Button("Save Employee");
     private final Button cancelBtn = new Button("Cancel");
@@ -70,28 +75,23 @@ public class EmployeeView extends VerticalLayout {
     private final Binder<User> userBinder = new Binder<>(User.class);
     private final Binder<Employee> employeeBinder = new Binder<>(Employee.class);
 
-    MultiSelectComboBox<LeaveType> applicableLeavesField = new MultiSelectComboBox<>("Applicable Leave Types");
-
     private Employee currentEmployee;
     private User currentUser;
     private boolean isExistingUserLinked = false;
 
-    public EmployeeView(EmployeeService employeeService, DepartmentService deptService,
-                        RoleService roleService, UserService userService, LeaveTypeRepository leaveTypeRepository, LeaveBalanceService leaveBalanceService, ShiftService shiftService) {
+    public EmployeeView(EmployeeService employeeService, DepartmentService deptService, RoleService roleService, LeaveTypeRepository leaveTypeRepository, ShiftService shiftService, LeaveBalanceService leaveBalanceService) {
         this.employeeService = employeeService;
         this.deptService = deptService;
         this.roleService = roleService;
-        this.userService = userService;
         this.leaveTypeRepository = leaveTypeRepository;
-        this.leaveBalanceService = leaveBalanceService;
         this.shiftService = shiftService;
+        this.leaveBalanceService = leaveBalanceService;
 
         setSizeFull();
         configureGrid();
         configureForm();
 
         searchField.setPlaceholder("Search by code");
-        searchField.setTooltipText("Search by Employee code");
         searchField.setClearButtonVisible(true);
         searchField.setValueChangeMode(ValueChangeMode.LAZY);
         searchField.addValueChangeListener(e -> updateList());
@@ -111,22 +111,15 @@ public class EmployeeView extends VerticalLayout {
         grid.setSizeFull();
         grid.addColumn(Employee::getEmployeeCode).setHeader("Code").setSortable(true);
         grid.addColumn(Employee::getFirstName).setHeader("First Name").setSortable(true);
+        grid.addColumn(emp -> emp.getDepartment() != null ? emp.getDepartment().getName() : "None").setHeader("Department");
+        grid.addColumn(emp -> emp.getManager() != null ? emp.getManager().getFirstName() : "None").setHeader("Manager");
 
-        grid.addColumn(emp -> emp.getDepartment() != null ? emp.getDepartment().getName() : "None")
-                .setHeader("Department");
-
-        grid.addColumn(emp -> emp.getManager() != null ? emp.getManager().getFirstName() : "None")
-                .setHeader("Manager");
-
-        grid.addColumn(emp -> emp.getDefaultShift() != null ? emp.getDefaultShift().getName() : "None")
-                .setHeader("Shift");
         grid.addComponentColumn(employee -> {
             Button editBtn = new Button(new Icon(VaadinIcon.EDIT));
             editBtn.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
             editBtn.addClickListener(e -> openForm(employee, employee.getUser() != null ? employee.getUser() : new User()));
 
             Button deleteBtn = new Button(new Icon(VaadinIcon.TRASH));
-            deleteBtn.setTooltipText("Only soft Deletes changes is_active to false");
             deleteBtn.addThemeVariants(ButtonVariant.LUMO_TERTIARY, ButtonVariant.LUMO_ERROR);
             deleteBtn.addClickListener(e -> softDeleteEmployee(employee));
 
@@ -139,82 +132,45 @@ public class EmployeeView extends VerticalLayout {
 
         department.setItems(deptService.findAll());
         department.setItemLabelGenerator(Department::getName);
-
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        boolean canManageDepartments = auth != null && auth.getAuthorities().stream()
-                .anyMatch(a -> a.getAuthority().equals("ROLE_SUPER_ADMIN") ||
-                        a.getAuthority().equals("ROLE_HR_ADMIN"));
-
-        HorizontalLayout departmentWrapper = new HorizontalLayout(department);
-        departmentWrapper.setWidthFull();
-        departmentWrapper.setAlignItems(Alignment.BASELINE);
-        department.setWidthFull();
-
-        if (canManageDepartments) {
-            Button addDeptBtn = new Button(new Icon(VaadinIcon.PLUS));
-            addDeptBtn.addThemeVariants(ButtonVariant.LUMO_TERTIARY, ButtonVariant.LUMO_SMALL);
-            addDeptBtn.setTooltipText("Add Department");
-
-            addDeptBtn.getStyle().set("color", "var(--lumo-secondary-text-color)");
-
-            addDeptBtn.addClickListener(e -> {
-                formDialog.close();
-                UI.getCurrent().navigate("add-departments");
-            });
-
-            departmentWrapper.add(addDeptBtn);
-        }
-
-        role.setItems(roleService.getRoles());
         role.setItemLabelGenerator(Role::getName);
-
         manager.setItemLabelGenerator(e -> e.getFirstName() + " (" + e.getEmployeeCode() + ")");
         manager.setClearButtonVisible(true);
         defaultShift.setItems(shiftService.findAll());
         defaultShift.setItemLabelGenerator(Shift::getName);
-        defaultShift.setClearButtonVisible(true);
 
-        department.addValueChangeListener(event -> {
-            Department selectedDept = event.getValue();
-            if (selectedDept != null) {
-                manager.setItems(employeeService.findAvailableManagers(selectedDept.getId()));
-            } else {
-                manager.setItems(java.util.Collections.emptyList());
-            }
-        });
+        HasValue.ValueChangeListener<AbstractField.ComponentValueChangeEvent<?, ?>> updateManagerList = event -> {
+            if (event.isFromClient()) {
+                Department selectedDept = department.getValue();
+                Role selectedRole = role.getValue();
 
-        username.setValueChangeMode(ValueChangeMode.TIMEOUT);
-        username.setValueChangeTimeout(2500);
-        username.addValueChangeListener(event -> {
-            String inputUsername = event.getValue();
-            if (inputUsername != null && !inputUsername.isEmpty()) {
-                User existingUser = userService.findByUsername(inputUsername);
-
-                if (existingUser != null) {
-                    currentUser = existingUser;
-                    userBinder.readBean(currentUser);
-                    isExistingUserLinked = true;
-                    toggleUserFields(false);
-                    showNotification("Existing user found. Linking to profile.", NotificationVariant.LUMO_SUCCESS);
+                if (selectedDept != null && selectedRole != null) {
+                    manager.setItems(employeeService.findAvailableReportingManagers(selectedDept.getId(), selectedRole));
                 } else {
-                    isExistingUserLinked = false;
-                    toggleUserFields(true);
+                    manager.setItems(java.util.Collections.emptyList());
                 }
             }
-        });
+        };
+        department.addValueChangeListener(updateManagerList);
+        role.addValueChangeListener(updateManagerList);
 
         userBinder.forField(username).asRequired("Required").bind(User::getUsername, User::setUsername);
         userBinder.forField(email).asRequired("Required").bind(User::getEmail, User::setEmail);
-        userBinder.forField(email)
-                .asRequired("Email is required")
-                .withValidator(
-                        value -> value != null &&
-                                value.matches("^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+$"),
-                        "Enter a valid email address"
-                )
-                .bind(User::getEmail, User::setEmail);
-        userBinder.forField(password).bind(User::getPasswordHash, User::setPasswordHash);
-
+        userBinder.forField(password)
+                .withValidator(pass -> {
+                    boolean isNewUser = (currentUser == null || currentUser.getId() == null);
+                    if (isNewUser) {
+                        return pass != null && !pass.isEmpty();
+                    }
+                    return true;
+                }, "Password is required for new users")
+                .bind(
+                        user -> "",
+                        (user, pass) -> {
+                            if (pass != null && !pass.isEmpty()) {
+                                user.setPasswordHash(pass);
+                            }
+                        }
+                );
         userBinder.forField(role).asRequired("Role is required").bind(User::getRole, User::setRole);
 
         employeeBinder.forField(firstName).asRequired("Required").bind(Employee::getFirstName, Employee::setFirstName);
@@ -225,15 +181,11 @@ public class EmployeeView extends VerticalLayout {
 
         applicableLeavesField.setItems(leaveTypeRepository.findAll());
         applicableLeavesField.setItemLabelGenerator(LeaveType::getName);
-        applicableLeavesField.setPlaceholder("Defaults to ALL if left blank");
 
         FormLayout userLayout = new FormLayout(username, email, password, role);
-        FormLayout empLayout = new FormLayout(employeeCode, firstName, departmentWrapper, manager, defaultShift);
+        FormLayout empLayout = new FormLayout(employeeCode, firstName, department, manager, defaultShift);
 
-        VerticalLayout dialogBody = new VerticalLayout(
-                new H3("User Identity"), userLayout,
-                new H3("Work Profile"), empLayout,applicableLeavesField
-        );
+        VerticalLayout dialogBody = new VerticalLayout(new H3("User Identity"), userLayout, new H3("Work Profile"), empLayout, applicableLeavesField);
         dialogBody.setPadding(false);
 
         saveBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
@@ -244,43 +196,60 @@ public class EmployeeView extends VerticalLayout {
         formDialog.getFooter().add(cancelBtn, saveBtn);
     }
 
-    private void toggleUserFields(boolean enabled) {
-        password.setEnabled(enabled);
-        email.setEnabled(enabled);
-        role.setEnabled(true);
-        if (enabled && !isExistingUserLinked) {
-            password.clear();
-            email.clear();
-            role.clear();
-        }
-    }
-
     private void openForm(Employee employee, User user) {
         currentEmployee = employee;
         currentUser = user;
 
-        if (currentEmployee.getDepartment() != null) {
-            manager.setItems(employeeService.findAvailableManagers(currentEmployee.getDepartment().getId()));
+        List<Role> allRoles = roleService.getRoles();
+        boolean isCurrentSuperAdmin = user.getRole() != null && "ROLE_SUPER_ADMIN".equals(user.getRole().getName());
+
+        if (isCurrentSuperAdmin) {
+            role.setItems(allRoles);
+            role.setReadOnly(true);
+        } else {
+            List<Role> filteredRoles = allRoles.stream()
+                    .filter(r -> !"ROLE_SUPER_ADMIN".equals(r.getName()))
+                    .collect(Collectors.toList());
+            role.setItems(filteredRoles);
+            role.setReadOnly(false);
+        }
+
+        if (currentEmployee.getDepartment() != null && currentUser.getRole() != null) {
+            manager.setItems(employeeService.findAvailableReportingManagers(
+                    currentEmployee.getDepartment().getId(), currentUser.getRole()));
         } else {
             manager.setItems(java.util.Collections.emptyList());
         }
 
         employeeBinder.readBean(currentEmployee);
         userBinder.readBean(currentUser);
+        username.setEnabled(currentEmployee.getId() == null);
 
         if (currentEmployee.getId() != null) {
             int currentYear = LocalDate.now().getYear();
-            java.util.Set<LeaveType> existingLeaves = leaveBalanceService.getBalancesForEmployee(currentEmployee.getId(), currentYear)
+            Set<Long> existingLeaveIds = leaveBalanceService.getBalancesForEmployee(currentEmployee.getId(), currentYear)
                     .stream()
-                    .map(LeaveBalance::getLeaveType)
+                    .map(b -> b.getLeaveType().getId())
                     .collect(Collectors.toSet());
-            applicableLeavesField.setValue(existingLeaves);
+
+            Set<LeaveType> itemsToSelect = applicableLeavesField.getListDataView().getItems()
+                    .filter(leaveType -> existingLeaveIds.contains(leaveType.getId()))
+                    .collect(Collectors.toSet());
+
+            applicableLeavesField.setValue(itemsToSelect);
         } else {
             applicableLeavesField.clear();
         }
 
-        username.setEnabled(currentEmployee.getId() == null);
+        boolean isNewUser = (currentUser.getId() == null);
+        password.setEnabled(isNewUser);
+        if (!isNewUser) {
+            password.setPlaceholder("Managed by user profile");
+        } else {
+            password.setPlaceholder("Enter new password");
+        }
 
+        password.clear();
         formDialog.open();
     }
 
@@ -288,26 +257,140 @@ public class EmployeeView extends VerticalLayout {
         try {
             userBinder.writeBean(currentUser);
             employeeBinder.writeBean(currentEmployee);
+            Set<LeaveType> selectedLeaves = applicableLeavesField.getValue();
 
-            java.util.Set<LeaveType> selectedLeaves = applicableLeavesField.getValue();
             employeeService.createOrUpdateEmployeeWithUser(currentEmployee, currentUser, isExistingUserLinked, selectedLeaves);
 
             showNotification("Saved successfully!", NotificationVariant.LUMO_SUCCESS);
             updateList();
             formDialog.close();
+
+        } catch (HodConflictException ex) {
+            openHodSwapDialog(ex);
+        } catch (ManagerPromotionConflictException ex) {
+            openManagerPromotionDialog(ex);
+        } catch (IllegalStateException ex) {
+            showNotification(ex.getMessage(), NotificationVariant.LUMO_ERROR);
         } catch (ValidationException ex) {
-                showNotification("Please fill in all required fields correctly.", NotificationVariant.LUMO_ERROR);
-        } catch (DataIntegrityViolationException ex) {
-                showNotification("Save failed: Username, Email, or Employee Code already exists.", NotificationVariant.LUMO_ERROR);
+            showNotification("Please fill in all required fields correctly.", NotificationVariant.LUMO_ERROR);
         } catch (Exception ex) {
-                showNotification("An unexpected error occurred: " + ex.getMessage(), NotificationVariant.LUMO_ERROR);
+            showNotification("Error: " + ex.getMessage(), NotificationVariant.LUMO_ERROR);
         }
     }
 
+    private void openHodSwapDialog(HodConflictException ex) {
+        Dialog dialog = new Dialog();
+        dialog.setHeaderTitle("HOD Conflict");
+
+        dialog.add(new Paragraph(ex.getMessage() + " The current HOD will be demoted to a standard employee."));
+
+        Button confirmBtn = new Button("Yes, Swap HOD", e -> {
+            try {
+                employeeService.swapHodAndSave(currentEmployee, currentUser, isExistingUserLinked, applicableLeavesField.getValue(), ex.getCurrentHodId());
+                showNotification("HOD Swapped successfully!", NotificationVariant.LUMO_SUCCESS);
+                updateList();
+                dialog.close();
+                formDialog.close();
+            } catch (Exception err) {
+                showNotification("Error: " + err.getMessage(), NotificationVariant.LUMO_ERROR);
+            }
+        });
+        confirmBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY, ButtonVariant.LUMO_ERROR);
+        dialog.getFooter().add(new Button("Cancel", e -> dialog.close()), confirmBtn);
+        dialog.open();
+    }
+
+    private void openManagerPromotionDialog(ManagerPromotionConflictException ex) {
+        Dialog dialog = new Dialog();
+        dialog.setHeaderTitle("Manager Promotion Conflict");
+        dialog.add(new Paragraph(ex.getMessage()));
+
+        ComboBox<Employee> replacementCombo = new ComboBox<>("Select Replacement Manager");
+        List<Employee> eligibleReplacements = employeeService.findAllActive().stream().filter(e -> e.getDepartment() != null && e.getDepartment().getId().equals(currentEmployee.getDepartment().getId())).filter(e -> !e.getId().equals(currentEmployee.getId())).collect(Collectors.toList());
+
+        replacementCombo.setItems(eligibleReplacements);
+        replacementCombo.setItemLabelGenerator(Employee::getFirstName);
+
+        Button confirmBtn = new Button("Reassign & Promote", e -> {
+            try {
+                employeeService.reassignSubordinatesAndPromoteToHod(currentEmployee, currentUser, isExistingUserLinked, applicableLeavesField.getValue(), replacementCombo.getValue().getId());
+                showNotification("Promoted successfully!", NotificationVariant.LUMO_SUCCESS);
+                updateList();
+                dialog.close();
+                formDialog.close();
+            } catch (Exception err) {
+                showNotification("Error: " + err.getMessage(), NotificationVariant.LUMO_ERROR);
+            }
+        });
+        confirmBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+        confirmBtn.setEnabled(false);
+        replacementCombo.addValueChangeListener(e -> confirmBtn.setEnabled(e.getValue() != null));
+
+        dialog.add(replacementCombo);
+        dialog.getFooter().add(new Button("Cancel", e -> dialog.close()), confirmBtn);
+        dialog.open();
+    }
+
     private void softDeleteEmployee(Employee employee) {
-        employeeService.deactivateEmployee(employee);
-        showNotification("Employee deactivated.", NotificationVariant.LUMO_SUCCESS);
-        updateList();
+        try {
+            employeeService.deactivateEmployee(employee);
+            showNotification("Employee deactivated.", NotificationVariant.LUMO_SUCCESS);
+            updateList();
+        } catch (HodDeleteConflictException ex) {
+            openHodDeleteDialog(ex, employee);
+        } catch (ManagerDeleteConflictException ex) {
+            openManagerDeleteDialog(ex, employee);
+        }
+    }
+
+    private void openHodDeleteDialog(HodDeleteConflictException ex, Employee employee) {
+        Dialog dialog = new Dialog();
+        dialog.setHeaderTitle("Cannot Deactivate HOD");
+        dialog.add(new Paragraph(ex.getMessage()));
+
+        ComboBox<Employee> replacementCombo = new ComboBox<>("Select New HOD");
+        List<Employee> available = employeeService.findAllActive().stream().filter(e -> e.getDepartment() != null && e.getDepartment().getId().equals(ex.getDepartmentId())).filter(e -> !e.getId().equals(employee.getId())).collect(Collectors.toList());
+        replacementCombo.setItems(available);
+        replacementCombo.setItemLabelGenerator(Employee::getFirstName);
+
+        Button confirmBtn = new Button("Replace & Deactivate", e -> {
+            employeeService.replaceHodAndDeactivate(employee, replacementCombo.getValue().getId());
+            showNotification("Replaced and deactivated.", NotificationVariant.LUMO_SUCCESS);
+            updateList();
+            dialog.close();
+        });
+        confirmBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY, ButtonVariant.LUMO_ERROR);
+        confirmBtn.setEnabled(false);
+        replacementCombo.addValueChangeListener(e -> confirmBtn.setEnabled(e.getValue() != null));
+
+        dialog.add(replacementCombo);
+        dialog.getFooter().add(new Button("Cancel", e -> dialog.close()), confirmBtn);
+        dialog.open();
+    }
+
+    private void openManagerDeleteDialog(ManagerDeleteConflictException ex, Employee employee) {
+        Dialog dialog = new Dialog();
+        dialog.setHeaderTitle("Cannot Deactivate Manager");
+        dialog.add(new Paragraph(ex.getMessage()));
+
+        ComboBox<Employee> replacementCombo = new ComboBox<>("Select Replacement Manager");
+        List<Employee> available = employeeService.findAllActive().stream().filter(e -> e.getDepartment() != null && e.getDepartment().getId().equals(employee.getDepartment().getId())).filter(e -> !e.getId().equals(employee.getId())).collect(Collectors.toList());
+        replacementCombo.setItems(available);
+        replacementCombo.setItemLabelGenerator(Employee::getFirstName);
+
+        Button confirmBtn = new Button("Reassign & Deactivate", e -> {
+            employeeService.reassignSubordinatesAndDeactivate(employee, replacementCombo.getValue().getId());
+            showNotification("Subordinates reassigned and deactivated.", NotificationVariant.LUMO_SUCCESS);
+            updateList();
+            dialog.close();
+        });
+        confirmBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY, ButtonVariant.LUMO_ERROR);
+        confirmBtn.setEnabled(false);
+        replacementCombo.addValueChangeListener(e -> confirmBtn.setEnabled(e.getValue() != null));
+
+        dialog.add(replacementCombo);
+        dialog.getFooter().add(new Button("Cancel", e -> dialog.close()), confirmBtn);
+        dialog.open();
     }
 
     private void updateList() {

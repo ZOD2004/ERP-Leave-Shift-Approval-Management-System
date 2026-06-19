@@ -28,6 +28,4 @@ public class Department {
     @JoinColumn(name = "hod_id")
     @JsonIgnoreProperties({"department", "manager", "user"})
     private Employee hod;
-
-
 }

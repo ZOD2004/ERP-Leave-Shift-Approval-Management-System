@@ -4,8 +4,7 @@ import com.murali.entity.Attendance;
 import com.murali.entity.Employee;
 import com.murali.entity.ShiftAssignment;
 import com.murali.entity.User;
-import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.jpa.repository.*;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
@@ -13,7 +12,6 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 
-import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -64,5 +62,16 @@ public interface EmployeeRepository extends JpaRepository<Employee, Long> {
 
     @EntityGraph(attributePaths = {"user", "user.role"})
     List<Employee> findByDepartmentId(Long departmentId);
+
+    boolean existsByManagerId(Long managerId);
+    List<Employee> findByManagerId(Long managerId);
+
+    @Modifying
+    @Query("UPDATE Employee e SET e.manager.id = :newManagerId WHERE e.manager.id = :oldManagerId")
+    void reassignManager(@Param("oldManagerId") Long oldManagerId, @Param("newManagerId") Long newManagerId);
+
+    @Modifying
+    @Query("UPDATE Employee e SET e.manager = null WHERE e.manager.id = :oldManagerId")
+    void clearManagerReference(@Param("oldManagerId") Long oldManagerId);
 
 }

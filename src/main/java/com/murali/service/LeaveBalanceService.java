@@ -50,13 +50,41 @@ public class LeaveBalanceService {
 
     @Transactional
     public void initializeBalancesForEmployee(Employee employee, Integer year, Set<LeaveType> selectedLeaves) {
-        java.util.Collection<LeaveType> typesToInitialize = (selectedLeaves == null || selectedLeaves.isEmpty()) ? leaveTypeRepository.findAll() : selectedLeaves;
+        java.util.Collection<LeaveType> targetLeaveTypes = (selectedLeaves == null || selectedLeaves.isEmpty()) ? leaveTypeRepository.findAll() : selectedLeaves;
 
-        for (LeaveType leaveType : typesToInitialize) {
-            getOrCreateBalance(employee, leaveType, year);
+        Set<Long> targetLeaveTypeIds = targetLeaveTypes.stream().map(LeaveType::getId).collect(java.util.stream.Collectors.toSet());
+
+        List<LeaveBalance> existingBalances = leaveBalanceRepository.findByEmployeeIdAndYear(employee.getId(), year);
+        Set<Long> existingLeaveTypeIds = existingBalances.stream().map(b -> b.getLeaveType().getId()).collect(java.util.stream.Collectors.toSet());
+
+        List<LeaveBalance> balancesToRemove = new java.util.ArrayList<>();
+        for (LeaveBalance balance : existingBalances) {
+            if (!targetLeaveTypeIds.contains(balance.getLeaveType().getId())) {
+
+                boolean hasUsed = balance.getUsed() != null && balance.getUsed().compareTo(java.math.BigDecimal.ZERO) > 0;
+                boolean hasPending = balance.getPendingDays() != null && balance.getPendingDays().compareTo(java.math.BigDecimal.ZERO) > 0;
+
+                if (hasUsed || hasPending) {
+                    throw new IllegalStateException("Cannot remove '" + balance.getLeaveType().getName() + "' because the employee has already used or requested days from it.");
+                }
+                balancesToRemove.add(balance);
+            }
         }
 
-        log.info("Initialized specific leave balances for Employee ID: {} for year {}", employee.getId(), year);
+        for (LeaveBalance balanceToRemove : balancesToRemove) {
+            String oldState = formatAuditState(balanceToRemove);
+            leaveBalanceRepository.delete(balanceToRemove);
+            auditLoggingService.saveAuditLog(balanceToRemove.getId(), "DELETED", "leave_balances", oldState, null);
+            log.info("Removed unselected leave balance for Employee ID: {}, LeaveType: {}", employee.getId(), balanceToRemove.getLeaveType().getCode());
+        }
+
+       for (LeaveType targetType : targetLeaveTypes) {
+            if (!existingLeaveTypeIds.contains(targetType.getId())) {
+                getOrCreateBalance(employee, targetType, year);
+            }
+        }
+
+        log.info("Successfully synced leave balances for Employee ID: {} for year {}", employee.getId(), year);
     }
 
     @Transactional
@@ -223,16 +251,14 @@ public class LeaveBalanceService {
     public List<LeaveBalanceTransaction> findAllWithDetails() {
         return transactionRepository.findAllWithDetails();
     }
+
     @Transactional(readOnly = true)
     public BigDecimal calculateApprovedMergedDays(LeaveRequest request) {
         if (request.getMergedLeaves() == null || request.getMergedLeaves().isEmpty()) {
             return BigDecimal.ZERO;
         }
 
-        return request.getMergedLeaves().stream()
-                .filter(mergedReq -> "APPROVED".equals(mergedReq.getStatus()))
-                .map(LeaveRequest::getDurationDays)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        return request.getMergedLeaves().stream().filter(mergedReq -> "APPROVED".equals(mergedReq.getStatus())).map(LeaveRequest::getDurationDays).reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
     @Transactional(readOnly = true)

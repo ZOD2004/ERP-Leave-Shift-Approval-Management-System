@@ -3,6 +3,7 @@ package com.murali.repository;
 import com.murali.entity.Role;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -11,6 +12,6 @@ import java.util.List;
 public interface RoleRepository extends JpaRepository<Role,Long> {
     Role findByName(String name);
     Role findByHierarchyWeight(Integer hierarchyWeight);
-    @Query("SELECT r FROM Role r ORDER BY r.hierarchyWeight ASC")
-    List<Role> findAllOrderedByWeight();
+    @Query("SELECT r FROM Role r WHERE r.hierarchyWeight > :weight ORDER BY r.hierarchyWeight ASC")
+    List<Role> findByHierarchyWeightGreaterThan(@Param("weight") Integer weight);
 }

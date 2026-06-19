@@ -27,4 +27,6 @@ public interface UserRepository extends JpaRepository<User,Long> {
 
     @EntityGraph(attributePaths = {"role"})
     Optional<User> findWithRoleById(Long id);
+
+    Long countByRoleName(String roleSuperAdmin);
 }
