@@ -1,6 +1,7 @@
 package com.murali.service;
 
 import com.murali.entity.Department;
+import com.murali.entity.Employee;
 import com.murali.repository.DepartmentRepository;
 import com.murali.repository.EmployeeRepository;
 import lombok.RequiredArgsConstructor;

@@ -21,7 +21,6 @@ import org.springframework.stereotype.Repository;
 
 import java.util.List;
 import java.util.Optional;
-
 @Repository
 public interface EmployeeRepository extends JpaRepository<Employee, Long> {
 
@@ -29,11 +28,11 @@ public interface EmployeeRepository extends JpaRepository<Employee, Long> {
     @Query("SELECT DISTINCT e FROM Employee e LEFT JOIN e.department d LEFT JOIN e.user u LEFT JOIN u.role r WHERE u.active = true AND (u.username IN ('super', 'hr') OR r.name IN ('ROLE_MANAGER', 'ROLE_DEPT_HEAD') OR d.id = :departmentId)")
     List<Employee> findAvailableManagers(@Param("departmentId") Long departmentId);
 
-    @EntityGraph(attributePaths = {"user", "department", "manager", "defaultShift"})
+    @EntityGraph(attributePaths = {"user", "user.role", "department", "manager", "defaultShift"})
     @Query("SELECT e FROM Employee e JOIN e.user u WHERE u.active = true")
     List<Employee> findByActiveTrue();
 
-    @EntityGraph(attributePaths = {"user", "department", "manager", "defaultShift"})
+    @EntityGraph(attributePaths = {"user", "user.role", "department", "manager", "defaultShift"})
     @Query("""
                 SELECT DISTINCT e
                 FROM Employee e

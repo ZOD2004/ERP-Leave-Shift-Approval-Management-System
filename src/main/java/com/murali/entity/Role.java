@@ -21,7 +21,7 @@ public class Role {
     @Column(nullable = false, unique = true, length = 50)
     private String name;
 
-    @Column(name = "hierarchy_weight", nullable = false)
+    @Column(name = "hierarchy_weight", nullable = false,unique = true)
     private Integer hierarchyWeight = 0;
 }
 

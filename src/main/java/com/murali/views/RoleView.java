@@ -4,6 +4,7 @@ import com.murali.entity.Role;
 import com.murali.service.RoleService;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
+import com.vaadin.flow.component.combobox.ComboBox;
 import com.vaadin.flow.component.confirmdialog.ConfirmDialog;
 import com.vaadin.flow.component.dialog.Dialog;
 import com.vaadin.flow.component.formlayout.FormLayout;
@@ -46,6 +47,7 @@ public class RoleView extends VerticalLayout {
 
     private final Dialog formDialog = new Dialog();
     private final TextField nameField = new TextField("Role Name");
+    private final ComboBox<Integer> weightField = new ComboBox<>("Hierarchy Weight");
 
     private final Button saveBtn = new Button("Save");
     private final Button cancelBtn = new Button("Cancel");
@@ -60,7 +62,6 @@ public class RoleView extends VerticalLayout {
         configureGrid();
         configureForm();
 
-        // UI Enhancement: Added a search field for consistency with LeaveTypeView
         searchField.setPlaceholder("Search roles...");
         searchField.setPrefixComponent(new Icon(VaadinIcon.SEARCH));
         searchField.setClearButtonVisible(true);
@@ -85,7 +86,6 @@ public class RoleView extends VerticalLayout {
     private void configureGrid() {
         grid.setSizeFull();
 
-        // Add a slight visual enhancement to the column
         grid.addColumn(Role::getName)
                 .setHeader("Role Name")
                 .setSortable(true)
@@ -100,14 +100,10 @@ public class RoleView extends VerticalLayout {
             deleteBtn.addThemeVariants(ButtonVariant.LUMO_TERTIARY, ButtonVariant.LUMO_ERROR);
             deleteBtn.addClickListener(e -> confirmAndDelete(role));
 
-            // Check if this is a system reserved role
             boolean isSystemRole = role.getName() != null && SYSTEM_ROLES.contains(role.getName().toUpperCase());
 
             if (isSystemRole) {
-                // Disable both since there are no other fields to edit besides the name!
-                editBtn.setEnabled(false);
                 deleteBtn.setEnabled(false);
-                editBtn.setTooltipText("System reserved roles cannot be edited.");
                 deleteBtn.setTooltipText("System reserved roles cannot be deleted.");
             }
 
@@ -117,15 +113,12 @@ public class RoleView extends VerticalLayout {
 
     private void configureForm() {
         formDialog.setHeaderTitle("Role Details");
-
-        // UI Enhancement: Give the dialog a proper width so it doesn't look ridiculously small
         formDialog.setWidth("400px");
 
         nameField.setPlaceholder("e.g. ROLE_MANAGER");
         nameField.setPrefixComponent(new Icon(VaadinIcon.USER_STAR));
         nameField.setWidthFull();
 
-        // Force uppercase for standardization
         nameField.addValueChangeListener(e -> {
             if (e.getValue() != null) {
                 nameField.setValue(e.getValue().toUpperCase().replaceAll("\\s+", "_"));
@@ -133,9 +126,11 @@ public class RoleView extends VerticalLayout {
         });
 
         FormLayout formLayout = new FormLayout();
-        formLayout.add(nameField);
+        formLayout.add(nameField, weightField);
+        binder.forField(weightField)
+                .asRequired("Weight is required")
+                .bind(Role::getHierarchyWeight, Role::setHierarchyWeight);
 
-        // Bindings and validation
         binder.forField(nameField)
                 .asRequired("Role name is required")
                 .withValidator(name -> {
@@ -158,6 +153,18 @@ public class RoleView extends VerticalLayout {
 
     private void openForm(Role role) {
         this.currentRole = role;
+
+        int totalRoles = roleService.findAll().size();
+        int maxWeight = (role.getId() == null) ? totalRoles + 1 : totalRoles;
+
+        List<Integer> weightOptions = java.util.stream.IntStream.rangeClosed(1, maxWeight)
+                .boxed()
+                .collect(Collectors.toList());
+
+        weightField.setItems(weightOptions);
+        boolean isSystemRole = role.getName() != null && SYSTEM_ROLES.contains(role.getName().toUpperCase());
+        nameField.setReadOnly(isSystemRole);
+
         binder.readBean(currentRole);
         formDialog.open();
     }
@@ -165,18 +172,21 @@ public class RoleView extends VerticalLayout {
     private void saveRole() {
         try {
             binder.writeBean(currentRole);
-            roleService.save(currentRole);
 
-            showNotification("Role saved successfully", NotificationVariant.LUMO_SUCCESS);
-            updateList();
-            formDialog.close();
+            Integer desiredWeight = currentRole.getHierarchyWeight();
+
+            Role conflictingRole = roleService.getRoleByWeight(desiredWeight);
+
+            if (conflictingRole != null && (currentRole.getId() == null || !conflictingRole.getId().equals(currentRole.getId()))) {
+                promptSwapConfirmation(conflictingRole);
+            } else {
+                executeSave(false);
+            }
+
         } catch (ValidationException e) {
             showNotification("Please check the form for errors", NotificationVariant.LUMO_ERROR);
-        } catch (Exception e) {
-            showNotification("Error saving role. It might already exist.", NotificationVariant.LUMO_ERROR);
         }
     }
-
     private void confirmAndDelete(Role role) {
         ConfirmDialog dialog = new ConfirmDialog();
         dialog.setHeader("Delete Role?");
@@ -219,5 +229,39 @@ public class RoleView extends VerticalLayout {
     private void showNotification(String message, NotificationVariant variant) {
         Notification notification = Notification.show(message, 3000, Notification.Position.TOP_CENTER);
         notification.addThemeVariants(variant);
+    }
+
+    private void promptSwapConfirmation(Role conflictingRole) {
+        ConfirmDialog dialog = new ConfirmDialog();
+        dialog.setHeader("Swap Role Weights?");
+
+        String currentName = currentRole.getName();
+        if (currentName == null || currentName.trim().isEmpty()) {
+            currentName = "the new role";
+        }
+
+        dialog.setText(String.format("Weight %d is currently assigned to %s. Do you want to swap weights between %s and %s?",
+                currentRole.getHierarchyWeight(), conflictingRole.getName(), currentName, conflictingRole.getName()));
+
+        dialog.setCancelable(true);
+        dialog.setCancelText("Cancel");
+
+        dialog.setConfirmText("Yes, Swap");
+        dialog.setConfirmButtonTheme("primary");
+
+        dialog.addConfirmListener(event -> executeSave(true));
+
+        dialog.open();
+    }
+
+    private void executeSave(boolean isSwapApproved) {
+        try {
+            roleService.save(currentRole, isSwapApproved);
+            showNotification("Role saved successfully", NotificationVariant.LUMO_SUCCESS);
+            updateList();
+            formDialog.close();
+        } catch (Exception e) {
+            showNotification("Error saving role. It might already exist.", NotificationVariant.LUMO_ERROR);
+        }
     }
 }

@@ -29,6 +29,5 @@ public class Department {
     @JsonIgnoreProperties({"department", "manager", "user"})
     private Employee hod;
 
-    // removed List<Employee> one to many mapping
 
 }
