@@ -21,6 +21,7 @@ import org.springframework.stereotype.Repository;
 
 import java.util.List;
 import java.util.Optional;
+
 @Repository
 public interface EmployeeRepository extends JpaRepository<Employee, Long> {
 
@@ -60,5 +61,8 @@ public interface EmployeeRepository extends JpaRepository<Employee, Long> {
     @EntityGraph(attributePaths = {"department", "manager"})
     @Query("SELECT e FROM Employee e WHERE e.id = :id")
     Optional<Employee> findByIdWithDepartmentAndManager(@Param("id") Long id);
+
+    @EntityGraph(attributePaths = {"user", "user.role"})
+    List<Employee> findByDepartmentId(Long departmentId);
 
 }

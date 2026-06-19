@@ -1,9 +1,9 @@
 package com.murali.service;
 
-import com.murali.entity.Employee;
-import com.murali.entity.LeaveType;
-import com.murali.entity.User;
+import com.murali.entity.*;
 import com.murali.repository.EmployeeRepository;
+import com.murali.repository.RoleRepository;
+import com.murali.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -24,6 +24,8 @@ public class EmployeeService {
     private final EmployeeRepository employeeRepository;
     private final LeaveBalanceService leaveBalanceService;
     private final AuditLogService auditLoggingService;
+    private final RoleRepository roleRepository;
+    private final UserRepository userRepository;
 
     public List<Employee> findAvailableManagers(Long departmentId) {
         if (departmentId == null) {
@@ -107,5 +109,32 @@ public class EmployeeService {
     @Transactional(readOnly = true)
     public Optional<Employee> findByIdWithDetails(Long id) {
         return employeeRepository.findByIdWithDepartmentAndManager(id);
+    }
+    // Add this method to EmployeeService
+    @Transactional
+    public void reassignEmployeesAndDemoteHod(Department oldDept, Department newDept) {
+        // 1. Demote the old HOD if one exists
+        if (oldDept.getHod() != null) {
+            Employee hod = oldDept.getHod();
+            User hodUser = hod.getUser();
+
+            if (hodUser != null) {
+                // Fetch the standard employee role
+                Role empRole = roleRepository.findByName("ROLE_EMPLOYEE");
+
+                // Update and explicitly save the user as requested
+                hodUser.setRole(empRole);
+                userRepository.save(hodUser);
+            }
+        }
+
+        // 2. Reassign all employees (This will also include the former HOD)
+        List<Employee> employees = employeeRepository.findByDepartmentId(oldDept.getId());
+        for (Employee emp : employees) {
+            emp.setDepartment(newDept);
+        }
+
+        // 3. Save all to trigger JPA lifecycle events and audit logs
+        employeeRepository.saveAll(employees);
     }
 }

@@ -20,6 +20,7 @@ public class DepartmentService {
     private final DepartmentRepository departmentRepository;
     private final EmployeeRepository employeeRepository;
     private final AuditLogService auditLoggingService;
+    private final EmployeeService employeeService;
 
     public List<Department> findAll() {
         return departmentRepository.findAll();
@@ -74,5 +75,23 @@ public class DepartmentService {
     private String formatAuditState(Department dept) {
         Long hodId = (dept.getHod() != null) ? dept.getHod().getId() : null;
         return String.format("{ \"name\": \"%s\", \"hod_id\": %d }", dept.getName(), hodId);
+    }
+
+    public boolean hasEmployees(Long deptId) {
+        return employeeRepository.existsByDepartmentId(deptId);
+    }
+
+    @Transactional
+    public void reassignAndDelete(Department oldDept, Department newDept) {
+        employeeService.reassignEmployeesAndDemoteHod(oldDept, newDept);
+
+        oldDept.setHod(null);
+        departmentRepository.save(oldDept);
+
+        String oldState = formatAuditState(oldDept);
+        departmentRepository.delete(oldDept);
+
+        log.info("Department REASSIGNED and DELETED successfully. ID: {}", oldDept.getId());
+        auditLoggingService.saveAuditLog(oldDept.getId(), "DELETED", "departments", oldState, null);
     }
 }
