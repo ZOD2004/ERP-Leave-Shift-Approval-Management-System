@@ -1,10 +1,7 @@
 package com.murali.views;
 
 import com.murali.entity.*;
-import com.murali.exception.HodConflictException;
-import com.murali.exception.HodDeleteConflictException;
-import com.murali.exception.ManagerDeleteConflictException;
-import com.murali.exception.ManagerPromotionConflictException;
+import com.murali.exception.*;
 import com.murali.repository.LeaveTypeRepository;
 import com.murali.service.*;
 import com.vaadin.flow.component.AbstractField;
@@ -269,7 +266,12 @@ public class EmployeeView extends VerticalLayout {
             openHodSwapDialog(ex);
         } catch (ManagerPromotionConflictException ex) {
             openManagerPromotionDialog(ex);
-        } catch (IllegalStateException ex) {
+        }
+        catch (HodDemotionConflictException ex) {
+            openHodDemotionDialog(ex);
+        } catch (ManagerDemotionConflictException ex) {
+            openManagerDemotionDialog(ex);
+        }catch (IllegalStateException ex) {
             showNotification(ex.getMessage(), NotificationVariant.LUMO_ERROR);
         } catch (ValidationException ex) {
             showNotification("Please fill in all required fields correctly.", NotificationVariant.LUMO_ERROR);
@@ -306,8 +308,7 @@ public class EmployeeView extends VerticalLayout {
         dialog.add(new Paragraph(ex.getMessage()));
 
         ComboBox<Employee> replacementCombo = new ComboBox<>("Select Replacement Manager");
-        List<Employee> eligibleReplacements = employeeService.findAllActive().stream().filter(e -> e.getDepartment() != null && e.getDepartment().getId().equals(currentEmployee.getDepartment().getId())).filter(e -> !e.getId().equals(currentEmployee.getId())).collect(Collectors.toList());
-
+        List<Employee> eligibleReplacements = employeeService.findEligibleReplacements(currentEmployee.getDepartment().getId(), currentEmployee.getId(), currentEmployee.getUser().getRole().getHierarchyWeight());
         replacementCombo.setItems(eligibleReplacements);
         replacementCombo.setItemLabelGenerator(Employee::getFirstName);
 
@@ -323,6 +324,71 @@ public class EmployeeView extends VerticalLayout {
             }
         });
         confirmBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+        confirmBtn.setEnabled(false);
+        replacementCombo.addValueChangeListener(e -> confirmBtn.setEnabled(e.getValue() != null));
+
+        dialog.add(replacementCombo);
+        dialog.getFooter().add(new Button("Cancel", e -> dialog.close()), confirmBtn);
+        dialog.open();
+    }
+    private void openHodDemotionDialog(HodDemotionConflictException ex) {
+        Dialog dialog = new Dialog();
+        dialog.setHeaderTitle("HOD Demotion Conflict");
+        dialog.add(new Paragraph(ex.getMessage()));
+
+        ComboBox<Employee> replacementCombo = new ComboBox<>("Select New HOD");
+        List<Employee> eligibleHods = employeeService.findAllActive().stream()
+                .filter(e -> e.getDepartment() != null && e.getDepartment().getId().equals(ex.getDepartmentId()))
+                .filter(e -> !e.getId().equals(currentEmployee.getId()))
+                .filter(e -> e.getUser() != null && e.getUser().getRole().getHierarchyWeight() >= 3)
+                .collect(Collectors.toList());
+
+        replacementCombo.setItems(eligibleHods);
+        replacementCombo.setItemLabelGenerator(Employee::getFirstName);
+
+        Button confirmBtn = new Button("Replace HOD & Demote", e -> {
+            try {
+                employeeService.replaceHodAndDemote(currentEmployee, currentUser, isExistingUserLinked, applicableLeavesField.getValue(), replacementCombo.getValue().getId());
+                showNotification("Demoted and HOD replaced successfully!", NotificationVariant.LUMO_SUCCESS);
+                updateList();
+                dialog.close();
+                formDialog.close();
+            } catch (Exception err) {
+                showNotification("Error: " + err.getMessage(), NotificationVariant.LUMO_ERROR);
+            }
+        });
+        confirmBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY, ButtonVariant.LUMO_ERROR);
+        confirmBtn.setEnabled(false);
+        replacementCombo.addValueChangeListener(e -> confirmBtn.setEnabled(e.getValue() != null));
+
+        dialog.add(replacementCombo);
+        dialog.getFooter().add(new Button("Cancel", e -> dialog.close()), confirmBtn);
+        dialog.open();
+    }
+
+    private void openManagerDemotionDialog(ManagerDemotionConflictException ex) {
+        Dialog dialog = new Dialog();
+        dialog.setHeaderTitle("Manager Demotion Conflict");
+        dialog.add(new Paragraph(ex.getMessage()));
+
+        ComboBox<Employee> replacementCombo = new ComboBox<>("Select Replacement Manager");
+        List<Employee> eligibleReplacements = employeeService.findEligibleReplacements(ex.getDepartmentId(), currentEmployee.getId(), currentEmployee.getUser().getRole().getHierarchyWeight());
+
+        replacementCombo.setItems(eligibleReplacements);
+        replacementCombo.setItemLabelGenerator(Employee::getFirstName);
+
+        Button confirmBtn = new Button("Reassign Subordinates & Demote", e -> {
+            try {
+                employeeService.reassignSubordinatesAndDemote(currentEmployee, currentUser, isExistingUserLinked, applicableLeavesField.getValue(), replacementCombo.getValue().getId());
+                showNotification("Demoted and Subordinates reassigned successfully!", NotificationVariant.LUMO_SUCCESS);
+                updateList();
+                dialog.close();
+                formDialog.close();
+            } catch (Exception err) {
+                showNotification("Error: " + err.getMessage(), NotificationVariant.LUMO_ERROR);
+            }
+        });
+        confirmBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY, ButtonVariant.LUMO_ERROR);
         confirmBtn.setEnabled(false);
         replacementCombo.addValueChangeListener(e -> confirmBtn.setEnabled(e.getValue() != null));
 
@@ -349,7 +415,17 @@ public class EmployeeView extends VerticalLayout {
         dialog.add(new Paragraph(ex.getMessage()));
 
         ComboBox<Employee> replacementCombo = new ComboBox<>("Select New HOD");
-        List<Employee> available = employeeService.findAllActive().stream().filter(e -> e.getDepartment() != null && e.getDepartment().getId().equals(ex.getDepartmentId())).filter(e -> !e.getId().equals(employee.getId())).collect(Collectors.toList());
+        int currentWeight = 0;
+        if (employee.getUser() != null && employee.getUser().getRole() != null) {
+            currentWeight = employee.getUser().getRole().getHierarchyWeight();
+        }
+
+        List<Employee> available = employeeService.findEligibleReplacements(
+                ex.getDepartmentId(),
+                employee.getId(),
+                currentWeight
+        );
+
         replacementCombo.setItems(available);
         replacementCombo.setItemLabelGenerator(Employee::getFirstName);
 
@@ -374,7 +450,11 @@ public class EmployeeView extends VerticalLayout {
         dialog.add(new Paragraph(ex.getMessage()));
 
         ComboBox<Employee> replacementCombo = new ComboBox<>("Select Replacement Manager");
-        List<Employee> available = employeeService.findAllActive().stream().filter(e -> e.getDepartment() != null && e.getDepartment().getId().equals(employee.getDepartment().getId())).filter(e -> !e.getId().equals(employee.getId())).collect(Collectors.toList());
+        int currentWeight = 0;
+        if (employee.getUser() != null && employee.getUser().getRole() != null) {
+            currentWeight = employee.getUser().getRole().getHierarchyWeight();
+        }
+        List<Employee> available = employeeService.findEligibleReplacements(employee.getDepartment().getId(), employee.getId(),currentWeight);
         replacementCombo.setItems(available);
         replacementCombo.setItemLabelGenerator(Employee::getFirstName);
 

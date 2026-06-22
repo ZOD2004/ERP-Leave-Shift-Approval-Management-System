@@ -1,10 +1,7 @@
 package com.murali.service;
 
 import com.murali.entity.*;
-import com.murali.exception.HodConflictException;
-import com.murali.exception.HodDeleteConflictException;
-import com.murali.exception.ManagerDeleteConflictException;
-import com.murali.exception.ManagerPromotionConflictException;
+import com.murali.exception.*;
 import com.murali.repository.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -58,7 +55,6 @@ public class EmployeeService {
         }
 
         if ("ROLE_EMPLOYEE".equals(roleName)) {
-            // Show Managers in the same department OR the HOD of the same department
             return employeeRepository.findByActiveTrue().stream().filter(e -> e.getDepartment() != null && e.getDepartment().getId().equals(departmentId)).filter(e -> {
                 boolean isManager = "ROLE_MANAGER".equals(e.getUser().getRole().getName());
                 boolean isHod = departmentRepository.existsByHodId(e.getId());
@@ -74,6 +70,7 @@ public class EmployeeService {
 
         validateSuperAdminRule(currentUser);
         validateRoleHierarchy(currentEmployee, currentUser);
+        validateDemotion(currentEmployee, currentUser);
 
         Employee savedEmployee = executeStandardSave(currentEmployee, currentUser, isExistingUserLinked, selectedLeaves);
 
@@ -301,4 +298,74 @@ public class EmployeeService {
     public Optional<Employee> findById(Long employeeId) {
         return employeeRepository.findById(employeeId);
     }
+
+    private void validateDemotion(Employee employee, User newUser) {
+        if (employee.getId() == null || newUser.getRole() == null) return;
+
+        Employee emp = employeeRepository.findById(employee.getId()).orElseThrow();
+        int oldWeight = emp.getUser().getRole().getHierarchyWeight();
+        int newWeight = newUser.getRole().getHierarchyWeight();
+
+        if (newWeight < oldWeight) {
+            Long deptId = employee.getDepartment().getId();
+            Department dept = departmentRepository.findById(deptId).orElseThrow();
+
+            List<Employee> eligibleReplacements = findEligibleReplacements(deptId, employee.getId(), oldWeight);
+
+            if (dept.getHod() != null && dept.getHod().getId().equals(employee.getId())) {
+                if (!eligibleReplacements.isEmpty()) {
+                    throw new HodDemotionConflictException("HOD is being demoted. Please select a new HOD for the department.", deptId);
+                } else {
+                    dept.setHod(null);
+                    departmentRepository.save(dept);
+                }
+            }
+
+            if (employeeRepository.existsByManagerId(employee.getId())) {
+                if (!eligibleReplacements.isEmpty()) {
+                    throw new ManagerDemotionConflictException("Manager is being demoted but has active subordinates. Please select a replacement manager.", deptId);
+                } else {
+                    employeeRepository.clearManagerReference(employee.getId());
+                }
+            }
+        }
+    }
+    @Transactional
+    public void replaceHodAndDemote(Employee demotedEmployee, User newUser, boolean isExistingUserLinked, Set<LeaveType> selectedLeaves, Long newHodId) {
+        Department dept = departmentRepository.findById(demotedEmployee.getDepartment().getId()).orElseThrow();
+        Employee newHod = employeeRepository.findById(newHodId).orElseThrow();
+
+        if (newHod.getUser().getRole().getHierarchyWeight() < 4) {
+            Role hodRole = roleRepository.findByName("ROLE_DEPT_HEAD");
+            newHod.getUser().setRole(hodRole);
+            userRepository.save(newHod.getUser());
+        }
+
+        dept.setHod(newHod);
+        departmentRepository.save(dept);
+
+        executeStandardSave(demotedEmployee, newUser, isExistingUserLinked, selectedLeaves);
+
+        if (employeeRepository.existsByManagerId(demotedEmployee.getId())) {
+            employeeRepository.reassignManager(demotedEmployee.getId(), newHod.getId());
+        }
+    }
+
+    @Transactional
+    public void reassignSubordinatesAndDemote(Employee demotedEmployee, User newUser, boolean isExistingUserLinked, Set<LeaveType> selectedLeaves, Long replacementManagerId) {
+        employeeRepository.reassignManager(demotedEmployee.getId(), replacementManagerId);
+        executeStandardSave(demotedEmployee, newUser, isExistingUserLinked, selectedLeaves);
+    }
+
+    @Transactional(readOnly = true)
+    public List<Employee> findEligibleReplacements(Long departmentId, Long excludedEmployeeId, int minimumWeight) {
+        if (departmentId == null) return Collections.emptyList();
+
+        return employeeRepository.findByActiveTrue().stream()
+                .filter(e -> e.getDepartment() != null && e.getDepartment().getId().equals(departmentId))
+                .filter(e -> !e.getId().equals(excludedEmployeeId))
+                .filter(e -> e.getUser() != null && e.getUser().getRole() != null && e.getUser().getRole().getHierarchyWeight() >= minimumWeight)
+                .collect(Collectors.toList());
+    }
+
 }

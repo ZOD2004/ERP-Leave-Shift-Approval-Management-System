@@ -23,9 +23,6 @@ import java.util.Optional;
 @Repository
 public interface EmployeeRepository extends JpaRepository<Employee, Long> {
 
-    @EntityGraph(attributePaths = {"department", "user.role"})
-    @Query("SELECT DISTINCT e FROM Employee e LEFT JOIN e.department d LEFT JOIN e.user u LEFT JOIN u.role r WHERE u.active = true AND (u.username IN ('super', 'hr') OR r.name IN ('ROLE_MANAGER', 'ROLE_DEPT_HEAD') OR d.id = :departmentId)")
-    List<Employee> findAvailableManagers(@Param("departmentId") Long departmentId);
 
     @EntityGraph(attributePaths = {"user", "user.role", "department", "manager", "defaultShift"})
     @Query("SELECT e FROM Employee e JOIN e.user u WHERE u.active = true")
