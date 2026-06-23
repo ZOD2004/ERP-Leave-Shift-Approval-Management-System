@@ -8,6 +8,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
@@ -23,6 +24,7 @@ public class DataInitializer implements CommandLineRunner {
     private final NavMenuItemRepository navMenuItemRepository;
     private final LeaveApprovalRuleRepository leaveApprovalRuleRepository;
     private final NavMenuRoleRepository navMenuRoleRepository;
+    private final LeaveApprovalPolicyRepository policyRepository;
 
     public DataInitializer(RoleRepository roleRepository,
                            UserRepository userRepository,
@@ -30,7 +32,7 @@ public class DataInitializer implements CommandLineRunner {
                            EmployeeRepository employeeRepository,
                            LeaveTypeRepository leaveTypeRepository,
                            PasswordEncoder passwordEncoder,
-                           NavMenuItemRepository navMenuItemRepository, LeaveApprovalRuleRepository leaveApprovalRuleRepository, NavMenuRoleRepository navMenuRoleRepository) {
+                           NavMenuItemRepository navMenuItemRepository, LeaveApprovalRuleRepository leaveApprovalRuleRepository, NavMenuRoleRepository navMenuRoleRepository, LeaveApprovalPolicyRepository policyRepository) {
         this.roleRepository = roleRepository;
         this.userRepository = userRepository;
         this.departmentRepository = departmentRepository;
@@ -40,6 +42,7 @@ public class DataInitializer implements CommandLineRunner {
         this.navMenuItemRepository = navMenuItemRepository;
         this.leaveApprovalRuleRepository = leaveApprovalRuleRepository;
         this.navMenuRoleRepository = navMenuRoleRepository;
+        this.policyRepository = policyRepository;
     }
 
     @Override
@@ -82,17 +85,15 @@ public class DataInitializer implements CommandLineRunner {
                 roleRepository.save(role);
             }
         }
+        LeaveApprovalPolicy defaultPolicy = initializeDefaultLeavePolicy();
+        createLeaveTypeIfNotFound("Casual Leave", "CL-001", 10, true, true, defaultPolicy);
+        createLeaveTypeIfNotFound("Sick Leave", "SL-001", 12, true, true, defaultPolicy);
+        createLeaveTypeIfNotFound("Earned Leave", "EL-001", 6, true, true, defaultPolicy);
+        createLeaveTypeIfNotFound("Work From Home", "WFH-001", 60, true, false, defaultPolicy);
+        createLeaveTypeIfNotFound("Half Day Leave", "HDL-001", 12, true, true, defaultPolicy);
+        createLeaveTypeIfNotFound("Emergency Leave", "EMG-001", 10, true, true, defaultPolicy);
+        createLeaveTypeIfNotFound("Unpaid Leave", "UPL-001", 365, false, false, defaultPolicy);
 
-        // 2. Initialize Leave Types
-        createLeaveTypeIfNotFound("Casual Leave", "CL-001", 10, true,true);
-        createLeaveTypeIfNotFound("Sick Leave", "SL-001", 12, true,true);
-        createLeaveTypeIfNotFound("Earned Leave", "EL-001", 6, true,true);
-        createLeaveTypeIfNotFound("Work From Home", "WFH-001", 60, true,false);
-        createLeaveTypeIfNotFound("Half Day Leave", "HDL-001", 12, true,true);
-        createLeaveTypeIfNotFound("Emergency Leave", "EMG-001", 10, true,true);
-        createLeaveTypeIfNotFound("Unpaid Leave", "UPL-001", 365, false,false);
-
-        // 3. Initialize Dummy Department (No HOD yet)
         Department adminDept = departmentRepository.findByName("Administration");
         if (adminDept == null) {
             adminDept = new Department();
@@ -132,13 +133,12 @@ public class DataInitializer implements CommandLineRunner {
 
         // 7. Initialize Navigation Menus
         initializeNavigationMenus();
-        initializeLeaveApprovalRules();
 
 
         System.out.println("System Initialized: Roles, Leave Types, Super Admin, and Navigation Menus setup complete.");
     }
 
-    private void createLeaveTypeIfNotFound(String name, String code, int maxDays, boolean isPaid,boolean sand) {
+    private void createLeaveTypeIfNotFound(String name, String code, int maxDays, boolean isPaid, boolean sand, LeaveApprovalPolicy policy) {
         if (leaveTypeRepository.findByCode(code).isEmpty()) {
             LeaveType leaveType = new LeaveType();
             leaveType.setName(name);
@@ -146,6 +146,8 @@ public class DataInitializer implements CommandLineRunner {
             leaveType.setMaxDaysPerYear(maxDays);
             leaveType.setPaid(isPaid);
             leaveType.setApplySandwichRule(sand);
+            leaveType.setApprovalPolicy(policy);
+
             leaveTypeRepository.save(leaveType);
         }
     }
@@ -236,48 +238,44 @@ public class DataInitializer implements CommandLineRunner {
             navMenuRoleRepository.save(mapping);
         }
     }
-    private void createApprovalRuleIfNotFound(String leaveTypeCode, double minDays, double maxDays, int level, String roleName) {
-        LeaveType leaveType = leaveTypeRepository.findByCode(leaveTypeCode)
-                .orElseThrow(() -> new RuntimeException("Leave type not found: " + leaveTypeCode));
+    private LeaveApprovalPolicy initializeDefaultLeavePolicy() {
+        LeaveApprovalPolicy policy = policyRepository.findByName("Standard Company Policy");
 
-        Role role = roleRepository.findByName(roleName);
-        if (role == null) throw new RuntimeException("Role not found: " + roleName);
+        if (policy == null) {
+            policy = new LeaveApprovalPolicy();
+            policy.setName("Standard Company Policy");
+            policy.setRules(new ArrayList<>());
 
-        BigDecimal min = BigDecimal.valueOf(minDays);
-        BigDecimal max = BigDecimal.valueOf(maxDays);
+            Role manager = roleRepository.findByName("ROLE_MANAGER");
+            Role deptHead = roleRepository.findByName("ROLE_DEPT_HEAD");
+            Role hrAdmin = roleRepository.findByName("ROLE_HR_ADMIN");
 
-        boolean exists = leaveApprovalRuleRepository.findAll().stream().anyMatch(rule ->
-                rule.getLeaveType().getCode().equals(leaveTypeCode) &&
-                        rule.getMinDays().compareTo(min) == 0 &&
-                        rule.getMaxDays().compareTo(max) == 0 &&
-                        rule.getApprovalLevel() == level
-        );
-
-        if (!exists) {
-            LeaveApprovalRule rule = new LeaveApprovalRule();
-            rule.setLeaveType(leaveType);
-            rule.setMinDays(min);
-            rule.setMaxDays(max);
-            rule.setApprovalLevel(level);
-            rule.setRequiredRole(role);
-            leaveApprovalRuleRepository.save(rule);
-        }
-    }
-    private void initializeLeaveApprovalRules() {
-        List<String> leaveTypeCodes = Arrays.asList("CL-001", "SL-001", "EL-001", "WFH-001", "HDL-001", "EMG-001");
-
-        for (String code : leaveTypeCodes) {
             // Tier 1: Small duration (0.5 to 2.0 days) -> Needs Manager Approval (Level 1)
-            createApprovalRuleIfNotFound(code, 0.5, 2.0, 1, "ROLE_MANAGER");
+            policy.getRules().add(createRule(policy, 0.5, 2.0, 1, manager));
 
-            // Tier 2: Mid duration (2.5 to 5.0 days) -> Needs Manager (Level 1) then HR Admin (Level 2)
-            createApprovalRuleIfNotFound(code, 2.5, 5.0, 1, "ROLE_MANAGER");
-            createApprovalRuleIfNotFound(code, 2.5, 5.0, 2, "ROLE_DEPT_HEAD");
+            // Tier 2: Mid duration (2.5 to 5.0 days) -> Needs Manager (L1) then Dept Head (L2)
+            policy.getRules().add(createRule(policy, 2.5, 5.0, 1, manager));
+            policy.getRules().add(createRule(policy, 2.5, 5.0, 2, deptHead));
 
-            // Tier 3: High duration (5.5+ days) -> Needs Manager (Level 1), HR Admin (Level 2), then Dept Head (Level 3)
-            createApprovalRuleIfNotFound(code, 5.5, 99.9, 1, "ROLE_MANAGER");
-            createApprovalRuleIfNotFound(code, 5.5, 99.9, 2, "ROLE_DEPT_HEAD");
-            createApprovalRuleIfNotFound(code, 5.5, 99.9, 3, "ROLE_HR_ADMIN");
+            // Tier 3: High duration (5.5+ days) -> Needs Manager (L1), Dept Head (L2), then HR Admin (L3)
+            policy.getRules().add(createRule(policy, 5.5, 99.9, 1, manager));
+            policy.getRules().add(createRule(policy, 5.5, 99.9, 2, deptHead));
+            policy.getRules().add(createRule(policy, 5.5, 99.9, 3, hrAdmin));
+
+            // Because of CascadeType.ALL, saving the policy saves all 6 rules instantly!
+            policy = policyRepository.save(policy);
         }
+        return policy;
     }
+
+    private LeaveApprovalRule createRule(LeaveApprovalPolicy policy, double minDays, double maxDays, int level, Role role) {
+        LeaveApprovalRule rule = new LeaveApprovalRule();
+        rule.setPolicy(policy);
+        rule.setMinDays(BigDecimal.valueOf(minDays));
+        rule.setMaxDays(BigDecimal.valueOf(maxDays));
+        rule.setApprovalLevel(level);
+        rule.setRequiredRole(role);
+        return rule;
+    }
+
 }

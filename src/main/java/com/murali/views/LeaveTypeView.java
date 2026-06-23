@@ -1,10 +1,13 @@
 package com.murali.views;
 
+import com.murali.entity.LeaveApprovalPolicy;
 import com.murali.entity.LeaveType;
+import com.murali.service.LeaveApprovalRuleService;
 import com.murali.service.LeaveTypeService;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.checkbox.Checkbox;
+import com.vaadin.flow.component.combobox.ComboBox;
 import com.vaadin.flow.component.confirmdialog.ConfirmDialog;
 import com.vaadin.flow.component.dialog.Dialog;
 import com.vaadin.flow.component.formlayout.FormLayout;
@@ -35,6 +38,7 @@ import java.util.Set;
 public class LeaveTypeView extends VerticalLayout {
 
     private final LeaveTypeService leaveTypeService;
+    private final LeaveApprovalRuleService ruleService;
 
     private static final Set<String> SYSTEM_CODES = Set.of("HDL-001", "EMG-001", "SL-001","CL-001","EL-001","WFH-001", "UPL-001");
 
@@ -52,10 +56,12 @@ public class LeaveTypeView extends VerticalLayout {
     private final Button cancelBtn = new Button("Cancel");
 
     private final Binder<LeaveType> binder = new Binder<>(LeaveType.class);
+    private final ComboBox<LeaveApprovalPolicy> policyBox = new ComboBox<>("Approval Policy");
     private LeaveType currentLeaveType;
 
-    public LeaveTypeView(LeaveTypeService leaveTypeService) {
+    public LeaveTypeView(LeaveTypeService leaveTypeService, LeaveApprovalRuleService ruleService) {
         this.leaveTypeService = leaveTypeService;
+        this.ruleService = ruleService;
 
         setSizeFull();
         configureGrid();
@@ -79,11 +85,15 @@ public class LeaveTypeView extends VerticalLayout {
     }
 
     private void configureGrid() {
+
         grid.setSizeFull();
         grid.addColumn(LeaveType::getName).setHeader("Name").setSortable(true);
         grid.addColumn(LeaveType::getCode).setHeader("Code").setSortable(true);
         grid.addColumn(leaveType -> leaveType.getPaid() ? "Paid" : "Unpaid").setHeader("Status");
         grid.addColumn(LeaveType::getMaxDaysPerYear).setHeader("Max Days");
+        grid.addColumn(leaveType -> leaveType.getApprovalPolicy() != null ?
+                        leaveType.getApprovalPolicy().getName() : "No Policy")
+                .setHeader("Approval Policy").setSortable(true);
 
         grid.addComponentColumn(leaveType -> {
             Button editBtn = new Button(new Icon(VaadinIcon.EDIT));
@@ -105,20 +115,26 @@ public class LeaveTypeView extends VerticalLayout {
 
     private void configureForm() {
         formDialog.setHeaderTitle("Leave Type Details");
+        policyBox.setItems(ruleService.getAllPolicies());
+        policyBox.setItemLabelGenerator(LeaveApprovalPolicy::getName);
 
         FormLayout formLayout = new FormLayout();
-        formLayout.add(nameField, codeField, maxDaysField, paidCheckbox);
+        formLayout.add(nameField, codeField, maxDaysField, paidCheckbox, policyBox);
         formLayout.setResponsiveSteps(
                 new FormLayout.ResponsiveStep("0", 1),
                 new FormLayout.ResponsiveStep("500px", 2)
         );
         formLayout.setColspan(paidCheckbox, 2);
 
+
         codeField.addValueChangeListener(e -> {
             if (e.getValue() != null) {
                 codeField.setValue(e.getValue().toUpperCase());
             }
         });
+        binder.forField(policyBox)
+                .asRequired("An Approval Policy is required")
+                .bind(LeaveType::getApprovalPolicy, LeaveType::setApprovalPolicy);
 
         binder.forField(nameField)
                 .asRequired("Name is required")
@@ -153,6 +169,9 @@ public class LeaveTypeView extends VerticalLayout {
 
     private void openForm(LeaveType leaveType) {
         currentLeaveType = leaveType;
+
+        policyBox.setItems(ruleService.getAllPolicies());
+
         binder.readBean(currentLeaveType);
 
         boolean isSystemCode = leaveType.getCode() != null && SYSTEM_CODES.contains(leaveType.getCode().toUpperCase());
@@ -160,7 +179,6 @@ public class LeaveTypeView extends VerticalLayout {
 
         formDialog.open();
     }
-
     private void saveLeaveType() {
         try {
             binder.writeBean(currentLeaveType);

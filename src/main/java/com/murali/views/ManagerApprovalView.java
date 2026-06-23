@@ -4,6 +4,7 @@ import com.murali.entity.*;
 import com.murali.entity.enums.ApprovalType;
 import com.murali.service.ApprovalRoutingService;
 import com.murali.service.AttendanceCorrectionService;
+import com.murali.service.LeaveBalanceService;
 import com.murali.util.SecurityService;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.avatar.Avatar;
@@ -14,6 +15,7 @@ import com.vaadin.flow.component.grid.Grid;
 import com.vaadin.flow.component.grid.GridVariant;
 import com.vaadin.flow.component.html.Div;
 import com.vaadin.flow.component.html.H2;
+import com.vaadin.flow.component.html.H5;
 import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.icon.VaadinIcon;
 import com.vaadin.flow.component.notification.Notification;
@@ -29,8 +31,10 @@ import com.vaadin.flow.router.Route;
 import com.vaadin.flow.theme.lumo.LumoUtility;
 import jakarta.annotation.security.RolesAllowed;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.util.List;
 
 @RolesAllowed({"ROLE_SUPER_ADMIN", "ROLE_HR_ADMIN", "ROLE_MANAGER", "ROLE_DEPT_HEAD"})
 @PageTitle("Approval Inbox")
@@ -40,6 +44,7 @@ public class ManagerApprovalView extends VerticalLayout {
     private final ApprovalRoutingService approvalRoutingService;
     private final AttendanceCorrectionService attendanceCorrectionService;
     private final SecurityService securityService;
+    private final LeaveBalanceService leaveBalanceService;
     private final User currentUser;
 
     private final Grid<LeaveApproval> leaveGrid = new Grid<>(LeaveApproval.class, false);
@@ -48,13 +53,12 @@ public class ManagerApprovalView extends VerticalLayout {
     private final VerticalLayout leaveWrapper = new VerticalLayout();
     private final VerticalLayout correctionWrapper = new VerticalLayout();
 
-    public ManagerApprovalView(ApprovalRoutingService approvalRoutingService,
-                               AttendanceCorrectionService attendanceCorrectionService,
-                               SecurityService securityService) {
+    public ManagerApprovalView(ApprovalRoutingService approvalRoutingService, AttendanceCorrectionService attendanceCorrectionService, SecurityService securityService, LeaveBalanceService leaveBalanceService) {
         this.approvalRoutingService = approvalRoutingService;
         this.attendanceCorrectionService = attendanceCorrectionService;
         this.securityService = securityService;
         this.currentUser = securityService.getAuthenticatedUser();
+        this.leaveBalanceService = leaveBalanceService;
 
         setSizeFull();
         addClassNames(LumoUtility.Padding.LARGE);
@@ -103,9 +107,7 @@ public class ManagerApprovalView extends VerticalLayout {
         searchField.setPlaceholder("Search employee name...");
         searchField.setPrefixComponent(VaadinIcon.SEARCH.create());
         searchField.addValueChangeListener(e -> {
-            leaveGrid.setItems(approvalRoutingService.getPendingApprovalsForUser(currentUser.getId()).stream()
-                    .filter(a -> a.getLeaveRequest().getEmployee().getFirstName().toLowerCase().contains(e.getValue().toLowerCase()))
-                    .toList());
+            leaveGrid.setItems(approvalRoutingService.getPendingApprovalsForUser(currentUser.getId()).stream().filter(a -> a.getLeaveRequest().getEmployee().getFirstName().toLowerCase().contains(e.getValue().toLowerCase())).toList());
         });
 
         HorizontalLayout toolbar = new HorizontalLayout(searchField);
@@ -117,13 +119,9 @@ public class ManagerApprovalView extends VerticalLayout {
     private void configureLeaveGrid() {
         leaveGrid.addThemeVariants(GridVariant.LUMO_ROW_STRIPES, GridVariant.LUMO_NO_BORDER);
         leaveGrid.setSizeFull();
-        leaveGrid.setPartNameGenerator(approval ->
-                approval.getApprovalType() == ApprovalType.CANCELLATION
-                        ? "cancellation-row"
-                        : null);
+        leaveGrid.setPartNameGenerator(approval -> approval.getApprovalType() == ApprovalType.CANCELLATION ? "cancellation-row" : null);
 
-        leaveGrid.addComponentColumn(approval -> createEmployeeBadge(approval.getLeaveRequest().getEmployee()))
-                .setHeader("Employee").setFlexGrow(1).setAutoWidth(true);
+        leaveGrid.addComponentColumn(approval -> createEmployeeBadge(approval.getLeaveRequest().getEmployee())).setHeader("Employee").setFlexGrow(1).setAutoWidth(true);
 
         // MODIFIED: Show a badge if it is a Cancellation Request
         leaveGrid.addComponentColumn(approval -> {
@@ -144,11 +142,9 @@ public class ManagerApprovalView extends VerticalLayout {
             return cell;
         }).setHeader("Leave Type").setAutoWidth(true);
 
-        leaveGrid.addColumn(approval -> approval.getLeaveRequest().getStartDate() + " to " + approval.getLeaveRequest().getEndDate())
-                .setHeader("Dates").setAutoWidth(true);
+        leaveGrid.addColumn(approval -> approval.getLeaveRequest().getStartDate() + " to " + approval.getLeaveRequest().getEndDate()).setHeader("Dates").setAutoWidth(true);
 
-        leaveGrid.addColumn(approval -> approval.getLeaveRequest().getDurationDays() + " days")
-                .setHeader("Duration").setAutoWidth(true);
+        leaveGrid.addColumn(approval -> approval.getLeaveRequest().getDurationDays() + " days").setHeader("Duration").setAutoWidth(true);
 
         leaveGrid.addComponentColumn(approval -> {
             Span badge = new Span("Level " + approval.getApprovalLevel());
@@ -213,6 +209,57 @@ public class ManagerApprovalView extends VerticalLayout {
         commentsArea.setWidthFull();
         contentLayout.add(commentsArea);
 
+
+        contentLayout.add(new H5("Current Balances (Used Only)"));
+        HorizontalLayout balancesLayout = new HorizontalLayout();
+        balancesLayout.setWidthFull();
+        balancesLayout.getStyle().set("overflow-x", "auto");
+        balancesLayout.setSpacing(true);
+        balancesLayout.addClassNames(LumoUtility.Margin.Bottom.MEDIUM);
+
+        List<LeaveBalance> balances = leaveBalanceService.getBalancesForEmployee(
+                request.getEmployee().getId(), request.getStartDate().getYear());
+
+        final BigDecimal[] remainingAfterApproval = {BigDecimal.ZERO};
+
+        for (LeaveBalance balance : balances) {
+            VerticalLayout card = new VerticalLayout();
+            card.setPadding(true);
+            card.setSpacing(false);
+            card.setWidth("140px");
+            card.setMinWidth("140px");
+            card.getStyle().set("border", "1px solid var(--lumo-contrast-10pct)");
+            card.getStyle().set("border-radius", "var(--lumo-border-radius-m)");
+
+            BigDecimal total = balance.getTotalEntitled() != null ? balance.getTotalEntitled() : BigDecimal.ZERO;
+            BigDecimal used = balance.getUsed() != null ? balance.getUsed() : BigDecimal.ZERO;
+            BigDecimal available = total.subtract(used);
+
+            Span typeName = new Span(balance.getLeaveType().getName());
+            typeName.addClassNames(LumoUtility.FontSize.SMALL, LumoUtility.FontWeight.BOLD, LumoUtility.TextColor.SECONDARY);
+
+            Span availableSpan = new Span(available.stripTrailingZeros().toPlainString() + " left");
+            availableSpan.addClassNames(LumoUtility.FontSize.MEDIUM, LumoUtility.FontWeight.BOLD);
+
+            card.add(typeName, availableSpan);
+
+            if (balance.getLeaveType().getId().equals(request.getLeaveType().getId())) {
+                card.getStyle().set("background-color", "var(--lumo-primary-color-10pct)");
+                card.getStyle().set("border-color", "var(--lumo-primary-color)");
+                availableSpan.addClassNames(LumoUtility.TextColor.PRIMARY);
+
+                Span requestedBadge = new Span("Requested");
+                requestedBadge.getElement().getThemeList().add("badge primary small");
+                requestedBadge.getStyle().set("margin-bottom", "4px");
+                card.addComponentAsFirst(requestedBadge);
+
+                remainingAfterApproval[0] = available.subtract(request.getDurationDays());
+            }
+
+            balancesLayout.add(card);
+        }
+        contentLayout.add(balancesLayout);
+
         // FIX 3: Put the master content layout inside a Scroller
         Scroller scroller = new Scroller(contentLayout);
         scroller.setSizeFull();
@@ -220,6 +267,23 @@ public class ManagerApprovalView extends VerticalLayout {
 
         // Add the Scroller to the dialog instead of the individual pieces
         dialog.add(scroller);
+
+        VerticalLayout summaryLayout = new VerticalLayout();
+        summaryLayout.setPadding(false);
+        summaryLayout.setSpacing(false);
+        summaryLayout.setAlignItems(FlexComponent.Alignment.END);
+
+        String summaryString = String.format("Remaining %s after approval would be %s days",
+                request.getLeaveType().getName(),
+                remainingAfterApproval[0].stripTrailingZeros().toPlainString());
+
+        Span summaryText = new Span(summaryString);
+        summaryText.addClassNames(LumoUtility.FontSize.SMALL, LumoUtility.FontWeight.BOLD, LumoUtility.TextColor.PRIMARY);
+        summaryText.getStyle().set("margin-top", "var(--lumo-space-m)");
+        summaryText.getStyle().set("margin-bottom", "var(--lumo-space-s)");
+
+        summaryLayout.add(summaryText);
+        dialog.add(summaryLayout);
 
         String approveText = isCancellation ? "Approve Cancellation" : "Approve Leave";
         Button approveBtn = new Button(approveText, VaadinIcon.CHECK.create());
@@ -267,16 +331,13 @@ public class ManagerApprovalView extends VerticalLayout {
     }
 
 
-
     private HorizontalLayout createCorrectionToolbar() {
         TextField searchField = new TextField();
         searchField.setPlaceholder("Search employee name...");
         searchField.setPrefixComponent(VaadinIcon.SEARCH.create());
         searchField.addValueChangeListener(e -> {
             // Note: Replace getPendingCorrectionsForApprover with your actual manager-specific fetch method
-            correctionGrid.setItems(attendanceCorrectionService.getPendingCorrectionsForApprover(currentUser.getId()).stream()
-                    .filter(c -> c.getAttendance().getEmployee().getFirstName().toLowerCase().contains(e.getValue().toLowerCase()))
-                    .toList());
+            correctionGrid.setItems(attendanceCorrectionService.getPendingCorrectionsForApprover(currentUser.getId()).stream().filter(c -> c.getAttendance().getEmployee().getFirstName().toLowerCase().contains(e.getValue().toLowerCase())).toList());
         });
 
         HorizontalLayout toolbar = new HorizontalLayout(searchField);
@@ -289,11 +350,9 @@ public class ManagerApprovalView extends VerticalLayout {
         correctionGrid.addThemeVariants(GridVariant.LUMO_ROW_STRIPES, GridVariant.LUMO_NO_BORDER);
         correctionGrid.setSizeFull();
 
-        correctionGrid.addComponentColumn(correction -> createEmployeeBadge(correction.getAttendance().getEmployee()))
-                .setHeader("Employee").setFlexGrow(1).setAutoWidth(true);
+        correctionGrid.addComponentColumn(correction -> createEmployeeBadge(correction.getAttendance().getEmployee())).setHeader("Employee").setFlexGrow(1).setAutoWidth(true);
 
-        correctionGrid.addColumn(correction -> correction.getAttendance().getAttendanceDate())
-                .setHeader("Date").setAutoWidth(true);
+        correctionGrid.addColumn(correction -> correction.getAttendance().getAttendanceDate()).setHeader("Date").setAutoWidth(true);
 
         correctionGrid.addComponentColumn(correction -> {
             Span badge = new Span(correction.getAttendance().getStatus().name());
@@ -346,7 +405,7 @@ public class ManagerApprovalView extends VerticalLayout {
         infoBanner.add(infoTitle, infoApprove, infoReject);
         detailsLayout.add(infoBanner);
 
-        LocalTime effectiveEnd = (assignment != null) ? assignment.getShift().getEndTime(): null;
+        LocalTime effectiveEnd = (assignment != null) ? assignment.getShift().getEndTime() : null;
         if (effectiveEnd != null) {
             detailsLayout.add(createDetailRow("Expected Shift End:", effectiveEnd.toString()));
         }
@@ -373,13 +432,7 @@ public class ManagerApprovalView extends VerticalLayout {
                 // Combine attendance date with the manually selected time
                 LocalDateTime checkOutDateTime = attendance.getAttendanceDate().atTime(manualCheckOutPicker.getValue());
 
-                attendanceCorrectionService.resolveCorrection(
-                        correction.getId(),
-                        "APPROVED",
-                        checkOutDateTime,
-                        commentsArea.getValue(),
-                        currentUser.getId()
-                );
+                attendanceCorrectionService.resolveCorrection(correction.getId(), "APPROVED", checkOutDateTime, commentsArea.getValue(), currentUser.getId());
                 Notification.show("Correction Approved.", 3000, Notification.Position.TOP_END).addThemeVariants(NotificationVariant.LUMO_SUCCESS);
                 dialog.close();
                 refreshCorrectionGrid();
@@ -392,13 +445,8 @@ public class ManagerApprovalView extends VerticalLayout {
         rejectBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY, ButtonVariant.LUMO_ERROR);
         rejectBtn.addClickListener(e -> {
             try {
-                attendanceCorrectionService.resolveCorrection(
-                        correction.getId(),
-                        "REJECTED",
-                        null, // Not needed for rejection
-                        commentsArea.getValue(),
-                        currentUser.getId()
-                );
+                attendanceCorrectionService.resolveCorrection(correction.getId(), "REJECTED", null, // Not needed for rejection
+                        commentsArea.getValue(), currentUser.getId());
                 Notification.show("Correction Rejected. Penalty applied.", 3000, Notification.Position.TOP_END).addThemeVariants(NotificationVariant.LUMO_SUCCESS);
                 dialog.close();
                 refreshCorrectionGrid();

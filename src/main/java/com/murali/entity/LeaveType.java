@@ -3,12 +3,10 @@ package com.murali.entity;
 import jakarta.persistence.*;
 import lombok.*;
 
-@AllArgsConstructor
-@NoArgsConstructor
-@Getter
-@Setter
 @Entity
 @Table(name = "leave_types")
+@Getter
+@Setter
 public class LeaveType {
 
     @Id
@@ -30,5 +28,7 @@ public class LeaveType {
     @Column(name = "apply_sandwich_rule", nullable = false)
     private Boolean applySandwichRule = false;
 
-
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "approval_policy_id", nullable = false)
+    private LeaveApprovalPolicy approvalPolicy;
 }

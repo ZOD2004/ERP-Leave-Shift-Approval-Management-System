@@ -51,5 +51,4 @@ public class Employee{
     //removed Set<LeaveType> applicableLeaveTypes since leave Balance already has this data in it
 
     // more data can be added like address and phone etc but dint do
-
 }

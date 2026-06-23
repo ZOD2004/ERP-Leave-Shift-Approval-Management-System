@@ -152,22 +152,17 @@ public class EmployeeView extends VerticalLayout {
 
         userBinder.forField(username).asRequired("Required").bind(User::getUsername, User::setUsername);
         userBinder.forField(email).asRequired("Required").bind(User::getEmail, User::setEmail);
-        userBinder.forField(password)
-                .withValidator(pass -> {
-                    boolean isNewUser = (currentUser == null || currentUser.getId() == null);
-                    if (isNewUser) {
-                        return pass != null && !pass.isEmpty();
-                    }
-                    return true;
-                }, "Password is required for new users")
-                .bind(
-                        user -> "",
-                        (user, pass) -> {
-                            if (pass != null && !pass.isEmpty()) {
-                                user.setPasswordHash(pass);
-                            }
-                        }
-                );
+        userBinder.forField(password).withValidator(pass -> {
+            boolean isNewUser = (currentUser == null || currentUser.getId() == null);
+            if (isNewUser) {
+                return pass != null && !pass.isEmpty();
+            }
+            return true;
+        }, "Password is required for new users").bind(user -> "", (user, pass) -> {
+            if (pass != null && !pass.isEmpty()) {
+                user.setPasswordHash(pass);
+            }
+        });
         userBinder.forField(role).asRequired("Role is required").bind(User::getRole, User::setRole);
 
         employeeBinder.forField(firstName).asRequired("Required").bind(Employee::getFirstName, Employee::setFirstName);
@@ -204,16 +199,13 @@ public class EmployeeView extends VerticalLayout {
             role.setItems(allRoles);
             role.setReadOnly(true);
         } else {
-            List<Role> filteredRoles = allRoles.stream()
-                    .filter(r -> !"ROLE_SUPER_ADMIN".equals(r.getName()))
-                    .collect(Collectors.toList());
+            List<Role> filteredRoles = allRoles.stream().filter(r -> !"ROLE_SUPER_ADMIN".equals(r.getName())).collect(Collectors.toList());
             role.setItems(filteredRoles);
             role.setReadOnly(false);
         }
 
         if (currentEmployee.getDepartment() != null && currentUser.getRole() != null) {
-            manager.setItems(employeeService.findAvailableReportingManagers(
-                    currentEmployee.getDepartment().getId(), currentUser.getRole()));
+            manager.setItems(employeeService.findAvailableReportingManagers(currentEmployee.getDepartment().getId(), currentUser.getRole()));
         } else {
             manager.setItems(java.util.Collections.emptyList());
         }
@@ -224,14 +216,9 @@ public class EmployeeView extends VerticalLayout {
 
         if (currentEmployee.getId() != null) {
             int currentYear = LocalDate.now().getYear();
-            Set<Long> existingLeaveIds = leaveBalanceService.getBalancesForEmployee(currentEmployee.getId(), currentYear)
-                    .stream()
-                    .map(b -> b.getLeaveType().getId())
-                    .collect(Collectors.toSet());
+            Set<Long> existingLeaveIds = leaveBalanceService.getBalancesForEmployee(currentEmployee.getId(), currentYear).stream().map(b -> b.getLeaveType().getId()).collect(Collectors.toSet());
 
-            Set<LeaveType> itemsToSelect = applicableLeavesField.getListDataView().getItems()
-                    .filter(leaveType -> existingLeaveIds.contains(leaveType.getId()))
-                    .collect(Collectors.toSet());
+            Set<LeaveType> itemsToSelect = applicableLeavesField.getListDataView().getItems().filter(leaveType -> existingLeaveIds.contains(leaveType.getId())).collect(Collectors.toSet());
 
             applicableLeavesField.setValue(itemsToSelect);
         } else {
@@ -266,12 +253,11 @@ public class EmployeeView extends VerticalLayout {
             openHodSwapDialog(ex);
         } catch (ManagerPromotionConflictException ex) {
             openManagerPromotionDialog(ex);
-        }
-        catch (HodDemotionConflictException ex) {
+        } catch (HodDemotionConflictException ex) {
             openHodDemotionDialog(ex);
         } catch (ManagerDemotionConflictException ex) {
             openManagerDemotionDialog(ex);
-        }catch (IllegalStateException ex) {
+        } catch (IllegalStateException ex) {
             showNotification(ex.getMessage(), NotificationVariant.LUMO_ERROR);
         } catch (ValidationException ex) {
             showNotification("Please fill in all required fields correctly.", NotificationVariant.LUMO_ERROR);
@@ -331,17 +317,14 @@ public class EmployeeView extends VerticalLayout {
         dialog.getFooter().add(new Button("Cancel", e -> dialog.close()), confirmBtn);
         dialog.open();
     }
+
     private void openHodDemotionDialog(HodDemotionConflictException ex) {
         Dialog dialog = new Dialog();
         dialog.setHeaderTitle("HOD Demotion Conflict");
         dialog.add(new Paragraph(ex.getMessage()));
 
         ComboBox<Employee> replacementCombo = new ComboBox<>("Select New HOD");
-        List<Employee> eligibleHods = employeeService.findAllActive().stream()
-                .filter(e -> e.getDepartment() != null && e.getDepartment().getId().equals(ex.getDepartmentId()))
-                .filter(e -> !e.getId().equals(currentEmployee.getId()))
-                .filter(e -> e.getUser() != null && e.getUser().getRole().getHierarchyWeight() >= 3)
-                .collect(Collectors.toList());
+        List<Employee> eligibleHods = employeeService.findAllActive().stream().filter(e -> e.getDepartment() != null && e.getDepartment().getId().equals(ex.getDepartmentId())).filter(e -> !e.getId().equals(currentEmployee.getId())).filter(e -> e.getUser() != null && e.getUser().getRole().getHierarchyWeight() >= 3).collect(Collectors.toList());
 
         replacementCombo.setItems(eligibleHods);
         replacementCombo.setItemLabelGenerator(Employee::getFirstName);
@@ -420,11 +403,7 @@ public class EmployeeView extends VerticalLayout {
             currentWeight = employee.getUser().getRole().getHierarchyWeight();
         }
 
-        List<Employee> available = employeeService.findEligibleReplacements(
-                ex.getDepartmentId(),
-                employee.getId(),
-                currentWeight
-        );
+        List<Employee> available = employeeService.findEligibleReplacements(ex.getDepartmentId(), employee.getId(), currentWeight);
 
         replacementCombo.setItems(available);
         replacementCombo.setItemLabelGenerator(Employee::getFirstName);
@@ -454,7 +433,7 @@ public class EmployeeView extends VerticalLayout {
         if (employee.getUser() != null && employee.getUser().getRole() != null) {
             currentWeight = employee.getUser().getRole().getHierarchyWeight();
         }
-        List<Employee> available = employeeService.findEligibleReplacements(employee.getDepartment().getId(), employee.getId(),currentWeight);
+        List<Employee> available = employeeService.findEligibleReplacements(employee.getDepartment().getId(), employee.getId(), currentWeight);
         replacementCombo.setItems(available);
         replacementCombo.setItemLabelGenerator(Employee::getFirstName);
 

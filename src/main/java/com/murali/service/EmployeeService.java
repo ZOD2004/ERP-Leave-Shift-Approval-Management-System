@@ -129,6 +129,38 @@ public class EmployeeService {
         }
     }
 
+    private void validateDemotion(Employee employee, User newUser) {
+        if (employee.getId() == null || newUser.getRole() == null) return;
+
+        Employee emp = employeeRepository.findById(employee.getId()).orElseThrow();
+        int oldWeight = emp.getUser().getRole().getHierarchyWeight();
+        int newWeight = newUser.getRole().getHierarchyWeight();
+
+        if (newWeight < oldWeight) {
+            Long deptId = employee.getDepartment().getId();
+            Department dept = departmentRepository.findById(deptId).orElseThrow();
+
+            List<Employee> eligibleReplacements = findEligibleReplacements(deptId, employee.getId(), oldWeight);
+
+            if (dept.getHod() != null && dept.getHod().getId().equals(employee.getId())) {
+                if (!eligibleReplacements.isEmpty()) {
+                    throw new HodDemotionConflictException("HOD is being demoted. Please select a new HOD for the department.", deptId);
+                } else {
+                    dept.setHod(null);
+                    departmentRepository.save(dept);
+                }
+            }
+
+            if (employeeRepository.existsByManagerId(employee.getId())) {
+                if (!eligibleReplacements.isEmpty()) {
+                    throw new ManagerDemotionConflictException("Manager is being demoted but has active subordinates. Please select a replacement manager.", deptId);
+                } else {
+                    employeeRepository.clearManagerReference(employee.getId());
+                }
+            }
+        }
+    }
+
     @Transactional
     public void swapHodAndSave(Employee newHod, User newUser, boolean isExistingUserLinked, Set<LeaveType> selectedLeaves, Long oldHodId) {
 
@@ -236,6 +268,7 @@ public class EmployeeService {
         return savedEmployee;
     }
 
+    @Transactional
     private void executeStandardDeactivation(Employee employee) {
         User currUser = employee.getUser();
         if (currUser != null) {
@@ -246,6 +279,7 @@ public class EmployeeService {
         log.info("Employee deactivated. Employee ID: {}", employee.getId());
     }
 
+    @Transactional
     private void demoteEmployeeToStandard(Long employeeId) {
         Employee emp = employeeRepository.findById(employeeId).orElseThrow();
         Role empRole = roleRepository.findByName("ROLE_EMPLOYEE");
@@ -299,37 +333,7 @@ public class EmployeeService {
         return employeeRepository.findById(employeeId);
     }
 
-    private void validateDemotion(Employee employee, User newUser) {
-        if (employee.getId() == null || newUser.getRole() == null) return;
 
-        Employee emp = employeeRepository.findById(employee.getId()).orElseThrow();
-        int oldWeight = emp.getUser().getRole().getHierarchyWeight();
-        int newWeight = newUser.getRole().getHierarchyWeight();
-
-        if (newWeight < oldWeight) {
-            Long deptId = employee.getDepartment().getId();
-            Department dept = departmentRepository.findById(deptId).orElseThrow();
-
-            List<Employee> eligibleReplacements = findEligibleReplacements(deptId, employee.getId(), oldWeight);
-
-            if (dept.getHod() != null && dept.getHod().getId().equals(employee.getId())) {
-                if (!eligibleReplacements.isEmpty()) {
-                    throw new HodDemotionConflictException("HOD is being demoted. Please select a new HOD for the department.", deptId);
-                } else {
-                    dept.setHod(null);
-                    departmentRepository.save(dept);
-                }
-            }
-
-            if (employeeRepository.existsByManagerId(employee.getId())) {
-                if (!eligibleReplacements.isEmpty()) {
-                    throw new ManagerDemotionConflictException("Manager is being demoted but has active subordinates. Please select a replacement manager.", deptId);
-                } else {
-                    employeeRepository.clearManagerReference(employee.getId());
-                }
-            }
-        }
-    }
     @Transactional
     public void replaceHodAndDemote(Employee demotedEmployee, User newUser, boolean isExistingUserLinked, Set<LeaveType> selectedLeaves, Long newHodId) {
         Department dept = departmentRepository.findById(demotedEmployee.getDepartment().getId()).orElseThrow();

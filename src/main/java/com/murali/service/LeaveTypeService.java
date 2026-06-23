@@ -70,6 +70,9 @@ public class LeaveTypeService {
         currLeaveType.setPaid(leaveType.getPaid());
         currLeaveType.setMaxDaysPerYear(leaveType.getMaxDaysPerYear());
 
+        // ADD THIS LINE: Copy the new approval policy over
+        currLeaveType.setApprovalPolicy(leaveType.getApprovalPolicy());
+
         LeaveType savedLeaveType = leaveTypeRepository.save(currLeaveType);
 
         String newState = String.format("{ \"name\": \"%s\", \"code\": \"%s\", \"paid\": %b, \"maxDaysPerYear\": %s }",
