@@ -17,6 +17,7 @@ import com.vaadin.flow.component.html.Div;
 import com.vaadin.flow.component.html.H2;
 import com.vaadin.flow.component.html.H5;
 import com.vaadin.flow.component.html.Span;
+import com.vaadin.flow.component.icon.Icon;
 import com.vaadin.flow.component.icon.VaadinIcon;
 import com.vaadin.flow.component.notification.Notification;
 import com.vaadin.flow.component.notification.NotificationVariant;
@@ -165,100 +166,82 @@ public class ManagerApprovalView extends VerticalLayout {
 
         boolean isCancellation = approval.getApprovalType() == ApprovalType.CANCELLATION;
         dialog.setHeaderTitle(isCancellation ? "Review Cancellation Request" : "Review Leave Request");
-        dialog.setWidth("450px");
-        dialog.setMaxHeight("90vh"); // FIX 1: Prevents dialog from stretching off-screen
+        dialog.setWidth("900px");
+        dialog.setMaxWidth("95vw");
 
         LeaveRequest request = approval.getLeaveRequest();
+        Component heroSection = createHeroSection(request, isCancellation);
 
         // FIX 2: Create a master wrapper for all the content so it can scroll
         VerticalLayout contentLayout = new VerticalLayout();
         contentLayout.setPadding(false);
         contentLayout.setSpacing(true); // Adds a little breathing room between sections
 
-        VerticalLayout detailsLayout = new VerticalLayout();
-        detailsLayout.setPadding(false);
-        detailsLayout.setSpacing(false);
-        detailsLayout.addClassNames(LumoUtility.Margin.Bottom.MEDIUM);
 
-        if (isCancellation) {
-            VerticalLayout warningBanner = new VerticalLayout();
-            warningBanner.addClassNames(LumoUtility.Background.ERROR_10, LumoUtility.BorderRadius.MEDIUM, LumoUtility.Padding.SMALL, LumoUtility.Margin.Bottom.MEDIUM);
-            Span warnIcon = new Span(VaadinIcon.WARNING.create());
-            warnIcon.getStyle().set("color", "var(--lumo-error-color)");
-            Span warnText = new Span(" The employee is requesting to CANCEL this already approved leave.");
-            warnText.addClassNames(LumoUtility.TextColor.ERROR, LumoUtility.FontSize.SMALL, LumoUtility.FontWeight.BOLD);
-            warningBanner.add(new HorizontalLayout(warnIcon, warnText));
-            detailsLayout.add(warningBanner);
-        }
+        Component reasonPanel = createReadOnlyPanel(isCancellation ? "Original Reason" : "Reason for Leave", request.getReason());
 
-        detailsLayout.add(createDetailRow("Employee ID:", String.valueOf(request.getEmployee().getId())));
-        detailsLayout.add(createDetailRow("Leave Type:", request.getLeaveType().getName()));
-        detailsLayout.add(createDetailRow("Dates:", request.getStartDate() + " to " + request.getEndDate()));
-        detailsLayout.add(createDetailRow("Duration:", request.getDurationDays() + " days"));
-
-        contentLayout.add(detailsLayout);
-
-        TextArea reasonDisplay = new TextArea(isCancellation ? "Original Reason" : "Employee Reason");
-        reasonDisplay.setValue(request.getReason() != null ? request.getReason() : "N/A");
-        reasonDisplay.setReadOnly(true);
-        reasonDisplay.setWidthFull();
-        contentLayout.add(reasonDisplay);
-
-        TextArea commentsArea = new TextArea("Approver Feedback");
-        commentsArea.setPlaceholder("Required if rejecting...");
+        TextArea commentsArea = new TextArea("Decision Notes");
+        commentsArea.setPlaceholder("Give feedback/Reason.");
+        commentsArea.setMinHeight("140px");
         commentsArea.setWidthFull();
-        contentLayout.add(commentsArea);
 
 
-        contentLayout.add(new H5("Current Balances (Used Only)"));
-        HorizontalLayout balancesLayout = new HorizontalLayout();
-        balancesLayout.setWidthFull();
-        balancesLayout.getStyle().set("overflow-x", "auto");
-        balancesLayout.setSpacing(true);
-        balancesLayout.addClassNames(LumoUtility.Margin.Bottom.MEDIUM);
+        List<LeaveBalance> balances = leaveBalanceService.getBalancesForEmployee(request.getEmployee().getId(), request.getStartDate().getYear());
 
-        List<LeaveBalance> balances = leaveBalanceService.getBalancesForEmployee(
-                request.getEmployee().getId(), request.getStartDate().getYear());
-
-        final BigDecimal[] remainingAfterApproval = {BigDecimal.ZERO};
-
+        LeaveBalance targetBalance = null;
         for (LeaveBalance balance : balances) {
-            VerticalLayout card = new VerticalLayout();
-            card.setPadding(true);
-            card.setSpacing(false);
-            card.setWidth("140px");
-            card.setMinWidth("140px");
-            card.getStyle().set("border", "1px solid var(--lumo-contrast-10pct)");
-            card.getStyle().set("border-radius", "var(--lumo-border-radius-m)");
-
-            BigDecimal total = balance.getTotalEntitled() != null ? balance.getTotalEntitled() : BigDecimal.ZERO;
-            BigDecimal used = balance.getUsed() != null ? balance.getUsed() : BigDecimal.ZERO;
-            BigDecimal available = total.subtract(used);
-
-            Span typeName = new Span(balance.getLeaveType().getName());
-            typeName.addClassNames(LumoUtility.FontSize.SMALL, LumoUtility.FontWeight.BOLD, LumoUtility.TextColor.SECONDARY);
-
-            Span availableSpan = new Span(available.stripTrailingZeros().toPlainString() + " left");
-            availableSpan.addClassNames(LumoUtility.FontSize.MEDIUM, LumoUtility.FontWeight.BOLD);
-
-            card.add(typeName, availableSpan);
-
             if (balance.getLeaveType().getId().equals(request.getLeaveType().getId())) {
-                card.getStyle().set("background-color", "var(--lumo-primary-color-10pct)");
-                card.getStyle().set("border-color", "var(--lumo-primary-color)");
-                availableSpan.addClassNames(LumoUtility.TextColor.PRIMARY);
-
-                Span requestedBadge = new Span("Requested");
-                requestedBadge.getElement().getThemeList().add("badge primary small");
-                requestedBadge.getStyle().set("margin-bottom", "4px");
-                card.addComponentAsFirst(requestedBadge);
-
-                remainingAfterApproval[0] = available.subtract(request.getDurationDays());
+                targetBalance = balance;
+                break;
             }
-
-            balancesLayout.add(card);
         }
-        contentLayout.add(balancesLayout);
+
+        // 1. Calculate the raw Net Deduction for this specific request
+        BigDecimal netDeduction = request.getDurationDays();
+
+        if (request.getParentLeave() != null) {
+            netDeduction = netDeduction.subtract(request.getParentLeave().getDurationDays());
+        } else if (request.getMergedLeaves() != null && !request.getMergedLeaves().isEmpty()) {
+            BigDecimal alreadyApproved = leaveBalanceService.calculateApprovedMergedDays(request);
+            netDeduction = netDeduction.subtract(alreadyApproved);
+        }
+
+        if (netDeduction.compareTo(BigDecimal.ZERO) < 0) {
+            netDeduction = BigDecimal.ZERO;
+        }
+
+        BigDecimal remainingAfterApproval = BigDecimal.ZERO;
+        BigDecimal available = BigDecimal.ZERO;
+
+        if (targetBalance != null) {
+            remainingAfterApproval = leaveBalanceService.getEffectiveBalance(targetBalance);
+            available = remainingAfterApproval.add(netDeduction);
+        }
+        Component impactCard = createImpactCard(request.getLeaveType(), available, netDeduction, remainingAfterApproval);
+
+        Component statusBanner = createStatusBanner(remainingAfterApproval);
+
+        VerticalLayout leftColumn = new VerticalLayout();
+        leftColumn.setPadding(false);
+        leftColumn.setSpacing(true);
+        leftColumn.setWidth("60%");
+
+        VerticalLayout rightColumn = new VerticalLayout();
+        rightColumn.setPadding(false);
+        rightColumn.setSpacing(true);
+        rightColumn.setWidth("40%");
+
+        Component requestPanel = createRequestDetailsPanel(request);
+
+        leftColumn.add(requestPanel, reasonPanel, commentsArea);
+        rightColumn.add(impactCard, statusBanner);
+
+        HorizontalLayout body = new HorizontalLayout(leftColumn, rightColumn);
+        body.setWidthFull();
+        body.setSpacing(true);
+        body.setAlignItems(FlexComponent.Alignment.START);
+
+        contentLayout.add(heroSection, body);
 
         // FIX 3: Put the master content layout inside a Scroller
         Scroller scroller = new Scroller(contentLayout);
@@ -268,26 +251,14 @@ public class ManagerApprovalView extends VerticalLayout {
         // Add the Scroller to the dialog instead of the individual pieces
         dialog.add(scroller);
 
-        VerticalLayout summaryLayout = new VerticalLayout();
-        summaryLayout.setPadding(false);
-        summaryLayout.setSpacing(false);
-        summaryLayout.setAlignItems(FlexComponent.Alignment.END);
-
-        String summaryString = String.format("Remaining %s after approval would be %s days",
-                request.getLeaveType().getName(),
-                remainingAfterApproval[0].stripTrailingZeros().toPlainString());
-
-        Span summaryText = new Span(summaryString);
-        summaryText.addClassNames(LumoUtility.FontSize.SMALL, LumoUtility.FontWeight.BOLD, LumoUtility.TextColor.PRIMARY);
-        summaryText.getStyle().set("margin-top", "var(--lumo-space-m)");
-        summaryText.getStyle().set("margin-bottom", "var(--lumo-space-s)");
-
-        summaryLayout.add(summaryText);
-        dialog.add(summaryLayout);
 
         String approveText = isCancellation ? "Approve Cancellation" : "Approve Leave";
         Button approveBtn = new Button(approveText, VaadinIcon.CHECK.create());
         approveBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY, ButtonVariant.LUMO_SUCCESS);
+
+        if (remainingAfterApproval.compareTo(BigDecimal.ZERO) < 0) {
+            approveBtn.setEnabled(false);
+        }
         approveBtn.addClickListener(e -> {
             try {
                 approvalRoutingService.processApprovalAction(approval.getId(), "APPROVED", commentsArea.getValue(), currentUser);
@@ -303,6 +274,10 @@ public class ManagerApprovalView extends VerticalLayout {
         Button rejectBtn = new Button(rejectText, VaadinIcon.CLOSE.create());
         rejectBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY, ButtonVariant.LUMO_ERROR);
         rejectBtn.addClickListener(e -> {
+            if (commentsArea.getValue() == null || commentsArea.getValue().trim().isEmpty()) {
+                Notification.show("Rejection requires decision notes.", 3000, Notification.Position.MIDDLE).addThemeVariants(NotificationVariant.LUMO_ERROR);
+                return;
+            }
             try {
                 approvalRoutingService.processApprovalAction(approval.getId(), "REJECTED", commentsArea.getValue(), currentUser);
                 Notification.show("Rejected successfully", 3000, Notification.Position.TOP_END).addThemeVariants(NotificationVariant.LUMO_SUCCESS);
@@ -315,12 +290,15 @@ public class ManagerApprovalView extends VerticalLayout {
 
         Button cancelBtn = new Button("Close", e -> dialog.close());
         cancelBtn.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
+        approveBtn.setMinWidth("180px");
+        rejectBtn.setMinWidth("140px");
 
-        HorizontalLayout footerLayout = new HorizontalLayout(cancelBtn, rejectBtn, approveBtn);
-        footerLayout.setJustifyContentMode(FlexComponent.JustifyContentMode.END);
+        HorizontalLayout footerLayout = new HorizontalLayout();
         footerLayout.setWidthFull();
-        footerLayout.setSpacing(true);
-//        footerLayout.setFlexWrap(FlexLayout.FlexWrap.WRAP);
+
+        footerLayout.add(cancelBtn);
+        footerLayout.addAndExpand(new Div());
+        footerLayout.add(rejectBtn, approveBtn);
 
         dialog.getFooter().add(footerLayout);
         dialog.open();
@@ -504,5 +482,201 @@ public class ManagerApprovalView extends VerticalLayout {
 
         row.add(label, value);
         return row;
+    }
+
+    private Component createHeroSection(LeaveRequest request, boolean isCancellation) {
+        HorizontalLayout header = new HorizontalLayout();
+        header.setWidthFull();
+        header.setAlignItems(FlexComponent.Alignment.CENTER);
+        header.setSpacing(true);
+        header.addClassNames(LumoUtility.Padding.Bottom.MEDIUM, LumoUtility.Border.BOTTOM, LumoUtility.BorderColor.CONTRAST_10);
+
+        Employee emp = request.getEmployee();
+
+        Avatar avatar = new Avatar(emp.getFirstName());
+        avatar.setAbbreviation(emp.getFirstName().substring(0, 1));
+        avatar.getStyle().set("width", "64px");
+        avatar.getStyle().set("height", "64px");
+
+        VerticalLayout empInfo = new VerticalLayout();
+        empInfo.setPadding(false);
+        empInfo.setSpacing(false);
+
+        Span name = new Span(emp.getFirstName() + " (" + emp.getEmployeeCode() + ")");
+        name.addClassNames(LumoUtility.FontSize.XLARGE, LumoUtility.FontWeight.BOLD);
+
+        String deptName = emp.getDepartment() != null ? emp.getDepartment().getName() : "Unassigned Department";
+        Span dept = new Span(deptName);
+        dept.addClassNames(LumoUtility.FontSize.SMALL, LumoUtility.TextColor.SECONDARY);
+
+        HorizontalLayout badges = new HorizontalLayout();
+        badges.getStyle().set("margin-top", "8px");
+        badges.setSpacing(true);
+
+        Span leaveTypeBadge = new Span(request.getLeaveType().getCode() + " LEAVE");
+        leaveTypeBadge.getElement().getThemeList().add("badge contrast primary");
+        badges.add(leaveTypeBadge);
+
+        if (isCancellation) {
+            Span cancelBadge = new Span("CANCELLATION");
+            cancelBadge.getElement().getThemeList().add("badge error");
+            badges.add(cancelBadge);
+        }
+
+        // Merged Leave Visual Indicator
+        boolean isMerged = request.getParentLeave() != null || (request.getMergedLeaves() != null && !request.getMergedLeaves().isEmpty());
+        if (isMerged) {
+            Span mergedBadge = new Span("MERGED LEAVE");
+            mergedBadge.getElement().getThemeList().add("badge success");
+            badges.add(mergedBadge);
+        }
+
+        empInfo.add(name, dept, badges);
+        header.add(avatar, empInfo);
+
+        return header;
+    }
+
+    private Component createRequestDetailsPanel(LeaveRequest request) {
+        VerticalLayout requestPanel = new VerticalLayout();
+        requestPanel.setPadding(true);
+        requestPanel.setSpacing(false);
+        requestPanel.getStyle().set("border-radius", "12px");
+        requestPanel.getStyle().set("background", "var(--lumo-contrast-5pct)");
+
+        requestPanel.add(createDetailRow("Leave Type", request.getLeaveType().getName()));
+
+        String dateStr = request.getStartDate() + " to " + request.getEndDate();
+        requestPanel.add(createDetailRow("Dates", dateStr));
+
+        // Only show sessions if it's not a standard Full Day to Full Day request
+        if (!"FULL_DAY".equals(request.getStartSession().name()) || !"FULL_DAY".equals(request.getEndSession().name())) {
+            String sessionStr = "Start: " + request.getStartSession().name() + " | End: " + request.getEndSession().name();
+            requestPanel.add(createDetailRow("Sessions", sessionStr));
+        }
+
+        requestPanel.add(createDetailRow("Total Duration", request.getDurationDays().toPlainString() + " Days"));
+
+        // Visual indicator for Sandwich Rule Penalties
+        if (Boolean.TRUE.equals(request.getIsSandwichLeave()) && request.getSandwichPenaltyDays() != null && request.getSandwichPenaltyDays().compareTo(BigDecimal.ZERO) > 0) {
+
+            HorizontalLayout penaltyRow = createDetailRow("Sandwich Penalty Included", "+" + request.getSandwichPenaltyDays().toPlainString() + " Days");
+            penaltyRow.getStyle().set("color", "var(--lumo-error-text-color)");
+            penaltyRow.getStyle().set("font-weight", "bold");
+
+            // Add a little top margin to separate it from the duration
+            penaltyRow.getStyle().set("margin-top", "8px");
+            requestPanel.add(penaltyRow);
+        }
+
+        return requestPanel;
+    }
+
+    private Component createReadOnlyPanel(String title, String content) {
+        VerticalLayout panel = new VerticalLayout();
+        panel.setPadding(true);
+        panel.setSpacing(false);
+        panel.getStyle().set("border-radius", "12px");
+        panel.getStyle().set("background", "var(--lumo-contrast-5pct)");
+        panel.setWidthFull();
+
+        Span titleSpan = new Span(title);
+        titleSpan.addClassNames(LumoUtility.FontSize.SMALL, LumoUtility.FontWeight.BOLD, LumoUtility.TextColor.SECONDARY);
+        titleSpan.getStyle().set("margin-bottom", "8px");
+
+        Span contentSpan = new Span(content != null && !content.trim().isEmpty() ? content : "No notes provided by the employee.");
+        contentSpan.addClassNames(LumoUtility.FontSize.MEDIUM);
+
+        panel.add(titleSpan, contentSpan);
+        return panel;
+    }
+
+    private Component createImpactCard(LeaveType leaveType, BigDecimal available, BigDecimal duration, BigDecimal remaining) {
+        VerticalLayout card = new VerticalLayout();
+        card.setPadding(true);
+        card.setSpacing(false);
+        card.getStyle().set("border", "1px solid var(--lumo-contrast-20pct)");
+        card.getStyle().set("border-radius", "8px");
+
+        Span title = new Span("Balance Impact: " + leaveType.getCode());
+        title.addClassNames(LumoUtility.FontSize.SMALL, LumoUtility.FontWeight.BOLD, LumoUtility.TextColor.SECONDARY);
+        title.getStyle().set("margin-bottom", "16px");
+
+        HorizontalLayout mathLayout = new HorizontalLayout();
+        mathLayout.setWidthFull();
+        mathLayout.setJustifyContentMode(FlexComponent.JustifyContentMode.BETWEEN);
+
+        // Column 1: Available
+        VerticalLayout availCol = new VerticalLayout(new Span("Available"), new Span(available.toPlainString()));
+        availCol.setPadding(false);
+        availCol.setSpacing(false);
+        availCol.setAlignItems(FlexComponent.Alignment.CENTER);
+        ((Span) availCol.getComponentAt(0)).addClassNames(LumoUtility.FontSize.XSMALL, LumoUtility.TextColor.SECONDARY);
+        ((Span) availCol.getComponentAt(1)).addClassNames(LumoUtility.FontSize.LARGE, LumoUtility.FontWeight.BOLD);
+
+        Span minus = new Span("-");
+        minus.addClassNames(LumoUtility.FontSize.LARGE, LumoUtility.FontWeight.BOLD, LumoUtility.TextColor.SECONDARY);
+        minus.getStyle().set("margin-top", "16px");
+
+        // Column 2: Duration
+        VerticalLayout durCol = new VerticalLayout(new Span("Deduction"), new Span(duration.toPlainString()));
+        durCol.setPadding(false);
+        durCol.setSpacing(false);
+        durCol.setAlignItems(FlexComponent.Alignment.CENTER);
+        ((Span) durCol.getComponentAt(0)).addClassNames(LumoUtility.FontSize.XSMALL, LumoUtility.TextColor.SECONDARY);
+        ((Span) durCol.getComponentAt(1)).addClassNames(LumoUtility.FontSize.LARGE, LumoUtility.FontWeight.BOLD);
+
+        Span equals = new Span("=");
+        equals.addClassNames(LumoUtility.FontSize.LARGE, LumoUtility.FontWeight.BOLD, LumoUtility.TextColor.SECONDARY);
+        equals.getStyle().set("margin-top", "16px");
+
+        // Column 3: Remaining
+        VerticalLayout remCol = new VerticalLayout(new Span("Remaining"), new Span(remaining.toPlainString()));
+        remCol.setPadding(false);
+        remCol.setSpacing(false);
+        remCol.setAlignItems(FlexComponent.Alignment.CENTER);
+        ((Span) remCol.getComponentAt(0)).addClassNames(LumoUtility.FontSize.XSMALL, LumoUtility.TextColor.SECONDARY);
+        ((Span) remCol.getComponentAt(1)).addClassNames(LumoUtility.FontSize.LARGE, LumoUtility.FontWeight.BOLD);
+
+        // Highlight Remaining in Red if negative
+        if (remaining.compareTo(BigDecimal.ZERO) < 0) {
+            ((Span) remCol.getComponentAt(1)).getStyle().set("color", "var(--lumo-error-text-color)");
+        } else {
+            ((Span) remCol.getComponentAt(1)).getStyle().set("color", "var(--lumo-success-text-color)");
+        }
+
+        mathLayout.add(availCol, minus, durCol, equals, remCol);
+        card.add(title, mathLayout);
+
+        return card;
+    }
+
+    private Component createStatusBanner(BigDecimal remainingAfterApproval) {
+        HorizontalLayout banner = new HorizontalLayout();
+        banner.setWidthFull();
+        banner.setPadding(true);
+        banner.setAlignItems(FlexComponent.Alignment.CENTER);
+        banner.getStyle().set("border-radius", "8px");
+
+        Icon icon;
+        Span text;
+
+        if (remainingAfterApproval.compareTo(BigDecimal.ZERO) < 0) {
+            banner.getStyle().set("background", "var(--lumo-error-color-10pct)");
+            banner.getStyle().set("color", "var(--lumo-error-text-color)");
+            icon = VaadinIcon.WARNING.create();
+            text = new Span("Insufficient balance. Approval disabled.");
+        } else {
+            banner.getStyle().set("background", "var(--lumo-success-color-10pct)");
+            banner.getStyle().set("color", "var(--lumo-success-text-color)");
+            icon = VaadinIcon.CHECK_CIRCLE.create();
+            text = new Span("Sufficient balance to approve.");
+        }
+
+        icon.setSize("20px");
+        text.addClassNames(LumoUtility.FontSize.SMALL, LumoUtility.FontWeight.BOLD);
+
+        banner.add(icon, text);
+        return banner;
     }
 }

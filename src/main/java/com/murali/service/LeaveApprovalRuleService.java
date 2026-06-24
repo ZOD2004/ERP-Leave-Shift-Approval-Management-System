@@ -110,10 +110,6 @@ public class LeaveApprovalRuleService {
         return ruleRepository.findByPolicyAndDuration(policy.getId(), duration);
     }
 
-    public List<LeaveType> getAllLeaveTypes() {
-        return leaveTypeRepository.findAll();
-    }
-
     public List<Role> getAllRoles() {
         return roleRepository.findAll();
     }

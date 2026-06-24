@@ -1,29 +1,20 @@
 package com.murali.views;
 
 import com.murali.entity.NavMenuItem;
-import com.murali.entity.User;
 import com.murali.service.NavigationService;
 import com.murali.util.SecurityService;
 import com.vaadin.flow.component.applayout.AppLayout;
-import com.vaadin.flow.component.avatar.Avatar;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
-import com.vaadin.flow.component.contextmenu.MenuItem;
-import com.vaadin.flow.component.contextmenu.SubMenu;
-import com.vaadin.flow.component.html.Footer;
 import com.vaadin.flow.component.html.H1;
 import com.vaadin.flow.component.html.Span;
-import com.vaadin.flow.component.icon.Icon;
 import com.vaadin.flow.component.icon.VaadinIcon;
-import com.vaadin.flow.component.menubar.MenuBar;
-import com.vaadin.flow.component.menubar.MenuBarVariant;
 import com.vaadin.flow.component.orderedlayout.FlexComponent;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.Scroller;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.sidenav.SideNav;
 import com.vaadin.flow.component.sidenav.SideNavItem;
-import com.vaadin.flow.theme.Theme;
 import com.vaadin.flow.theme.lumo.LumoUtility;
 import jakarta.annotation.security.PermitAll;
 import org.springframework.security.core.Authentication;
@@ -31,7 +22,6 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.authentication.logout.SecurityContextLogoutHandler;
 
 import java.util.List;
-
 
 @PermitAll
 public class MainLayout extends AppLayout {
@@ -84,7 +74,7 @@ public class MainLayout extends AppLayout {
 
         if (securityService.getPrincipal() != null) {
             currentUsername = securityService.getPrincipal().getUsername();
-            currentRole = securityService.getPrincipal().getRole();
+            currentRole = formatRoleName(securityService.getPrincipal().getRole());
         }
 
         Span nameSpan = new Span(currentUsername);
@@ -105,7 +95,6 @@ public class MainLayout extends AppLayout {
             logoutHandler.logout(com.vaadin.flow.server.VaadinServletRequest.getCurrent().getHttpServletRequest(), null, null);
         });
         logoutButton.addThemeVariants(ButtonVariant.LUMO_TERTIARY, ButtonVariant.LUMO_ERROR);
-        logoutButton.addThemeVariants(ButtonVariant.LUMO_TERTIARY, ButtonVariant.LUMO_ERROR);
         logoutButton.setTooltipText("Log out");
 
         HorizontalLayout userHeaderMenu = new HorizontalLayout(profileClickZone, logoutButton);
@@ -121,4 +110,35 @@ public class MainLayout extends AppLayout {
         addToNavbar(true, topRow);
     }
 
+    private String formatRoleName(String rawRole) {
+        if (rawRole == null || rawRole.trim().isEmpty()) {
+            return "Unknown Role";
+        }
+
+        switch (rawRole.toUpperCase()) {
+            case "ROLE_SUPER_ADMIN":
+                return "Super Admin";
+            case "ROLE_HR_ADMIN":
+                return "HR Admin";
+            case "ROLE_EMPLOYEE":
+                return "Employee";
+            case "ROLE_MANAGER":
+                return "Manager";
+            case "ROLE_AUDITOR":
+                return "Auditor";
+            case "ROLE_DEPT_HEAD":
+                return "Department Head";
+            default:
+                String cleanString = rawRole.replaceFirst("^ROLE_", "").replace("_", " ");
+                String[] words = cleanString.split(" ");
+                StringBuilder formatted = new StringBuilder();
+                for (String word : words) {
+                    if (!word.isEmpty()) {
+                        formatted.append(Character.toUpperCase(word.charAt(0))).append(word.substring(1).toLowerCase()).append(" ");
+                    }
+                }
+                return formatted.toString().trim();
+
+        }
+    }
 }

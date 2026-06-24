@@ -46,7 +46,6 @@ import java.util.List;
 @Route(value = "apply-leave", layout = MainLayout.class)
 public class LeaveApplicationView extends VerticalLayout {
 
-    // Services
     private final LeaveRequestService leaveRequestService;
     private final LeaveTypeService leaveTypeService;
     private final DurationEngineService durationEngineService;
@@ -86,6 +85,9 @@ public class LeaveApplicationView extends VerticalLayout {
         startSessionBox.setItems(LeaveSession.values());
         endSessionBox.setItems(LeaveSession.values());
         leaveType.setItems(leaveTypeService.getAvailableLeaveTypes());
+        leaveType.setItems(leaveTypeService.getAvailableLeaveTypes().stream()
+                .filter(lt -> !lt.getName().trim().equalsIgnoreCase("Unpaid Leave"))
+                .toList());
         setupBinder();
         setupDateCalculations();
         refreshBalanceAndHistory();
@@ -278,8 +280,9 @@ public class LeaveApplicationView extends VerticalLayout {
 
         this.currentDraft = draftToEdit;
 
-        // 1. Initialize Form Components
-        leaveType.setItems(leaveTypeService.getAvailableLeaveTypes());
+        leaveType.setItems(leaveTypeService.getAvailableLeaveTypes().stream()
+                .filter(lt -> !lt.getName().trim().equalsIgnoreCase("Unpaid Leave"))
+                .toList());
         leaveType.setItemLabelGenerator(LeaveType::getName);
 
         durationDays.setReadOnly(true);
@@ -444,14 +447,13 @@ public class LeaveApplicationView extends VerticalLayout {
                 startSessionBox.setLabel("Day Session");
                 startSessionBox.setItems(LeaveSession.FULL_DAY, LeaveSession.FIRST_HALF, LeaveSession.SECOND_HALF);
             } else {
-                // Multi-day leave: Show both dropdowns with restricted options
                 endSessionBox.setVisible(true);
 
                 startSessionBox.setLabel("Start Date Session");
-                startSessionBox.setItems(LeaveSession.FULL_DAY, LeaveSession.SECOND_HALF);
+                startSessionBox.setItems(LeaveSession.FIRST_HALF, LeaveSession.SECOND_HALF);
 
                 endSessionBox.setLabel("End Date Session");
-                endSessionBox.setItems(LeaveSession.FULL_DAY, LeaveSession.FIRST_HALF);
+                endSessionBox.setItems(LeaveSession.FIRST_HALF, LeaveSession.SECOND_HALF);
             }
         }
         calculateDuration();
@@ -537,6 +539,9 @@ public class LeaveApplicationView extends VerticalLayout {
         List<LeaveBalance> balances = leaveBalanceService.getBalancesForEmployee(currentEmployee.getId(), LocalDate.now().getYear());
 
         for (LeaveBalance balance : balances) {
+            if (balance.getLeaveType().getName().trim().equalsIgnoreCase("Unpaid Leave")) {
+                continue;
+            }
             BigDecimal total = balance.getTotalEntitled();
             BigDecimal remaining = leaveBalanceService.getEffectiveBalance(balance);
             double used = total.subtract(remaining).doubleValue();

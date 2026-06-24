@@ -377,9 +377,16 @@ public class AdminConfigurationView extends VerticalLayout {
         tierContext.minField.setWidth("120px");
         if (min != null) tierContext.minField.setValue(min.doubleValue());
 
-        tierContext.maxField = new NumberField("Max Days");
-        tierContext.maxField.setWidth("150px");
-        if (max != null) tierContext.maxField.setValue(max.doubleValue());
+        // UPDATE: Make Max Days optional and show Infinity placeholder
+        tierContext.maxField = new NumberField("Max Days (Empty = ∞)");
+        tierContext.maxField.setWidth("180px");
+        tierContext.maxField.setPlaceholder("∞ (Infinity)");
+        tierContext.maxField.setClearButtonVisible(true);
+
+        // Only fill the field if it's less than our infinity threshold (99.0)
+        if (max != null && max.doubleValue() < 99.0) {
+            tierContext.maxField.setValue(max.doubleValue());
+        }
 
         Button removeTierBtn = new Button(VaadinIcon.TRASH.create(), e -> {
             container.remove(tierCard);
@@ -449,14 +456,18 @@ public class AdminConfigurationView extends VerticalLayout {
             return null;
         }
 
+        double highestMaxFound = -1.0;
+
         for (TierUIContext context : memoryTiers) {
-            if (context.minField.getValue() == null || context.maxField.getValue() == null) {
-                Notification.show("All Min and Max day fields must be filled.", 3000, Notification.Position.MIDDLE).addThemeVariants(NotificationVariant.LUMO_ERROR);
+            if (context.minField.getValue() == null) {
+                Notification.show("All Min day fields must be filled.", 3000, Notification.Position.MIDDLE).addThemeVariants(NotificationVariant.LUMO_ERROR);
                 return null;
             }
 
             double min = context.minField.getValue();
-            double max = context.maxField.getValue();
+
+            // UPDATE: If Max is empty, treat it as Infinity (999.0)
+            double max = context.maxField.getValue() != null ? context.maxField.getValue() : 999.0;
 
             if (min > max) {
                 Notification.show("Min days (" + min + ") cannot be greater than Max days (" + max + ").", 4000, Notification.Position.MIDDLE).addThemeVariants(NotificationVariant.LUMO_ERROR);
@@ -465,11 +476,15 @@ public class AdminConfigurationView extends VerticalLayout {
 
             for (double[] existingRange : durationRanges) {
                 if (min <= existingRange[1] && max >= existingRange[0]) {
-                    Notification.show("Duration groups cannot overlap! Group (" + min + " to " + max + ") conflicts with another.", 5000, Notification.Position.MIDDLE).addThemeVariants(NotificationVariant.LUMO_ERROR);
+                    Notification.show("Duration groups cannot overlap! Group (" + min + " to " + (max >= 99.0 ? "∞" : max) + ") conflicts with another.", 5000, Notification.Position.MIDDLE).addThemeVariants(NotificationVariant.LUMO_ERROR);
                     return null;
                 }
             }
             durationRanges.add(new double[]{min, max});
+
+            if (max > highestMaxFound) {
+                highestMaxFound = max;
+            }
 
             int levelSequence = 1;
             boolean hasApprovers = false;
@@ -487,13 +502,22 @@ public class AdminConfigurationView extends VerticalLayout {
             }
 
             if (!hasApprovers) {
-                Notification.show("Duration group (" + min + " to " + max + " days) is missing approvers.", 4000, Notification.Position.MIDDLE).addThemeVariants(NotificationVariant.LUMO_ERROR);
+                Notification.show("Duration group (" + min + " to " + (max >= 99.0 ? "∞" : max) + " days) is missing approvers.", 4000, Notification.Position.MIDDLE).addThemeVariants(NotificationVariant.LUMO_ERROR);
                 return null;
             }
         }
+
+        if (highestMaxFound < 999.0) {
+            for (LeaveApprovalRule rule : newRules) {
+                if (rule.getMaxDays().doubleValue() == highestMaxFound) {
+                    rule.setMaxDays(BigDecimal.valueOf(999.0));
+                }
+            }
+            Notification.show("Note: The final duration group was automatically extended to ∞ to prevent gaps.", 5000, Notification.Position.BOTTOM_END).addThemeVariants(NotificationVariant.LUMO_SUCCESS);
+        }
+
         return newRules;
     }
-
     private void refreshPolicies() {
         policyGrid.setItems(ruleService.getAllPolicies());
     }

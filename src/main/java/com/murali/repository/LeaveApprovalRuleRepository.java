@@ -26,7 +26,4 @@ public interface LeaveApprovalRuleRepository extends JpaRepository<LeaveApproval
     @EntityGraph(attributePaths = {"policy", "requiredRole"})
     @Query("SELECT r FROM LeaveApprovalRule r WHERE r.policy.id = :policyId " + "AND :duration >= r.minDays AND :duration <= r.maxDays " + "ORDER BY r.approvalLevel ASC")
     List<LeaveApprovalRule> findByPolicyAndDuration(@Param("policyId") Long policyId, @Param("duration") BigDecimal duration);
-    @Modifying
-    @Query("DELETE FROM LeaveApprovalRule r WHERE r.policy.id = :policyId")
-    void deleteByPolicyId(@Param("policyId") Long policyId);
 }

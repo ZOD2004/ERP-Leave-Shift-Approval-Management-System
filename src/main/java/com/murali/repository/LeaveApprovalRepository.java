@@ -24,11 +24,12 @@ public interface LeaveApprovalRepository extends JpaRepository<LeaveApproval, Lo
 
     List<LeaveApproval> findByLeaveRequestIdAndAction(Long leaveRequestId, String action);
 
-    @EntityGraph(attributePaths = {"leaveRequest.leaveType", "leaveRequest.employee"})
+    @EntityGraph(attributePaths = {"leaveRequest.leaveType", "leaveRequest.employee", "leaveRequest.employee.department", "leaveRequest.mergedLeaves", "leaveRequest.parentLeave"})
     @Query("SELECT a FROM LeaveApproval a " + "JOIN a.leaveRequest r " + "WHERE a.approver.id = :approverId " + "AND a.action = 'PENDING' " + "AND a.approvalType = :origType " + "AND a.approvalLevel = r.currentLevel " + "AND (r.cancellationStatus IS NULL OR r.cancellationStatus IN :safeStatuses)")
     List<LeaveApproval> findPendingOriginalApprovals(@Param("approverId") Long approverId, @Param("origType") ApprovalType origType, @Param("safeStatuses") List<CancellationStatus> safeStatuses);
 
-    @EntityGraph(attributePaths = {"leaveRequest.leaveType", "leaveRequest.employee"})
+
+    @EntityGraph(attributePaths = {"leaveRequest.leaveType", "leaveRequest.employee", "leaveRequest.employee.department", "leaveRequest.mergedLeaves", "leaveRequest.parentLeave"})
     @Query("SELECT a FROM LeaveApproval a " + "JOIN a.leaveRequest r " + "WHERE a.approver.id = :approverId " + "AND a.action = 'PENDING' " + "AND a.approvalType = :cancelType " + "AND r.cancellationStatus = :pendingStatus")
     List<LeaveApproval> findPendingCancellationApprovals(@Param("approverId") Long approverId, @Param("cancelType") ApprovalType cancelType, @Param("pendingStatus") CancellationStatus pendingStatus);
 
