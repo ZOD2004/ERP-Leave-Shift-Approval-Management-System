@@ -371,5 +371,4 @@ public class EmployeeService {
                 .filter(e -> e.getUser() != null && e.getUser().getRole() != null && e.getUser().getRole().getHierarchyWeight() >= minimumWeight)
                 .collect(Collectors.toList());
     }
-
 }

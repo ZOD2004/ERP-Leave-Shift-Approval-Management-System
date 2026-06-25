@@ -76,7 +76,7 @@ public class AuditDashboardView extends VerticalLayout {
         kpiLayout.setWidthFull();
         kpiLayout.setSpacing(true);
 
-        long manualOverrides = dashboardService.getManualOverridesCount();
+//        long manualOverrides = dashboardService.getManualOverridesCount();
         long missingPunches = dashboardService.getMissingPunchesCount();
         long escalatedApprovals = dashboardService.getEscalatedApprovalsCount();
 
@@ -84,7 +84,7 @@ public class AuditDashboardView extends VerticalLayout {
 //        long negativeBalances = dashboardService.getNegativeBalancesCount();
 
         kpiLayout.add(
-                createCard("Manual Overrides", String.valueOf(manualOverrides), "Shifts with override_applied"),
+//                createCard("Manual Overrides", String.valueOf(manualOverrides), "Shifts with override_applied"),
                 createCard("Missing Punches", String.valueOf(missingPunches), "Records with MISSING_CHECKOUT"),
                 createCard("Escalated Approvals", String.valueOf(escalatedApprovals), "Level 3+ Leave Requests")
         );

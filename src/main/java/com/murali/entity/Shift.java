@@ -9,7 +9,9 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.time.LocalTime;
+import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 @Getter
@@ -50,6 +52,13 @@ public class Shift {
 
     @Column(name = "second_half_start_time")
     private LocalTime secondHalfStartTime;
+
+    @Column(name = "is_rotational_shift", nullable = false)
+    private Boolean isRotationalShift = false;
+
+    @OneToMany(mappedBy = "parentShift", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OrderBy("sequenceOrder ASC")
+    private List<RotationSequence> rotationSequences = new ArrayList<>();
 
 
     @ElementCollection(fetch = FetchType.EAGER)

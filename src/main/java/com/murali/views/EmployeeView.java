@@ -10,6 +10,7 @@ import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.combobox.ComboBox;
 import com.vaadin.flow.component.combobox.MultiSelectComboBox;
+import com.vaadin.flow.component.datepicker.DatePicker;
 import com.vaadin.flow.component.dialog.Dialog;
 import com.vaadin.flow.component.formlayout.FormLayout;
 import com.vaadin.flow.component.grid.Grid;
@@ -75,6 +76,7 @@ public class EmployeeView extends VerticalLayout {
     private Employee currentEmployee;
     private User currentUser;
     private boolean isExistingUserLinked = false;
+    private Shift originalShift;
 
     public EmployeeView(EmployeeService employeeService, DepartmentService deptService, RoleService roleService, LeaveTypeRepository leaveTypeRepository, ShiftService shiftService, LeaveBalanceService leaveBalanceService) {
         this.employeeService = employeeService;
@@ -129,7 +131,7 @@ public class EmployeeView extends VerticalLayout {
 
         department.setItems(deptService.findAll());
         department.setItemLabelGenerator(Department::getName);
-        role.setItemLabelGenerator(Role::getName);
+        role.setItemLabelGenerator(r -> formatRoleName(r.getName()));
         manager.setItemLabelGenerator(e -> e.getFirstName() + " (" + e.getEmployeeCode() + ")");
         manager.setClearButtonVisible(true);
         defaultShift.setItems(shiftService.findAll());
@@ -191,6 +193,7 @@ public class EmployeeView extends VerticalLayout {
     private void openForm(Employee employee, User user) {
         currentEmployee = employee;
         currentUser = user;
+        originalShift = employee.getDefaultShift();
 
         List<Role> allRoles = roleService.getRoles();
         boolean isCurrentSuperAdmin = user.getRole() != null && "ROLE_SUPER_ADMIN".equals(user.getRole().getName());
@@ -243,6 +246,66 @@ public class EmployeeView extends VerticalLayout {
             employeeBinder.writeBean(currentEmployee);
             Set<LeaveType> selectedLeaves = applicableLeavesField.getValue();
 
+            // CHECK FOR SHIFT CHANGE
+            boolean isExistingEmployee = currentEmployee.getId() != null;
+            Shift newShift = currentEmployee.getDefaultShift();
+
+            boolean shiftChanged = isExistingEmployee
+                    && newShift != null
+                    && (originalShift == null || !originalShift.getId().equals(newShift.getId()));
+
+            if (shiftChanged) {
+                openShiftEffectiveDateDialog(selectedLeaves);
+            } else {
+                // New employee or shift didn't change, just save
+                if (!isExistingEmployee && currentEmployee.getShiftEffectiveDate() == null) {
+                    currentEmployee.setShiftEffectiveDate(LocalDate.now()); // Default new hires to today
+                }
+                executeFinalSave(selectedLeaves);
+            }
+
+        } catch (ValidationException ex) {
+            showNotification("Please fill in all required fields correctly.", NotificationVariant.LUMO_ERROR);
+        } catch (Exception ex) {
+            showNotification("Error: " + ex.getMessage(), NotificationVariant.LUMO_ERROR);
+        }
+    }
+    private void openShiftEffectiveDateDialog(Set<LeaveType> selectedLeaves) {
+        Dialog dialog = new Dialog();
+        dialog.setHeaderTitle("Shift Change Detected");
+
+        Paragraph warning = new Paragraph("You have changed this employee's default shift. Please select when this new schedule should take effect.");
+
+        DatePicker effectiveDatePicker = new DatePicker("Effective Date");
+
+        // Default to today, or maintain the old date if one existed
+        if (currentEmployee.getShiftEffectiveDate() != null) {
+            effectiveDatePicker.setValue(currentEmployee.getShiftEffectiveDate());
+        } else {
+            effectiveDatePicker.setValue(LocalDate.now());
+        }
+
+        Button confirmBtn = new Button("Confirm & Save", e -> {
+            if (effectiveDatePicker.getValue() == null) {
+                showNotification("Effective date is required.", NotificationVariant.LUMO_ERROR);
+                return;
+            }
+
+            currentEmployee.setShiftEffectiveDate(effectiveDatePicker.getValue());
+            dialog.close();
+            executeFinalSave(selectedLeaves);
+        });
+        confirmBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+
+        Button cancelBtn = new Button("Cancel", e -> dialog.close());
+
+        dialog.add(warning, effectiveDatePicker);
+        dialog.getFooter().add(cancelBtn, confirmBtn);
+        dialog.open();
+    }
+
+    private void executeFinalSave(Set<LeaveType> selectedLeaves) {
+        try {
             employeeService.createOrUpdateEmployeeWithUser(currentEmployee, currentUser, isExistingUserLinked, selectedLeaves);
 
             showNotification("Saved successfully!", NotificationVariant.LUMO_SUCCESS);
@@ -259,13 +322,10 @@ public class EmployeeView extends VerticalLayout {
             openManagerDemotionDialog(ex);
         } catch (IllegalStateException ex) {
             showNotification(ex.getMessage(), NotificationVariant.LUMO_ERROR);
-        } catch (ValidationException ex) {
-            showNotification("Please fill in all required fields correctly.", NotificationVariant.LUMO_ERROR);
         } catch (Exception ex) {
             showNotification("Error: " + ex.getMessage(), NotificationVariant.LUMO_ERROR);
         }
     }
-
     private void openHodSwapDialog(HodConflictException ex) {
         Dialog dialog = new Dialog();
         dialog.setHeaderTitle("HOD Conflict");
@@ -464,5 +524,37 @@ public class EmployeeView extends VerticalLayout {
     private void showNotification(String message, NotificationVariant variant) {
         Notification notification = Notification.show(message, 3000, Notification.Position.TOP_CENTER);
         notification.addThemeVariants(variant);
+    }
+
+    private String formatRoleName(String rawRole) {
+        if (rawRole == null || rawRole.trim().isEmpty()) {
+            return "Unknown Role";
+        }
+
+        switch (rawRole.toUpperCase()) {
+            case "ROLE_SUPER_ADMIN":
+                return "Super Admin";
+            case "ROLE_HR_ADMIN":
+                return "HR Admin";
+            case "ROLE_EMPLOYEE":
+                return "Employee";
+            case "ROLE_MANAGER":
+                return "Manager";
+            case "ROLE_AUDITOR":
+                return "Auditor";
+            case "ROLE_DEPT_HEAD":
+                return "Department Head";
+            default:
+                String cleanString = rawRole.replaceFirst("^ROLE_", "").replace("_", " ");
+                String[] words = cleanString.split(" ");
+                StringBuilder formatted = new StringBuilder();
+                for (String word : words) {
+                    if (!word.isEmpty()) {
+                        formatted.append(Character.toUpperCase(word.charAt(0))).append(word.substring(1).toLowerCase()).append(" ");
+                    }
+                }
+                return formatted.toString().trim();
+
+        }
     }
 }

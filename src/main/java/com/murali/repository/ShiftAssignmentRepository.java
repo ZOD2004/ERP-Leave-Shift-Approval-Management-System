@@ -57,21 +57,8 @@ public interface ShiftAssignmentRepository extends JpaRepository<ShiftAssignment
 
     boolean existsByShiftId(Long id);
 
-    @Query("SELECT sa.shift.name, COUNT(sa) FROM ShiftAssignment sa WHERE :date BETWEEN sa.startDate AND sa.endDate GROUP BY sa.shift.name")
-    List<Object[]> countShiftsByDate(@Param("date") LocalDate date);
-
-    @Query("SELECT COUNT(sa) FROM ShiftAssignment sa WHERE sa.startDate = sa.endDate AND sa.startDate >= :start AND sa.endDate <= :end")
-    long countSingleDayHolePunches(@Param("start") LocalDate start, @Param("end") LocalDate end);
-
-
     @Query("SELECT sa FROM ShiftAssignment sa WHERE sa.employee.id = :employeeId AND :targetDate BETWEEN sa.startDate AND sa.endDate")
     Optional<ShiftAssignment> findAssignmentByEmployeeAndDate(@Param("employeeId") Long employeeId, @Param("targetDate") LocalDate targetDate);
-
-    @Query("SELECT sa FROM ShiftAssignment sa WHERE sa.employee.id IN :employeeIds AND :targetDate BETWEEN sa.startDate AND sa.endDate")
-    List<ShiftAssignment> findTodayAssignmentsForEmployees(@Param("employeeIds") List<Long> employeeIds, @Param("targetDate") LocalDate targetDate);
-
-    @Query("SELECT sa FROM ShiftAssignment sa WHERE sa.employee.id = :employeeId AND :targetDate BETWEEN sa.startDate AND sa.endDate")
-    Optional<ShiftAssignment> findByEmployeeIdAndAssignmentDate(@Param("employeeId") Long employeeId, @Param("targetDate") LocalDate targetDate);
 
     @EntityGraph(attributePaths = {"employee", "shift"})
     @Query("SELECT sa FROM ShiftAssignment sa WHERE LOWER(sa.employee.firstName) LIKE LOWER(CONCAT('%', :employeeName, '%')) AND sa.endDate >= CURRENT_DATE")

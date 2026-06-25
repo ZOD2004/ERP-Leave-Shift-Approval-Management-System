@@ -45,8 +45,8 @@ public class Employee{
     @JoinColumn(name = "default_shift_id")
     private Shift defaultShift;
 
-    @Column(name = "default_shift_generated_until")
-    private LocalDate defaultShiftGeneratedUntil;
+    @Column(name = "shift_effective_date")
+    private LocalDate shiftEffectiveDate;
 
     //removed Set<LeaveType> applicableLeaveTypes since leave Balance already has this data in it
 

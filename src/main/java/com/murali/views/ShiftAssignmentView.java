@@ -224,13 +224,12 @@ public class ShiftAssignmentView extends VerticalLayout {
             Button deleteBtn = new Button(new Icon(VaadinIcon.TRASH));
             deleteBtn.addThemeVariants(ButtonVariant.LUMO_TERTIARY, ButtonVariant.LUMO_ERROR);
 
-            // FIX: Disable Edit and Delete completely for past and today
+            editBtn.addClickListener(e -> openListEditDialog(assignment));
+
             if (!assignment.getStartDate().isAfter(LocalDate.now())) {
-                editBtn.setEnabled(false);
                 deleteBtn.setEnabled(false);
-                editBtn.getElement().setProperty("title", "Locked: Past or active shifts cannot be modified");
+                deleteBtn.getElement().setProperty("title", "Locked: Past or active shifts cannot be deleted");
             } else {
-                editBtn.addClickListener(e -> openListEditDialog(assignment));
                 deleteBtn.addClickListener(e -> openPartialDeleteDialog(assignment, assignment.getStartDate(), assignment.getEndDate()));
             }
 
@@ -376,7 +375,7 @@ public class ShiftAssignmentView extends VerticalLayout {
                 endDatePicker.clear();
                 employeeCombo.setReadOnly(false);
                 singleDatePicker.setReadOnly(false);
-                shiftCombo.setItems(shiftService.getShifts());
+                shiftCombo.setItems(shiftService.getStandardShifts());
                 dialogTabs.setVisible(true);
             }
         });
@@ -384,7 +383,7 @@ public class ShiftAssignmentView extends VerticalLayout {
         employeeCombo.setItems(employeeService.findAllActive());
         employeeCombo.setItemLabelGenerator(Employee::getFirstName);
 
-        shiftCombo.setItems(shiftService.getShifts());
+        shiftCombo.setItems(shiftService.getStandardShifts());
         shiftCombo.setItemLabelGenerator(shift -> shift.getName() + " (" + shift.getStartTime().format(TIME_FORMATTER) + " - " + shift.getEndTime().format(TIME_FORMATTER) + ")");
 
         FormLayout singleForm = new FormLayout(singleDatePicker);
@@ -743,7 +742,7 @@ public class ShiftAssignmentView extends VerticalLayout {
         editDialog.setHeaderTitle("Edit Shift for " + assignment.getEmployeeName());
 
         ComboBox<Shift> shiftCombo = new ComboBox<>("Shift");
-        shiftCombo.setItems(shiftService.getShifts());
+        shiftCombo.setItems(shiftService.getStandardShifts());
         shiftCombo.setItemLabelGenerator(shift -> shift.getName() + " (" + shift.getStartTime().format(TIME_FORMATTER) + " - " + shift.getEndTime().format(TIME_FORMATTER) + ")");
         shiftService.getShiftById(assignment.getShiftId()).ifPresent(shiftCombo::setValue);
 
@@ -884,7 +883,9 @@ public class ShiftAssignmentView extends VerticalLayout {
 
 
         String dayName = cell.getDate().getDayOfWeek().name();
-        List<Shift> validShifts = shiftService.getShifts().stream().filter(s -> s.getWorkingDays().stream().anyMatch(wd -> wd.name().equalsIgnoreCase(dayName))).toList();
+        List<Shift> validShifts = shiftService.getStandardShifts().stream()
+                .filter(s -> s.getWorkingDays().stream().anyMatch(wd -> wd.name().equalsIgnoreCase(dayName)))
+                .toList();
         shiftCombo.setItems(validShifts);
 
         assignmentDialog.open();
@@ -895,19 +896,34 @@ public class ShiftAssignmentView extends VerticalLayout {
         editDialog.setHeaderTitle("Edit Assignment Block for " + assignment.getEmployeeName());
 
         ComboBox<Shift> shiftCombo = new ComboBox<>("Shift");
-        shiftCombo.setItems(shiftService.getShifts());
+        shiftCombo.setItems(shiftService.getStandardShifts());
         shiftCombo.setItemLabelGenerator(shift -> shift.getName() + " (" + shift.getStartTime().format(TIME_FORMATTER) + " - " + shift.getEndTime().format(TIME_FORMATTER) + ")");
         shiftService.getShiftById(assignment.getShiftId()).ifPresent(shiftCombo::setValue);
 
-        DatePicker startPicker = new DatePicker("Start Date");
-        startPicker.setValue(assignment.getStartDate());
-        // Prevent moving the start date into the past
-        LocalDate minSelectable = assignment.getStartDate().isBefore(LocalDate.now()) ? assignment.getStartDate() : LocalDate.now().plusDays(1);
+        // --- SMART DATE PICKER LOGIC ---
+        LocalDate today = LocalDate.now();
+        LocalDate originalStart = assignment.getStartDate();
+        LocalDate originalEnd = assignment.getEndDate();
+
+        // If the assignment started in the past, force the edit to apply from tomorrow onwards
+        LocalDate minSelectable = originalStart.isAfter(today) ? originalStart : today.plusDays(1);
+
+        DatePicker startPicker = new DatePicker("Effective Start Date");
         startPicker.setMin(minSelectable);
 
+        if (!originalStart.isAfter(today)) {
+            startPicker.setValue(minSelectable);
+            startPicker.setHelperText("Original start date was in the past. Edits will apply from tomorrow onwards, preserving past attendance.");
+        } else {
+            startPicker.setValue(originalStart);
+        }
+
         DatePicker endPicker = new DatePicker("End Date");
-        endPicker.setValue(assignment.getEndDate());
-        endPicker.setMin(assignment.getStartDate());
+        // Ensure the end date picker doesn't crash if the new forced start date is past the original end date
+        LocalDate defaultEnd = originalEnd.isBefore(startPicker.getValue()) ? startPicker.getValue() : originalEnd;
+        endPicker.setValue(defaultEnd);
+        endPicker.setMin(startPicker.getValue());
+        // -------------------------------
 
         // Keep dates cascading correctly
         startPicker.addValueChangeListener(e -> {
@@ -931,12 +947,12 @@ public class ShiftAssignmentView extends VerticalLayout {
             }
 
             try {
-                // Update the DTO with the new values
+                // Update the DTO with the new boundaries
                 assignment.setShiftId(shiftCombo.getValue().getId());
                 assignment.setStartDate(startPicker.getValue());
                 assignment.setEndDate(endPicker.getValue());
 
-                // Call the block-level update service method!
+                // Call the smart split-and-update backend method!
                 assignmentService.updateSingleAssignment(assignment);
 
                 showNotification("Assignment block updated successfully.", NotificationVariant.LUMO_SUCCESS);

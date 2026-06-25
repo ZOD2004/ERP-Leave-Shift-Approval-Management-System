@@ -8,6 +8,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -70,23 +71,42 @@ public class ShiftService {
     }
 
     private void validateAndPrepareShift(Shift shift) {
-        if (shift.getWorkingDays() == null || shift.getWorkingDays().isEmpty()) {
-            throw new IllegalArgumentException("At least one working day is required.");
-        }
-
-        if (shift.getStartTime().equals(shift.getEndTime())) {
-            throw new IllegalArgumentException("Start time and end time cannot be the same.");
-        }
-
+        // Name validation applies to all shifts
         shiftRepository.findByNameIgnoreCase(shift.getName()).ifPresent(existingShift -> {
             if (shift.getId() == null || !existingShift.getId().equals(shift.getId())) {
                 throw new IllegalArgumentException("A shift with the name '" + shift.getName() + "' already exists.");
             }
         });
 
+        // If it's a Rotational Shift container, skip standard time/day validations
+        if (Boolean.TRUE.equals(shift.getIsRotationalShift())) {
+            shift.setCrossesMidnight(false);
+
+            // --- THE FIX: Satisfy the database NOT NULL constraints ---
+            // We inject dummy times so the database doesn't crash.
+            // The Schedule Engine ignores these and uses the Sequence times instead.
+            shift.setStartTime(LocalTime.MIDNIGHT);
+            shift.setEndTime(LocalTime.MIDNIGHT);
+            // ----------------------------------------------------------
+
+            return;
+        }
+
+        // Standard Shift Validations
+        if (shift.getWorkingDays() == null || shift.getWorkingDays().isEmpty()) {
+            throw new IllegalArgumentException("At least one working day is required.");
+        }
+
+        if (shift.getStartTime() == null || shift.getEndTime() == null) {
+            throw new IllegalArgumentException("Start time and end time are required for standard shifts.");
+        }
+
+        if (shift.getStartTime().equals(shift.getEndTime())) {
+            throw new IllegalArgumentException("Start time and end time cannot be the same.");
+        }
+
         boolean crosses = shift.getEndTime().isBefore(shift.getStartTime());
         shift.setCrossesMidnight(crosses);
-
     }
 
     public Optional<Shift> getShiftById(Long id){
@@ -99,5 +119,19 @@ public class ShiftService {
 
     public List<Shift> findAll() {
         return shiftRepository.findAll();
+    }
+    public List<Shift> getStandardShifts() {
+        return shiftRepository.findStandardShifts();
+    }
+    @Transactional(readOnly = true)
+    public Shift getShiftWithSequences(Long id) {
+        Shift shift = shiftRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Shift not found"));
+
+        if (shift.getRotationSequences() != null) {
+            shift.getRotationSequences().size();
+        }
+
+        return shift;
     }
 }

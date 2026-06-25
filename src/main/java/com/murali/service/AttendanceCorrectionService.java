@@ -1,5 +1,6 @@
 package com.murali.service;
 
+import com.murali.dto.DailyExpectedShift;
 import com.murali.entity.*;
 import com.murali.entity.enums.AttendanceStatus;
 import com.murali.repository.*;
@@ -12,7 +13,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
-
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -25,15 +25,14 @@ public class AttendanceCorrectionService {
     private final LeaveTypeRepository leaveTypeRepository;
     private final UserRepository userRepository;
     private final AuditLogService auditLogService;
-    private final SecurityService securityService;
     private final AttendanceProcessService attendanceProcessService;
-    private final LeaveRequestRepository leaveRequestRepository;
+    private final ScheduleCalculationService scheduleCalculationService;
 
     @Transactional
     public void evaluateAndRouteAnomaly(Attendance attendance) {
-        LeaveRequest leaveRequest = leaveRequestRepository.findApprovedLeaveForEmployeeOnDate(attendance.getEmployee().getId(), attendance.getAttendanceDate()).orElse(null);
+        DailyExpectedShift engineResult = scheduleCalculationService.calculateDailyShift(attendance.getEmployee(), attendance.getAttendanceDate());
 
-        attendanceProcessService.recalculateTimeline(attendance, attendance.getShiftAssignment().getShift(), leaveRequest);
+        attendanceProcessService.recalculateTimeline(attendance, engineResult);
 
         String currentStatus = attendance.getStatus() != null ? attendance.getStatus().toString() : "";
         if ("PRESENT".equals(currentStatus) || "HALF_DAY_LEAVE".equals(currentStatus)) {
@@ -65,7 +64,8 @@ public class AttendanceCorrectionService {
 
     @Transactional
     public void resolveCorrection(Long correctionId, String action, LocalDateTime manualCheckOutTime, String comments, Long actingUserId) {
-        AttendanceCorrection correction = correctionRepository.findById(correctionId).orElseThrow(() -> new IllegalArgumentException("Correction record not found"));
+        AttendanceCorrection correction = correctionRepository.findById(correctionId)
+                .orElseThrow(() -> new IllegalArgumentException("Correction record not found"));
 
         if (!correction.getApprover().getId().equals(actingUserId)) {
             throw new SecurityException("You are not authorized to resolve this anomaly.");
@@ -75,7 +75,7 @@ public class AttendanceCorrectionService {
         String oldStatus = correction.getStatus();
         String safeComments = (comments != null) ? comments.replace("\"", "\\\"") : "";
 
-        LeaveRequest leaveRequest = leaveRequestRepository.findApprovedLeaveForEmployeeOnDate(attendance.getEmployee().getId(), attendance.getAttendanceDate()).orElse(null);
+        DailyExpectedShift engineResult = scheduleCalculationService.calculateDailyShift(attendance.getEmployee(), attendance.getAttendanceDate());
 
         if ("APPROVED".equalsIgnoreCase(action)) {
             if (manualCheckOutTime == null) {
@@ -88,7 +88,8 @@ public class AttendanceCorrectionService {
             manualOut.setPunchType("OUT");
             manualOut.setSource("MANAGER_OVERRIDE");
             timeLogRepository.save(manualOut);
-            attendanceProcessService.recalculateTimeline(attendance, attendance.getShiftAssignment().getShift(), leaveRequest);
+
+            attendanceProcessService.recalculateTimeline(attendance, engineResult);
 
             correction.setResolvedCheckOutTime(manualCheckOutTime);
             correction.setStatus("APPROVED");
@@ -100,7 +101,7 @@ public class AttendanceCorrectionService {
 
         } else if ("REJECTED".equalsIgnoreCase(action)) {
 
-            attendanceProcessService.recalculateTimeline(attendance, attendance.getShiftAssignment().getShift(), leaveRequest);
+            attendanceProcessService.recalculateTimeline(attendance, engineResult);
 
             if (attendance.getTotalWorkedMinutes() > 0) {
                 attendance.setStatus(AttendanceStatus.PRESENT_PENALIZED);

@@ -1,5 +1,6 @@
 package com.murali.service;
 
+import com.murali.dto.DailyExpectedShift;
 import com.murali.entity.*;
 import com.murali.entity.enums.AttendanceStatus;
 import com.murali.entity.enums.LeaveSession;
@@ -23,15 +24,11 @@ import java.util.stream.Collectors;
 public class AttendanceCronJobService {
 
     private final AttendanceRepository attendanceRepository;
-    private final ShiftAssignmentRepository shiftAssignmentRepository;
     private final EmployeeRepository employeeRepository;
-    private final ShiftRotationPolicyRepository policyRepository;
-    private final HolidayRepository holidayRepository;
-    private final LeaveRequestRepository leaveRequestRepository;
     private final LeaveTypeRepository leaveTypeRepository;
     private final AttendanceCorrectionService attendanceCorrectionService;
     private final LeaveBalanceService leaveBalanceService;
-    private final ShiftRotationService shiftRotationService;
+    private final ScheduleCalculationService scheduleCalculationService;
 
     private LocalDateTime lastRunTime;
     private String lastRunStatus = "WAITING";
@@ -42,80 +39,75 @@ public class AttendanceCronJobService {
         LocalDateTime now = LocalDateTime.now();
         LocalDate today = LocalDate.now();
         LocalDate yesterday = today.minusDays(1);
-        List<LocalDate> datesToCheck = List.of(today, yesterday);
+        List<LocalDate> datesToCheck = List.of(yesterday, today);
 
         try {
             this.lastRunStatus = "RUNNING";
-            log.info("Starting Rolling Shift Sweeper at {}", now);
+            log.info("Starting Batch Schedule Sweeper at {}", now);
 
             List<Employee> activeEmployees = employeeRepository.findByActiveTrue();
             List<Long> empIds = activeEmployees.stream().map(Employee::getId).toList();
 
-            List<ShiftAssignment> assignments = shiftAssignmentRepository.findByEmployeeIdInAndDateRange(empIds, yesterday, today);
-            List<ShiftRotationPolicy> policies = policyRepository.findAllWithEmployee();
-            List<LeaveRequest> leaves = leaveRequestRepository.findApprovedLeavesForEmployeesInRange(empIds, "APPROVED", yesterday, today);
-            List<LocalDate> holidays = holidayRepository.findHolidayDatesBetween(yesterday, today);
+            // 1. Run the super-fast memory engine!
+            Map<Long, List<DailyExpectedShift>> expectedSchedules = scheduleCalculationService.calculateBatchShifts(activeEmployees, yesterday, today);
 
+            // 2. Fetch existing attendances
             List<Attendance> attendances = new ArrayList<>();
             for (LocalDate date : datesToCheck) {
                 attendances.addAll(attendanceRepository.findByEmployeeIdInAndAttendanceDate(empIds, date));
             }
-
-            Map<Long, Map<LocalDate, ShiftAssignment>> assignmentMap = buildAssignMap(assignments, datesToCheck);
             Map<Long, Map<LocalDate, Attendance>> attendanceMap = buildAttendanceMap(attendances);
-            Map<Long, List<LeaveRequest>> leaveMap = leaves.stream().collect(Collectors.groupingBy(lr -> lr.getEmployee().getId()));
-            Map<Long, ShiftRotationPolicy> policyMap = policies.stream().collect(Collectors.toMap(p -> p.getEmployee().getId(), p -> p, (p1, p2) -> p1));
 
-            for (LocalDate targetDate : datesToCheck) {
-                for (Employee emp : activeEmployees) {
-                    Long empId = emp.getId();
-                    ShiftAssignment assignment = assignmentMap.getOrDefault(empId, Collections.emptyMap()).get(targetDate);
-                    Attendance attendance = attendanceMap.getOrDefault(empId, Collections.emptyMap()).get(targetDate);
-                    List<LeaveRequest> empLeaves = leaveMap.getOrDefault(empId, Collections.emptyList());
+            // 3. Evaluate Reality vs. Engine Expectations
+            for (Employee emp : activeEmployees) {
+                Long empId = emp.getId();
+                List<DailyExpectedShift> expectations = expectedSchedules.getOrDefault(empId, Collections.emptyList());
 
-                    if (assignment != null) {
-                        processWorkingDay(emp, assignment, targetDate, attendance, empLeaves, now);
+                for (DailyExpectedShift expected : expectations) {
+                    Attendance attendance = attendanceMap.getOrDefault(empId, Collections.emptyMap()).get(expected.getTargetDate());
+
+                    if (expected.isWorkingDay()) {
+                        processWorkingDay(emp, expected, attendance, now);
                     } else {
-                        processNonWorkingDay(emp, targetDate, attendance, holidays, policyMap.get(empId));
+                        processNonWorkingDay(emp, expected, attendance);
                     }
                 }
             }
 
             this.lastRunStatus = "SUCCESS";
             this.lastRunTime = LocalDateTime.now();
-            log.info("Rolling Sweeper completed successfully.");
+            log.info("Batch Schedule Sweeper completed successfully.");
 
         } catch (Exception e) {
             this.lastRunStatus = "FAILED";
             this.lastRunTime = LocalDateTime.now();
-            log.error("Rolling Sweeper failed.", e);
+            log.error("Batch Schedule Sweeper failed.", e);
         }
     }
 
-    private void processWorkingDay(Employee emp, ShiftAssignment assignment, LocalDate targetDate, Attendance attendance, List<LeaveRequest> empLeaves, LocalDateTime now) {
-        Shift shift = assignment.getShift();
+    private void processWorkingDay(Employee emp, DailyExpectedShift expected, Attendance attendance, LocalDateTime now) {
+        Shift shift = expected.getExpectedShift();
+        LocalDate targetDate = expected.getTargetDate();
+
         LocalDateTime shiftEndDT = (shift.getCrossesMidnight() != null && shift.getCrossesMidnight())
                 ? targetDate.plusDays(1).atTime(shift.getEndTime())
                 : targetDate.atTime(shift.getEndTime());
 
+        // Only evaluate if the shift has actually finished
         if (now.isAfter(shiftEndDT) && now.isBefore(shiftEndDT.plusHours(24))) {
 
             if (attendance != null && attendance.getFirstCheckIn() != null) {
+                // They punched in, but check if they missed hours
                 if (AttendanceStatus.WORKING.equals(attendance.getStatus()) || AttendanceStatus.PARTIAL_DAY.equals(attendance.getStatus())) {
                     attendanceCorrectionService.evaluateAndRouteAnomaly(attendance);
                 }
             } else {
-                LeaveRequest leave = getActiveLeaveForDate(empLeaves, targetDate);
-                LeaveSession session = getSessionForDate(leave, targetDate);
-
+                // They missed their shift entirely!
                 AttendanceStatus exactStatus;
                 double penaltyDays = 0;
                 String penaltyDesc = "";
 
-                if (leave != null && session == LeaveSession.FULL_DAY) {
-                    exactStatus = AttendanceStatus.ON_LEAVE;
-                    penaltyDesc="emp on full day leave";
-                } else if (leave != null && session != LeaveSession.FULL_DAY) {
+                if (expected.getActiveLeave() != null && expected.getLeaveSession() != LeaveSession.FULL_DAY) {
                     exactStatus = AttendanceStatus.HALF_DAY_ABSENT;
                     penaltyDays = 0.5;
                     penaltyDesc = "Missed shift on half-day leave";
@@ -126,12 +118,19 @@ public class AttendanceCronJobService {
                 }
 
                 if (attendance == null || !exactStatus.equals(attendance.getStatus())) {
-
                     Attendance attRecord = (attendance != null) ? attendance : new Attendance();
                     attRecord.setEmployee(emp);
-                    attRecord.setShiftAssignment(assignment);
                     attRecord.setAttendanceDate(targetDate);
                     attRecord.setStatus(exactStatus);
+
+                    // Snapshot expected times
+                    attRecord.setExpectedShiftId(shift.getId());
+                    attRecord.setExpectedShiftName(shift.getName());
+                    attRecord.setExpectedStartTime(shift.getStartTime());
+                    attRecord.setExpectedEndTime(shift.getEndTime());
+                    attRecord.setExpectedWorkMinutes(shift.getRequiredWorkTime());
+                    attRecord.setCrossesMidnight(shift.getCrossesMidnight());
+                    attRecord.setIsManualOverride(expected.isManualOverride());
 
                     if (penaltyDays > 0) {
                         deductPenalty(emp, "Unpaid Leave", penaltyDays, targetDate.getYear(), penaltyDesc);
@@ -142,15 +141,16 @@ public class AttendanceCronJobService {
         }
     }
 
-    private void processNonWorkingDay(Employee emp, LocalDate targetDate, Attendance attendance, List<LocalDate> holidays, ShiftRotationPolicy policy) {
-
+    private void processNonWorkingDay(Employee emp, DailyExpectedShift expected, Attendance attendance) {
         if (attendance == null || attendance.getFirstCheckIn() == null) {
-            AttendanceStatus exactStatus = workingStatus(emp, targetDate, holidays, policy);
+
+            AttendanceStatus exactStatus = AttendanceStatus.OFF_DAY;
+            if (expected.isHoliday()) exactStatus = AttendanceStatus.PUBLIC_HOLIDAY;
+            if (expected.getActiveLeave() != null && expected.getLeaveSession() == LeaveSession.FULL_DAY) exactStatus = AttendanceStatus.ON_LEAVE;
 
             Attendance attRecord = (attendance != null) ? attendance : new Attendance();
             attRecord.setEmployee(emp);
-            attRecord.setShiftAssignment(null);
-            attRecord.setAttendanceDate(targetDate);
+            attRecord.setAttendanceDate(expected.getTargetDate());
 
             if (!exactStatus.equals(attRecord.getStatus())) {
                 attRecord.setStatus(exactStatus);
@@ -159,56 +159,10 @@ public class AttendanceCronJobService {
         }
     }
 
-    private AttendanceStatus workingStatus(Employee employee, LocalDate targetDate, List<LocalDate> holidays, ShiftRotationPolicy policy) {
-        if (holidays.contains(targetDate)) {
-            return AttendanceStatus.PUBLIC_HOLIDAY;
-        }
-
-        if (policy != null) {
-            if (policy.getGeneratedUntil() != null && !targetDate.isAfter(policy.getGeneratedUntil())) {
-                return AttendanceStatus.OFF_DAY;
-            } else {
-                int totalCycleDays = shiftRotationService.calculateCycleDays(policy);
-                RotationSequence seq = shiftRotationService.calculateSequenceForDate(policy, targetDate, totalCycleDays);
-                if (seq == null || seq.getSegmentType() == RotationSegmentType.OFF) {
-                    return AttendanceStatus.OFF_DAY;
-                }
-            }
-        } else if (employee.getDefaultShift() != null) {
-            if (employee.getDefaultShiftGeneratedUntil() != null && !targetDate.isAfter(employee.getDefaultShiftGeneratedUntil())) {
-                return AttendanceStatus.OFF_DAY;
-            } else {
-                String dayOfWeek = targetDate.getDayOfWeek().name();
-                boolean isWorkingDay = employee.getDefaultShift().getWorkingDays().stream().anyMatch(wd -> wd.name().equalsIgnoreCase(dayOfWeek));
-                if (!isWorkingDay) {
-                    return AttendanceStatus.OFF_DAY;
-                }
-            }
-        } else {
-            DayOfWeek day = targetDate.getDayOfWeek();
-            if (day == DayOfWeek.SATURDAY || day == DayOfWeek.SUNDAY) {
-                return AttendanceStatus.OFF_DAY;
-            }
-        }
-        return AttendanceStatus.MISSING_SHIFT;
-    }
-
     private void deductPenalty(Employee employee, String leaveTypeName, double days, int year, String desc) {
-        LeaveType type = leaveTypeRepository.findByNameContainingIgnoreCaseOrCodeContainingIgnoreCase(leaveTypeName, "UPL-001").stream().findFirst().orElseThrow(() -> new IllegalStateException("Leave type not found!"));
+        LeaveType type = leaveTypeRepository.findByNameContainingIgnoreCaseOrCodeContainingIgnoreCase(leaveTypeName, "UPL-001").stream().findFirst()
+                .orElseThrow(() -> new IllegalStateException("Leave type not found!"));
         leaveBalanceService.deductPenalty(employee, type, java.math.BigDecimal.valueOf(days), year, desc);
-    }
-
-    private Map<Long, Map<LocalDate, ShiftAssignment>> buildAssignMap(List<ShiftAssignment> assignments, List<LocalDate> targetDates) {
-        Map<Long, Map<LocalDate, ShiftAssignment>> map = new HashMap<>();
-        for (ShiftAssignment sa : assignments) {
-            map.computeIfAbsent(sa.getEmployee().getId(), k -> new HashMap<>());
-            for (LocalDate date : targetDates) {
-                if (!date.isBefore(sa.getStartDate()) && !date.isAfter(sa.getEndDate())) {
-                    map.get(sa.getEmployee().getId()).put(date, sa);
-                }
-            }
-        }
-        return map;
     }
 
     private Map<Long, Map<LocalDate, Attendance>> buildAttendanceMap(List<Attendance> attendances) {
@@ -219,30 +173,6 @@ public class AttendanceCronJobService {
         return map;
     }
 
-    private LeaveSession getSessionForDate(LeaveRequest request, LocalDate targetDate) {
-        if (request == null) return null;
-        if (targetDate.equals(request.getStartDate()) && targetDate.equals(request.getEndDate()))
-            return request.getStartSession();
-        if (targetDate.equals(request.getStartDate())) return request.getStartSession();
-        if (targetDate.equals(request.getEndDate())) return request.getEndSession();
-        return LeaveSession.FULL_DAY;
-    }
-
-    private LeaveRequest getActiveLeaveForDate(List<LeaveRequest> leaves, LocalDate targetDate) {
-        if (leaves == null || leaves.isEmpty()) return null;
-        for (LeaveRequest leave : leaves) {
-            if (!targetDate.isBefore(leave.getStartDate()) && !targetDate.isAfter(leave.getEndDate())) {
-                return leave;
-            }
-        }
-        return null;
-    }
-
-    public LocalDateTime getLastRunTime() {
-        return lastRunTime;
-    }
-
-    public String getLastRunStatus() {
-        return lastRunStatus;
-    }
+    public LocalDateTime getLastRunTime() { return lastRunTime; }
+    public String getLastRunStatus() { return lastRunStatus; }
 }

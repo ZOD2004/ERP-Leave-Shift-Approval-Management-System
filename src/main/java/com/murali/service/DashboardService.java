@@ -60,12 +60,12 @@ public class DashboardService {
        return leaveApprovalRepository.countPendingEscalations();
     }
 
-    public long getManualOverridesCount() {
-        LocalDate startOfMonth = LocalDate.now().withDayOfMonth(1);
-        LocalDate endOfMonth = LocalDate.now().withDayOfMonth(LocalDate.now().lengthOfMonth());
-
-      return shiftAssignmentRepository.countSingleDayHolePunches(startOfMonth, endOfMonth);
-    }
+//    public long getManualOverridesCount() {
+//        LocalDate startOfMonth = LocalDate.now().withDayOfMonth(1);
+//        LocalDate endOfMonth = LocalDate.now().withDayOfMonth(LocalDate.now().lengthOfMonth());
+//
+//      return shiftAssignmentRepository.countSingleDayHolePunches(startOfMonth, endOfMonth);
+//    }
 
     public long getExhaustedBalanceUsersCount() {
         return leaveBalanceRepository.countUsersWithUnpaidLeave(LocalDate.now().getYear());

@@ -358,7 +358,10 @@ public class ManagerApprovalView extends VerticalLayout {
         dialog.setMaxWidth("95vw");
 
         Attendance attendance = correction.getAttendance();
-        ShiftAssignment assignment = attendance.getShiftAssignment();
+
+        // NEW LOGIC: Use the snapshotted Engine expectations directly!
+        LocalTime effectiveEnd = attendance.getExpectedEndTime();
+        String expectedShiftName = attendance.getExpectedShiftName();
 
         VerticalLayout detailsLayout = new VerticalLayout();
         detailsLayout.setPadding(false);
@@ -368,6 +371,11 @@ public class ManagerApprovalView extends VerticalLayout {
         detailsLayout.add(createDetailRow("Employee:", attendance.getEmployee().getFirstName() + " (ID: " + attendance.getEmployee().getId() + ")"));
         detailsLayout.add(createDetailRow("Date:", attendance.getAttendanceDate().toString()));
         detailsLayout.add(createDetailRow("System Status:", attendance.getStatus().name()));
+
+        if (expectedShiftName != null) {
+            detailsLayout.add(createDetailRow("Expected Shift:", expectedShiftName));
+        }
+
         VerticalLayout infoBanner = new VerticalLayout();
         infoBanner.addClassNames(LumoUtility.Background.CONTRAST_5, LumoUtility.BorderRadius.MEDIUM, LumoUtility.Padding.SMALL, LumoUtility.Margin.Top.SMALL);
         infoBanner.setSpacing(false);
@@ -383,7 +391,6 @@ public class ManagerApprovalView extends VerticalLayout {
         infoBanner.add(infoTitle, infoApprove, infoReject);
         detailsLayout.add(infoBanner);
 
-        LocalTime effectiveEnd = (assignment != null) ? assignment.getShift().getEndTime() : null;
         if (effectiveEnd != null) {
             detailsLayout.add(createDetailRow("Expected Shift End:", effectiveEnd.toString()));
         }
@@ -391,7 +398,8 @@ public class ManagerApprovalView extends VerticalLayout {
         // Time Picker for check-out
         TimePicker manualCheckOutPicker = new TimePicker("Manual Check-out Time");
         manualCheckOutPicker.setWidthFull();
-        // PRE-FILL: Automatically set the check-out time to the employee's expected shift end time
+
+        // PRE-FILL: Automatically set the check-out time to the employee's snapshotted expected shift end time
         if (effectiveEnd != null) {
             manualCheckOutPicker.setValue(effectiveEnd);
         }

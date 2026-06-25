@@ -28,4 +28,6 @@ public interface HolidayRepository extends JpaRepository<Holiday, Long> {
                   AND YEAR(h.holidayDate) = :year
             """)
     long countUpcomingHolidaysInMonth(@Param("today") LocalDate today, @Param("month") int month, @Param("year") int year);
+
+    boolean existsByHolidayDate(LocalDate targetDate);
 }

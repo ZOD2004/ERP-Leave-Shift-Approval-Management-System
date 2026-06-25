@@ -24,11 +24,11 @@ import java.util.Optional;
 public interface EmployeeRepository extends JpaRepository<Employee, Long> {
 
 
-    @EntityGraph(attributePaths = {"user", "user.role", "department", "manager", "defaultShift"})
+    @EntityGraph(attributePaths = {"user", "user.role", "department", "manager", "defaultShift", "defaultShift.workingDays", "defaultShift.rotationSequences"})
     @Query("SELECT e FROM Employee e JOIN e.user u WHERE u.active = true")
     List<Employee> findByActiveTrue();
 
-    @EntityGraph(attributePaths = {"user", "user.role", "department", "manager", "defaultShift"})
+    @EntityGraph(attributePaths = {"user", "user.role", "department", "manager", "defaultShift", "defaultShift.workingDays", "defaultShift.rotationSequences"})
     @Query("""
                 SELECT DISTINCT e
                 FROM Employee e
@@ -61,6 +61,7 @@ public interface EmployeeRepository extends JpaRepository<Employee, Long> {
     List<Employee> findByDepartmentId(Long departmentId);
 
     boolean existsByManagerId(Long managerId);
+
     List<Employee> findByManagerId(Long managerId);
 
     @Modifying

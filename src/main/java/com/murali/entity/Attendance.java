@@ -9,6 +9,7 @@ import lombok.Setter;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -28,9 +29,26 @@ public class Attendance {
     @JoinColumn(name = "employee_id", nullable = false)
     private Employee employee;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "shift_assignment_id")
-    private ShiftAssignment shiftAssignment;
+    @Column(name = "expected_shift_id")
+    private Long expectedShiftId;
+
+    @Column(name = "expected_shift_name")
+    private String expectedShiftName;
+
+    @Column(name = "expected_start_time")
+    private LocalTime expectedStartTime;
+
+    @Column(name = "expected_end_time")
+    private LocalTime expectedEndTime;
+
+    @Column(name = "expected_work_minutes")
+    private Long expectedWorkMinutes;
+
+    @Column(name = "crosses_midnight")
+    private Boolean crossesMidnight = false;
+
+    @Column(name = "is_manual_override", nullable = false)
+    private Boolean isManualOverride = false;
 
     @Column(name = "attendance_date", nullable = false)
     private LocalDate attendanceDate;
