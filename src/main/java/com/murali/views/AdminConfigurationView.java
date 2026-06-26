@@ -104,12 +104,10 @@ public class AdminConfigurationView extends VerticalLayout {
 
         long upcomingCount = holidayService.countUpcomingHolidaysInMonth(today, today.getMonthValue(), today.getYear());
 
-        // 1. Stats Row
         HorizontalLayout statsRow = new HorizontalLayout(createStatsCard("Total Holidays", String.valueOf(holidayService.getAllHolidays().size()), VaadinIcon.CALENDAR, "var(--lumo-primary-color)"), createStatsCard("Upcoming", String.valueOf(upcomingCount), VaadinIcon.CLOCK, "var(--lumo-success-color)") // Note: "3" is hardcoded visually, could be dynamically calculated
         );
         statsRow.addClassNames(LumoUtility.Margin.Bottom.MEDIUM);
 
-        // 2. Search & Action Toolbar
         TextField searchField = new TextField();
         searchField.setPlaceholder("Search holidays...");
         searchField.setPrefixComponent(VaadinIcon.SEARCH.create());
@@ -282,7 +280,7 @@ public class AdminConfigurationView extends VerticalLayout {
         gridContainer.setSizeFull();
 
         refreshPolicies();
-        contentContainer.setSpacing(true);
+//        contentContainer.setSpacing(true);
         contentContainer.add(statsRow, gridContainer);
     }
 
@@ -518,6 +516,7 @@ public class AdminConfigurationView extends VerticalLayout {
 
         return newRules;
     }
+
     private void refreshPolicies() {
         policyGrid.setItems(ruleService.getAllPolicies());
     }
@@ -540,22 +539,14 @@ public class AdminConfigurationView extends VerticalLayout {
             emptyBadge.getElement().getThemeList().add("badge error");
             tiersLayout.add(emptyBadge);
         } else {
-            Map<String, List<LeaveApprovalRule>> groupedRules = policy.getRules().stream()
-                    .sorted(Comparator.comparing(LeaveApprovalRule::getMinDays))
-                    .collect(Collectors.groupingBy(
-                            r -> r.getMinDays() + "_" + r.getMaxDays(),
-                            LinkedHashMap::new,
-                            Collectors.toList()
-                    ));
+            Map<String, List<LeaveApprovalRule>> groupedRules = policy.getRules().stream().sorted(Comparator.comparing(LeaveApprovalRule::getMinDays)).collect(Collectors.groupingBy(r -> r.getMinDays() + "_" + r.getMaxDays(), LinkedHashMap::new, Collectors.toList()));
 
             for (List<LeaveApprovalRule> tierRules : groupedRules.values()) {
                 tierRules.sort(Comparator.comparing(LeaveApprovalRule::getApprovalLevel));
 
                 String range = tierRules.get(0).getMinDays() + " - " + (tierRules.get(0).getMaxDays().doubleValue() >= 99.0 ? "∞" : tierRules.get(0).getMaxDays()) + " Days";
 
-                String approverChain = tierRules.stream()
-                        .map(r -> r.getRequiredRole().getName().replace("ROLE_", "").replace("_", " "))
-                        .collect(Collectors.joining(" → "));
+                String approverChain = tierRules.stream().map(r -> r.getRequiredRole().getName().replace("ROLE_", "").replace("_", " ")).collect(Collectors.joining(" → "));
 
                 HorizontalLayout tierRow = new HorizontalLayout();
                 tierRow.setAlignItems(FlexComponent.Alignment.CENTER);

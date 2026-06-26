@@ -314,8 +314,6 @@ public class EmployeeView extends VerticalLayout {
 
         } catch (HodConflictException ex) {
             openHodSwapDialog(ex);
-        } catch (ManagerPromotionConflictException ex) {
-            openManagerPromotionDialog(ex);
         } catch (HodDemotionConflictException ex) {
             openHodDemotionDialog(ex);
         } catch (ManagerDemotionConflictException ex) {
@@ -344,36 +342,6 @@ public class EmployeeView extends VerticalLayout {
             }
         });
         confirmBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY, ButtonVariant.LUMO_ERROR);
-        dialog.getFooter().add(new Button("Cancel", e -> dialog.close()), confirmBtn);
-        dialog.open();
-    }
-
-    private void openManagerPromotionDialog(ManagerPromotionConflictException ex) {
-        Dialog dialog = new Dialog();
-        dialog.setHeaderTitle("Manager Promotion Conflict");
-        dialog.add(new Paragraph(ex.getMessage()));
-
-        ComboBox<Employee> replacementCombo = new ComboBox<>("Select Replacement Manager");
-        List<Employee> eligibleReplacements = employeeService.findEligibleReplacements(currentEmployee.getDepartment().getId(), currentEmployee.getId(), currentEmployee.getUser().getRole().getHierarchyWeight());
-        replacementCombo.setItems(eligibleReplacements);
-        replacementCombo.setItemLabelGenerator(Employee::getFirstName);
-
-        Button confirmBtn = new Button("Reassign & Promote", e -> {
-            try {
-                employeeService.reassignSubordinatesAndPromoteToHod(currentEmployee, currentUser, isExistingUserLinked, applicableLeavesField.getValue(), replacementCombo.getValue().getId());
-                showNotification("Promoted successfully!", NotificationVariant.LUMO_SUCCESS);
-                updateList();
-                dialog.close();
-                formDialog.close();
-            } catch (Exception err) {
-                showNotification("Error: " + err.getMessage(), NotificationVariant.LUMO_ERROR);
-            }
-        });
-        confirmBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
-        confirmBtn.setEnabled(false);
-        replacementCombo.addValueChangeListener(e -> confirmBtn.setEnabled(e.getValue() != null));
-
-        dialog.add(replacementCombo);
         dialog.getFooter().add(new Button("Cancel", e -> dialog.close()), confirmBtn);
         dialog.open();
     }

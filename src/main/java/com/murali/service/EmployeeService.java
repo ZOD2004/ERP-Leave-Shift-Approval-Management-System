@@ -115,20 +115,16 @@ public class EmployeeService {
         boolean isExistingEmployee = employee.getId() != null;
 
         if ("ROLE_DEPT_HEAD".equals(newRole)) {
-            if (isExistingEmployee && employeeRepository.existsByManagerId(employee.getId())) {
-                throw new ManagerPromotionConflictException("This manager currently has subordinates. Select a replacement manager before promoting to HOD.", employee.getId());
-            }
-
             Department dept = departmentRepository.findById(deptId).orElseThrow();
             if (dept.getHod() != null) {
                 Long currentHodId = dept.getHod().getId();
+
                 if (!isExistingEmployee || !currentHodId.equals(employee.getId())) {
                     throw new HodConflictException("Department already has an HOD. Do you want to swap them?", deptId, currentHodId);
                 }
             }
         }
     }
-
     private void validateDemotion(Employee employee, User newUser) {
         if (employee.getId() == null || newUser.getRole() == null) return;
 
@@ -170,28 +166,6 @@ public class EmployeeService {
 
         Department dept = departmentRepository.findById(savedNewHod.getDepartment().getId()).orElseThrow();
         dept.setHod(savedNewHod);
-        departmentRepository.save(dept);
-    }
-
-    @Transactional
-    public void reassignSubordinatesAndPromoteToHod(Employee managerToPromote, User newUser, boolean isExistingUserLinked, Set<LeaveType> selectedLeaves, Long replacementManagerId) {
-
-        employeeRepository.reassignManager(managerToPromote.getId(), replacementManagerId);
-
-        Employee replacement = employeeRepository.findById(replacementManagerId).orElseThrow();
-        if ("ROLE_EMPLOYEE".equals(replacement.getUser().getRole().getName())) {
-            Role managerRole = roleRepository.findByName("ROLE_MANAGER");
-            replacement.getUser().setRole(managerRole);
-            userRepository.save(replacement.getUser());
-        }
-
-        Department dept = departmentRepository.findById(managerToPromote.getDepartment().getId()).orElseThrow();
-        if (dept.getHod() != null && !dept.getHod().getId().equals(managerToPromote.getId())) {
-            demoteEmployeeToStandard(dept.getHod().getId());
-        }
-
-        Employee savedHod = executeStandardSave(managerToPromote, newUser, isExistingUserLinked, selectedLeaves);
-        dept.setHod(savedHod);
         departmentRepository.save(dept);
     }
 

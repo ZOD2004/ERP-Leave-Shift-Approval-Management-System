@@ -433,6 +433,8 @@ public class ShiftAssignmentService {
                     shiftDto.setShiftId(virtualShift.getId());
                     shiftDto.setShiftName(virtualShift.getName());
                     shiftDto.setShiftType(virtualShift.getShiftType());
+                    shiftDto.setIsRotational(Boolean.TRUE.equals(virtualShift.getIsRotationalShift()));
+                    shiftDto.setSegmentName(virtualShift.getActiveSegmentName());
                     shiftDto.setStartTime(virtualShift.getStartTime());
                     shiftDto.setEndTime(virtualShift.getEndTime());
                     shiftDto.setStartDate(expected.getTargetDate());

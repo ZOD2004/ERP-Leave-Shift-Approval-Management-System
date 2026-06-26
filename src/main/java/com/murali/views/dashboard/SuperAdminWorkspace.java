@@ -104,13 +104,12 @@ public class SuperAdminWorkspace extends VerticalLayout {
                 .filter(log -> log.getTimestamp().toLocalDate().equals(LocalDate.now()))
                 .count();
 
-        // Build Cards
         kpiLayout.add(
                 createStatCard("Total Employees", String.valueOf(totalEmployees), VaadinIcon.USERS, "var(--lumo-primary-color)"),
-                createStatCard("Active Logins Today", String.valueOf(activeLogins), VaadinIcon.SIGN_IN, "var(--lumo-success-color)"),
+//                createStatCard("Active Logins Today", String.valueOf(activeLogins), VaadinIcon.SIGN_IN, "var(--lumo-success-color)"),
                 createStatCard("Departments", String.valueOf(totalDepts), VaadinIcon.BUILDING, "var(--lumo-contrast-70pct)"),
                 createStatCard("Managers & HODs", String.valueOf(totalManagers), VaadinIcon.USER, "var(--lumo-contrast-70pct)"),
-                createStatCard("System Pending Approvals", String.valueOf(totalPendingApprovals), VaadinIcon.INBOX, "var(--lumo-warning-color)"),
+//                createStatCard("System Pending Approvals", String.valueOf(totalPendingApprovals), VaadinIcon.INBOX, "var(--lumo-warning-color)"),
                 createStatCard("Audit Events Today", String.valueOf(auditEventsToday), VaadinIcon.RECORDS, "var(--lumo-secondary-text-color)")
         );
 

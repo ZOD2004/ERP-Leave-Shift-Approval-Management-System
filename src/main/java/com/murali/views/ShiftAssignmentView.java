@@ -291,8 +291,14 @@ public class ShiftAssignmentView extends VerticalLayout {
                 }
 
                 if (cell.getAssignment() != null) {
-                    String shiftName = cell.getAssignment().getShiftName();
-                    String shortCode = shiftName.length() > 7 ? shiftName.substring(0, 7) : shiftName;
+                    String shortCode;
+                    if (Boolean.TRUE.equals(cell.getAssignment().getIsRotational())) {
+                        String seg = cell.getAssignment().getSegmentName();
+                        shortCode = (seg != null && seg.length() > 7) ? seg.substring(0, 7) : (seg != null ? seg : "ROT");
+                    } else {
+                        String shiftName = cell.getAssignment().getShiftName();
+                        shortCode = shiftName.length() > 7 ? shiftName.substring(0, 7) : shiftName;
+                    }
 
                     if (cell.isOnLeave()) {
                         String sessionStr = cell.getLeaveSession() == LeaveSession.FIRST_HALF ? "L(1st)" : "L(2nd)";
@@ -537,8 +543,14 @@ public class ShiftAssignmentView extends VerticalLayout {
                 }
 
                 if (cell.getAssignment() != null) {
-                    String shiftName = cell.getAssignment().getShiftName();
-                    String shortCode = shiftName.length() > 4 ? shiftName.substring(0, 4) : shiftName;
+                    String shortCode;
+                    if (Boolean.TRUE.equals(cell.getAssignment().getIsRotational())) {
+                        String seg = cell.getAssignment().getSegmentName();
+                        shortCode = (seg != null && seg.length() > 4) ? seg.substring(0, 4) : (seg != null ? seg : "ROT");
+                    } else {
+                        String shiftName = cell.getAssignment().getShiftName();
+                        shortCode = shiftName.length() > 4 ? shiftName.substring(0, 4) : shiftName;
+                    }
 
                     if (cell.isOnLeave()) {
                         // HALF DAY LEAVE Logic
@@ -581,8 +593,11 @@ public class ShiftAssignmentView extends VerticalLayout {
                     cellBtn.addClickListener(e -> handleEmptyCellClick(cell));
                 }
 
-                return cellBtn;
-            })).setHeader(String.valueOf(day)).setAutoWidth(true);
+                        return cellBtn;
+                    })).setHeader(String.valueOf(day))
+                    .setWidth("75px")
+                    .setFlexGrow(0)
+                    .setResizable(false);
         }
     }
 

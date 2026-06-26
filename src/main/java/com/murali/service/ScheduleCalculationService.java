@@ -128,6 +128,9 @@ public class ScheduleCalculationService {
         virtualShift.setCrossesMidnight(segment.getCrossesMidnight());
         virtualShift.setFirstHalfEndTime(segment.getFirstHalfEndTime());
         virtualShift.setSecondHalfStartTime(segment.getSecondHalfStartTime());
+
+        virtualShift.setIsRotationalShift(true);
+        virtualShift.setActiveSegmentName(segment.getName());
         return virtualShift;
     }
 

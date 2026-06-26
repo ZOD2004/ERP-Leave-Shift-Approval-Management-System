@@ -69,4 +69,6 @@ public class Shift {
     @Enumerated(EnumType.STRING)
     @Column(name = "working_day")
     private Set<WorkingDay> workingDays = new HashSet<>();
+
+    private String activeSegmentName;
 }
