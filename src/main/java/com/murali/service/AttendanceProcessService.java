@@ -250,4 +250,55 @@ public class AttendanceProcessService {
 
         return new TeamAttendanceSummaryDTO(presentCount, expectedCount, absentOrLeaveCount);
     }
+    @Transactional(readOnly = true)
+    public TeamAttendanceSummaryDTO getGlobalDailyAttendanceSummary(LocalDate date) {
+        // 1. Get all active employees in the company
+        List<Employee> allActiveEmployees = employeeRepository.findByActiveTrue();
+
+        if (allActiveEmployees.isEmpty()) {
+            return new TeamAttendanceSummaryDTO(0, 0, 0);
+        }
+
+        // 2. Ask the Batch Engine for today's schedule for EVERYONE
+        Map<Long, List<DailyExpectedShift>> batchSchedules = scheduleCalculationService.calculateBatchShifts(allActiveEmployees, date, date);
+
+        // 3. Extract IDs of employees expected to work today
+        List<Long> expectedEmployeeIds = new ArrayList<>();
+        for (Employee emp : allActiveEmployees) {
+            List<DailyExpectedShift> scheduleList = batchSchedules.getOrDefault(emp.getId(), Collections.emptyList());
+            if (!scheduleList.isEmpty() && scheduleList.get(0).isWorkingDay()) {
+                expectedEmployeeIds.add(emp.getId());
+            }
+        }
+
+        // 4. Fetch actual attendance records for today
+        List<Long> allIds = allActiveEmployees.stream().map(Employee::getId).toList();
+        List<Attendance> attendances = attendanceRepository.findByEmployeeIdsAndAttendanceDate(allIds, date);
+
+        int presentCount = 0;
+        int expectedCount = 0; // "Yet to Check-in"
+        int absentOrLeaveCount = 0;
+
+        // 5. Calculate metrics
+        for (Long expectedId : expectedEmployeeIds) {
+            Attendance att = attendances.stream()
+                    .filter(a -> a.getEmployee().getId().equals(expectedId))
+                    .findFirst()
+                    .orElse(null);
+
+            if (att == null) {
+                expectedCount++;
+            } else {
+                if (att.getFirstCheckIn() != null) {
+                    presentCount++;
+                } else if (AttendanceStatus.ON_LEAVE.equals(att.getStatus()) || AttendanceStatus.ABSENT.equals(att.getStatus())) {
+                    absentOrLeaveCount++;
+                } else {
+                    expectedCount++;
+                }
+            }
+        }
+
+        return new TeamAttendanceSummaryDTO(presentCount, expectedCount, absentOrLeaveCount);
+    }
 }

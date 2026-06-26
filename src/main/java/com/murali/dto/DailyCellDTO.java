@@ -20,6 +20,6 @@ public class DailyCellDTO {
     private boolean isOnLeave;
     private LeaveSession leaveSession; // FULL_DAY, FIRST_HALF, SECOND_HALF
 
-    private ShiftAssignmentDTO assignment; // Holds the shift if they are working
-    private boolean isOvertimeOverride; // True if this is a 1-day manual assignment
+    private ShiftAssignmentDTO assignment;
+    private boolean isOvertimeOverride;
 }

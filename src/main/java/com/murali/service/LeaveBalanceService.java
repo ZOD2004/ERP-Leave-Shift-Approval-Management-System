@@ -11,7 +11,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 @Slf4j
@@ -267,5 +269,19 @@ public class LeaveBalanceService {
         BigDecimal held = request.getDurationDays().subtract(approvedDuration);
 
         return held.compareTo(BigDecimal.ZERO) > 0 ? held : BigDecimal.ZERO;
+    }
+    @Transactional(readOnly = true)
+    public Map<String, BigDecimal> getGlobalLeaveUtilization(Integer year) {
+        List<Object[]> result = leaveBalanceRepository.getGlobalLeaveUtilizationStats(year);
+        Map<String, BigDecimal> stats = new HashMap<>();
+
+        if (result != null && !result.isEmpty() && result.get(0)[0] != null) {
+            stats.put("total", (BigDecimal) result.get(0)[0]);
+            stats.put("used", (BigDecimal) result.get(0)[1]);
+        } else {
+            stats.put("total", BigDecimal.ZERO);
+            stats.put("used", BigDecimal.ZERO);
+        }
+        return stats;
     }
 }

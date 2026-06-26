@@ -145,13 +145,14 @@ public class AttendanceCorrectionService {
         return correctionRepository.findPendingCorrectionsForManager(approverId);
     }
 
-    @Transactional(readOnly = true)
-    public List<AttendanceCorrection> getAllPendingCorrectionsGlobally() {
-        return correctionRepository.findAllPendingCorrectionsGlobally();
-    }
 
     @Transactional(readOnly = true)
     public long getGlobalPendingCorrectionsCount() {
         return correctionRepository.countByStatus("PENDING");
+    }
+
+    @Transactional(readOnly = true)
+    public List<AttendanceCorrection> getAllPendingCorrectionsGlobally() {
+        return correctionRepository.findByStatusContaining("PENDING");
     }
 }

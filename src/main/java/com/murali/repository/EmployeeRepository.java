@@ -43,11 +43,11 @@ public interface EmployeeRepository extends JpaRepository<Employee, Long> {
 
     Optional<Employee> findByEmployeeCode(String employeeCode);
 
-    @EntityGraph(attributePaths = {"user", "department"})
+    @EntityGraph(attributePaths = {"user", "department", "defaultShift", "defaultShift.rotationSequences", "defaultShift.workingDays"})
     @Query("SELECT e FROM Employee e WHERE e.manager.id = :managerId")
     List<Employee> findReportingEmployees(@Param("managerId") Long managerId);
 
-    @EntityGraph(attributePaths = {"department", "manager"})
+    @EntityGraph(attributePaths = {"department", "manager", "defaultShift", "defaultShift.rotationSequences", "defaultShift.workingDays"})
     @Query("SELECT e FROM Employee e WHERE e.user.id = :userId")
     Optional<Employee> findByUserId(@Param("userId") Long userId);
 
@@ -57,7 +57,7 @@ public interface EmployeeRepository extends JpaRepository<Employee, Long> {
     @Query("SELECT e FROM Employee e WHERE e.id = :id")
     Optional<Employee> findByIdWithDepartmentAndManager(@Param("id") Long id);
 
-    @EntityGraph(attributePaths = {"user", "user.role"})
+    @EntityGraph(attributePaths = {"user", "user.role", "manager", "defaultShift", "defaultShift.workingDays", "defaultShift.rotationSequences"})
     List<Employee> findByDepartmentId(Long departmentId);
 
     boolean existsByManagerId(Long managerId);

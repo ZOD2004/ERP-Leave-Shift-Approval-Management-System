@@ -30,4 +30,6 @@ public interface HolidayRepository extends JpaRepository<Holiday, Long> {
     long countUpcomingHolidaysInMonth(@Param("today") LocalDate today, @Param("month") int month, @Param("year") int year);
 
     boolean existsByHolidayDate(LocalDate targetDate);
+    @Query("SELECT h FROM Holiday h WHERE h.holidayDate >= :today ORDER BY h.holidayDate ASC")
+    List<Holiday> findUpcomingHolidays(@Param("today") LocalDate today);
 }

@@ -10,6 +10,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Slf4j
@@ -60,5 +62,10 @@ public class AuditLogService {
     @Transactional(readOnly = true)
     public List<AuditLog> getRecentLogs(int limit) {
         return auditLogRepository.findRecentLogs(PageRequest.of(0, limit));
+    }
+    @Transactional(readOnly = true)
+    public long getActiveLoginsToday() {
+        LocalDateTime startOfDay = LocalDate.now().atStartOfDay();
+        return auditLogRepository.countUniqueLoginsSince(startOfDay);
     }
 }

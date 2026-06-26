@@ -32,8 +32,6 @@ public class ScheduleCalculationService {
         DailyExpectedShift result = new DailyExpectedShift();
         result.setTargetDate(targetDate);
         result.setEmployeeId(employee.getId());
-
-        // Priority 1: Approved Leaves
         Optional<LeaveRequest> activeLeaveOpt = leaveRequestRepository.findApprovedLeaveForEmployeeOnDate(employee.getId(), targetDate);
         if (activeLeaveOpt.isPresent()) {
             LeaveRequest leave = activeLeaveOpt.get();
@@ -45,8 +43,6 @@ public class ScheduleCalculationService {
                 return result;
             }
         }
-
-        // Priority 2: Manual Overrides (ShiftAssignments)
         Optional<ShiftAssignment> manualOverrideOpt = shiftAssignmentRepository.findAssignmentByEmployeeAndDate(employee.getId(), targetDate);
         if (manualOverrideOpt.isPresent()) {
             ShiftAssignment override = manualOverrideOpt.get();
@@ -56,16 +52,11 @@ public class ScheduleCalculationService {
             result.setWorkingDay(true);
             return result;
         }
-
-        // Priority 3: Holidays (Manual overrides beat holidays)
-        // Ensure you have an existsByHolidayDate method in HolidayRepository
         if (holidayRepository.existsByHolidayDate(targetDate)) {
             result.setHoliday(true);
             result.setWorkingDay(false);
             return result;
         }
-
-        // Priority 4: Mathematical Calculation Engine
         Shift defaultShift = employee.getDefaultShift();
         if (defaultShift == null) {
             result.setWorkingDay(false);
@@ -74,7 +65,6 @@ public class ScheduleCalculationService {
         }
 
         if (Boolean.TRUE.equals(defaultShift.getIsRotationalShift())) {
-            // -- ROTATIONAL SHIFT LOGIC --
             LocalDate anchorDate = employee.getShiftEffectiveDate() != null ? employee.getShiftEffectiveDate() : LocalDate.now();
             List<RotationSequence> sequences = defaultShift.getRotationSequences();
 
@@ -90,7 +80,6 @@ public class ScheduleCalculationService {
             }
 
             long daysElapsed = ChronoUnit.DAYS.between(anchorDate, targetDate);
-            // Bidirectional modulo to handle dates perfectly whether they are past or future
             int cyclePosition = (int) ((daysElapsed % cycleLength + cycleLength) % cycleLength);
 
             RotationSequence activeSegment = null;
@@ -112,7 +101,6 @@ public class ScheduleCalculationService {
             }
 
         } else {
-            // -- STANDARD SHIFT LOGIC --
             String dayName = targetDate.getDayOfWeek().name();
             boolean isWorkingDay = defaultShift.getWorkingDays().stream()
                     .anyMatch(wd -> wd.name().equalsIgnoreCase(dayName));
@@ -129,7 +117,6 @@ public class ScheduleCalculationService {
         return result;
     }
 
-    // Creates an in-memory Shift object containing the specific times of the rotational segment
     private Shift createVirtualShiftFromSegment(Shift parentShift, RotationSequence segment) {
         Shift virtualShift = new Shift();
         virtualShift.setId(parentShift.getId());
@@ -160,18 +147,15 @@ public class ScheduleCalculationService {
 
         List<Long> empIds = employees.stream().map(Employee::getId).toList();
 
-        // 1. Fetch all exceptions in bulk (3 Queries total)
         List<LeaveRequest> allLeaves = leaveRequestRepository.findApprovedLeavesForEmployeesInRange(empIds, "APPROVED", startDate, endDate);
         List<ShiftAssignment> allOverrides = shiftAssignmentRepository.findByEmployeeIdInAndDateRange(empIds, startDate, endDate);
         Set<LocalDate> allHolidays = new HashSet<>(holidayRepository.findHolidayDatesBetween(startDate, endDate));
 
-        // 2. Group data into memory maps for instant lookup
         Map<Long, List<LeaveRequest>> leavesByEmp = allLeaves.stream()
                 .collect(Collectors.groupingBy(lr -> lr.getEmployee().getId()));
         Map<Long, List<ShiftAssignment>> overridesByEmp = allOverrides.stream()
                 .collect(Collectors.groupingBy(sa -> sa.getEmployee().getId()));
 
-        // 3. Process each employee using memory
         for (Employee employee : employees) {
             List<DailyExpectedShift> employeeSchedule = new ArrayList<>();
             Long empId = employee.getId();
@@ -183,8 +167,6 @@ public class ScheduleCalculationService {
                 DailyExpectedShift daily = new DailyExpectedShift();
                 daily.setTargetDate(date);
                 daily.setEmployeeId(empId);
-
-                // Priority 1: Leaves
                 LeaveRequest activeLeave = getActiveLeaveForDate(empLeaves, date);
                 if (activeLeave != null) {
                     daily.setActiveLeave(activeLeave);
@@ -195,8 +177,6 @@ public class ScheduleCalculationService {
                         continue;
                     }
                 }
-
-                // Priority 2: Manual Overrides
                 ShiftAssignment override = getActiveOverrideForDate(empOverrides, date);
                 if (override != null) {
                     daily.setExpectedShift(override.getShift());
@@ -206,16 +186,12 @@ public class ScheduleCalculationService {
                     employeeSchedule.add(daily);
                     continue;
                 }
-
-                // Priority 3: Holidays
                 if (allHolidays.contains(date)) {
                     daily.setHoliday(true);
                     daily.setWorkingDay(false);
                     employeeSchedule.add(daily);
                     continue;
                 }
-
-                // Priority 4: Mathematical Calculation Engine
                 Shift defaultShift = employee.getDefaultShift();
                 if (defaultShift == null) {
                     daily.setWorkingDay(false);
@@ -225,7 +201,6 @@ public class ScheduleCalculationService {
                 }
 
                 if (Boolean.TRUE.equals(defaultShift.getIsRotationalShift())) {
-                    // ROTATIONAL MATH
                     LocalDate anchorDate = employee.getShiftEffectiveDate() != null ? employee.getShiftEffectiveDate() : LocalDate.now();
                     List<RotationSequence> sequences = defaultShift.getRotationSequences();
 
@@ -259,7 +234,6 @@ public class ScheduleCalculationService {
                         }
                     }
                 } else {
-                    // STANDARD MATH
                     String dayName = date.getDayOfWeek().name();
                     boolean isWorkingDay = defaultShift.getWorkingDays().stream()
                             .anyMatch(wd -> wd.name().equalsIgnoreCase(dayName));
@@ -279,7 +253,6 @@ public class ScheduleCalculationService {
         return bulkResults;
     }
 
-    // Helper method for the bulk engine
     private LeaveRequest getActiveLeaveForDate(List<LeaveRequest> leaves, LocalDate targetDate) {
         return leaves.stream()
                 .filter(l -> !targetDate.isBefore(l.getStartDate()) && !targetDate.isAfter(l.getEndDate()))
@@ -287,7 +260,6 @@ public class ScheduleCalculationService {
                 .orElse(null);
     }
 
-    // Helper method for the bulk engine
     private ShiftAssignment getActiveOverrideForDate(List<ShiftAssignment> overrides, LocalDate targetDate) {
         return overrides.stream()
                 .filter(a -> !targetDate.isBefore(a.getStartDate()) && !targetDate.isAfter(a.getEndDate()))

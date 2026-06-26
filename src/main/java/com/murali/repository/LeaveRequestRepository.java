@@ -51,4 +51,6 @@ public interface LeaveRequestRepository extends JpaRepository<LeaveRequest, Long
               AND lr.parentLeave.status NOT IN ('REJECTED', 'CANCELLED', 'DRAFT')
            """)
     Optional<LeaveRequest> findActiveParentLeave(@Param("leaveId") Long leaveId);
+    @Query("SELECT SUM(lb.totalEntitled), SUM(lb.used) FROM LeaveBalance lb WHERE lb.year = :year")
+    List<Object[]> getGlobalLeaveUtilizationStats(@Param("year") Integer year);
 }

@@ -22,4 +22,7 @@ public interface AttendanceCorrectionRepository extends JpaRepository<Attendance
     List<AttendanceCorrection> findAllPendingCorrectionsGlobally();
 
     long countByStatus(String status);
+
+    @EntityGraph(attributePaths = {"attendance", "attendance.employee", "approver"})
+    List<AttendanceCorrection> findByStatusContaining(String pending);
 }
