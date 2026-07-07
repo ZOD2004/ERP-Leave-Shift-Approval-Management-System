@@ -278,7 +278,6 @@ public class EmployeeView extends VerticalLayout {
 
         DatePicker effectiveDatePicker = new DatePicker("Effective Date");
 
-        // Default to today, or maintain the old date if one existed
         if (currentEmployee.getShiftEffectiveDate() != null) {
             effectiveDatePicker.setValue(currentEmployee.getShiftEffectiveDate());
         } else {

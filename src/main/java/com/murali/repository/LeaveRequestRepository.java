@@ -16,6 +16,7 @@ import java.util.Optional;
 @Repository
 public interface LeaveRequestRepository extends JpaRepository<LeaveRequest, Long> {
 
+    @EntityGraph(attributePaths = {"leaveType"})
     @Query("SELECT l FROM LeaveRequest l WHERE l.employee.id IN :employeeIds " + "AND l.status = :status " + "AND (l.startDate <= :endDate AND l.endDate >= :startDate)")
     List<LeaveRequest> findApprovedLeavesForEmployeesInRange(@Param("employeeIds") List<Long> employeeIds, @Param("status") String status, @Param("startDate") LocalDate startDate, @Param("endDate") LocalDate endDate);
 
@@ -37,6 +38,7 @@ public interface LeaveRequestRepository extends JpaRepository<LeaveRequest, Long
     @EntityGraph(attributePaths = {"leaveType"})
     List<LeaveRequest> findByEmployeeIdAndStatusOrderByIdDesc(Long employeeId, String status);
 
+    @EntityGraph(attributePaths = {"leaveType"})
     @Query("SELECT lr FROM LeaveRequest lr " + "WHERE lr.employee.id = :employeeId " + "AND lr.status = 'APPROVED' " + "AND :targetDate BETWEEN lr.startDate AND lr.endDate")
     Optional<LeaveRequest> findApprovedLeaveForEmployeeOnDate(@Param("employeeId") Long employeeId, @Param("targetDate") LocalDate targetDate);
 

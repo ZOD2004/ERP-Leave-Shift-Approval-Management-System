@@ -15,7 +15,7 @@ import org.springframework.beans.factory.ObjectProvider;
 
 @PermitAll
 @PageTitle("My Dashboard")
-@Route(value = "dashboard", layout = MainLayout.class)
+@Route(value = "", layout = MainLayout.class)
 public class DashboardView extends VerticalLayout {
 
     private final SecurityService securityService;

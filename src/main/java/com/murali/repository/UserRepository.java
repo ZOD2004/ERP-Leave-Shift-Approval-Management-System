@@ -29,4 +29,7 @@ public interface UserRepository extends JpaRepository<User,Long> {
     Optional<User> findWithRoleById(Long id);
 
     Long countByRoleName(String roleSuperAdmin);
+
+    @EntityGraph(attributePaths = {"role"})
+    User findByEmail(String username);
 }

@@ -1,0 +1,49 @@
+2026-07-07 12:42:47.289 [main] INFO  com.murali.Application - Starting Application using Java 21.0.10 with PID 264 (C:\Users\murali\Downloads\ErpLeave\app\target\classes started by murali in C:\Users\murali\Downloads\ErpLeave\app)
+2026-07-07 12:42:47.289 [main] INFO  com.murali.Application - No active profile set, falling back to 1 default profile: "default"
+2026-07-07 12:42:48.482 [main] INFO  o.s.d.r.c.RepositoryConfigurationDelegate - Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2026-07-07 12:42:48.683 [main] INFO  o.s.d.r.c.RepositoryConfigurationDelegate - Finished Spring Data repository scanning in 189 ms. Found 20 JPA repository interfaces.
+2026-07-07 12:42:49.415 [main] INFO  o.s.boot.tomcat.TomcatWebServer - Tomcat initialized with port 8080 (http)
+2026-07-07 12:42:49.431 [main] INFO  o.a.catalina.core.StandardService - Starting service [Tomcat]
+2026-07-07 12:42:49.431 [main] INFO  o.a.catalina.core.StandardEngine - Starting Servlet engine: [Apache Tomcat/11.0.21]
+2026-07-07 12:42:49.568 [main] INFO  o.s.b.w.c.s.WebApplicationContextInitializer - Root WebApplicationContext: initialization completed in 2165 ms
+2026-07-07 12:42:55.206 [main] INFO  c.v.f.s.VaadinServletContextInitializer - Search for subclasses and classes with annotations took 5219 ms
+2026-07-07 12:42:55.396 [main] INFO  c.v.b.d.s.DevModeStartupListener - Starting dev-mode updaters in C:\Users\murali\Downloads\ErpLeave\app folder.
+2026-07-07 12:42:55.443 [main] INFO  c.v.f.s.f.s.FullDependenciesScanner - Visited 135 classes. Took 27 ms.
+2026-07-07 12:42:55.443 [main] INFO  c.v.f.s.f.BundleValidationUtil - Checking if a development mode bundle build is needed
+2026-07-07 12:42:55.954 [main] INFO  c.v.f.s.f.BundleValidationUtil - A development mode bundle build is not needed
+2026-07-07 12:42:56.009 [vaadin-dev-server-1] INFO  c.v.f.s.f.TaskCopyFrontendFiles - Copying frontend resources from jar files ...
+2026-07-07 12:42:56.177 [vaadin-dev-server-1] INFO  c.v.f.s.f.TaskCopyFrontendFiles - Visited 22 resources. Took 173 ms.
+2026-07-07 12:42:56.282 [main] INFO  org.hibernate.orm.jpa - HHH008540: Processing PersistenceUnitInfo [name: default]
+2026-07-07 12:42:56.375 [main] INFO  org.hibernate.orm.core - HHH000001: Hibernate ORM core version 7.2.12.Final
+2026-07-07 12:42:57.004 [main] INFO  o.s.o.j.p.SpringPersistenceUnitInfo - No LoadTimeWeaver setup: ignoring JPA class transformer
+2026-07-07 12:42:57.058 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Starting...
+2026-07-07 12:42:57.258 [main] INFO  com.zaxxer.hikari.pool.HikariPool - HikariPool-1 - Added connection org.postgresql.jdbc.PgConnection@372d9bcf
+2026-07-07 12:42:57.258 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Start completed.
+2026-07-07 12:42:57.322 [main] WARN  org.hibernate.orm.deprecation - HHH90000025: PostgreSQLDialect does not need to be specified explicitly using 'hibernate.dialect' (remove the property setting and it will be selected by default)
+2026-07-07 12:42:57.354 [main] INFO  o.hibernate.orm.connections.pooling - HHH10001005: Database info:
+	Database JDBC URL [jdbc:postgresql://localhost:5432/noway]
+	Database driver: PostgreSQL JDBC Driver
+	Database dialect: PostgreSQLDialect
+	Database version: 18.3
+	Default catalog/schema: noway/public
+	Autocommit mode: undefined/unknown
+	Isolation level: READ_COMMITTED [default READ_COMMITTED]
+	JDBC fetch size: none
+	Pool: DataSourceConnectionProvider
+	Minimum pool size: undefined/unknown
+	Maximum pool size: undefined/unknown
+2026-07-07 12:42:59.441 [main] INFO  org.hibernate.orm.core - HHH000489: No JTA platform available (set 'hibernate.transaction.jta.platform' to enable JTA platform integration)
+2026-07-07 12:42:59.568 [main] INFO  o.s.o.j.LocalContainerEntityManagerFactoryBean - Initialized JPA EntityManagerFactory for persistence unit 'default'
+2026-07-07 12:42:59.663 [main] INFO  o.s.d.j.r.q.QueryEnhancerFactories - Hibernate is in classpath; If applicable, HQL parser will be used.
+2026-07-07 12:43:02.608 [main] WARN  o.s.b.j.a.JpaBaseConfiguration$JpaWebConfiguration - spring.jpa.open-in-view is enabled by default. Therefore, database queries may be performed during view rendering. Explicitly configure spring.jpa.open-in-view to disable this warning
+2026-07-07 12:43:02.734 [main] INFO  o.s.s.c.a.a.c.InitializeUserDetailsBeanManagerConfigurer$InitializeUserDetailsManagerConfigurer - Global AuthenticationManager configured with UserDetailsService bean with name customUserDetailsService
+2026-07-07 12:43:03.627 [main] INFO  c.v.f.s.DefaultDeploymentConfiguration - 
+Vaadin is running in DEVELOPMENT mode - do not use for production deployments.
+2026-07-07 12:43:03.717 [main] INFO  o.s.boot.tomcat.TomcatWebServer - Tomcat started on port 8080 (http) with context path '/'
+2026-07-07 12:43:03.726 [main] INFO  com.murali.Application - Started Application in 17.048 seconds (process running for 17.603)
+2026-07-07 12:43:04.028 [http-nio-8080-exec-1] INFO  o.a.c.c.C.[Tomcat].[localhost].[/] - Initializing Spring DispatcherServlet 'dispatcherServlet'
+2026-07-07 12:43:04.028 [http-nio-8080-exec-1] INFO  o.s.web.servlet.DispatcherServlet - Initializing Servlet 'dispatcherServlet'
+2026-07-07 12:43:04.032 [http-nio-8080-exec-1] INFO  o.s.web.servlet.DispatcherServlet - Completed initialization in 4 ms
+2026-07-07 12:43:04.199 [main] INFO  c.v.b.d.DevModeHandlerManagerImpl - Application running at http://localhost:8080/
+2026-07-07 12:43:06.004 [http-nio-8080-exec-1] WARN  c.v.copilot.JavaSourcePathDetector - Calculated project directory (C:\Users\murali\Downloads\ErpLeave\app) and directory reported by IDE (C:\Users\murali\Downloads\ErpLeave) do not match. Using C:\Users\murali\Downloads\ErpLeave.
+2026-07-07 12:43:17.054 [http-nio-8080-exec-3] INFO  c.murali.config.LoginSuccessListener - User logged in and recorded in audit log: super@gmail.com

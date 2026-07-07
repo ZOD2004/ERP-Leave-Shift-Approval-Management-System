@@ -32,10 +32,8 @@ public class AttendanceProcessService {
     public Attendance processDailyPunch(Long employeeId, LocalDateTime punchTime, boolean isCheckIn) {
         LocalDate today = punchTime.toLocalDate();
         LocalDate yesterday = today.minusDays(1);
-        Employee employee = employeeRepository.findById(employeeId)
-                .orElseThrow(() -> new IllegalArgumentException("Employee not found"));
+        Employee employee = employeeRepository.findById(employeeId).orElseThrow(() -> new IllegalArgumentException("Employee not found"));
 
-        // 1. Check if this punch belongs to Yesterday's Night Shift
         DailyExpectedShift yesterdayExpected = scheduleCalculationService.calculateDailyShift(employee, yesterday);
         if (yesterdayExpected.isWorkingDay() && yesterdayExpected.getExpectedShift().getCrossesMidnight()) {
             Shift yShift = yesterdayExpected.getExpectedShift();
@@ -48,10 +46,8 @@ public class AttendanceProcessService {
             }
         }
 
-        // 2. Otherwise, map to Today's Shift
         DailyExpectedShift todayExpected = scheduleCalculationService.calculateDailyShift(employee, today);
         if (!todayExpected.isWorkingDay() && !todayExpected.isManualOverride()) {
-            // Let them punch in on an Off-Day (generates an anomaly/overtime)
             log.warn("Employee {} is punching in on an unassigned day.", employeeId);
         }
 
@@ -61,8 +57,7 @@ public class AttendanceProcessService {
     private Attendance recordPunch(Employee employee, LocalDateTime punchTime, boolean isCheckIn, LocalDate targetDate, DailyExpectedShift expectedShift) {
         boolean isNewRecord = false;
 
-        Attendance attendance = attendanceRepository.findByEmployeeIdAndAttendanceDate(employee.getId(), targetDate)
-                .orElse(null);
+        Attendance attendance = attendanceRepository.findByEmployeeIdAndAttendanceDate(employee.getId(), targetDate).orElse(null);
 
         if (attendance == null) {
             isNewRecord = true;
@@ -71,7 +66,6 @@ public class AttendanceProcessService {
             attendance.setAttendanceDate(targetDate);
             attendance.setStatus(AttendanceStatus.PENDING);
 
-            // SNAPSHOT THE ENGINE RESULTS! (Immutability)
             if (expectedShift.isWorkingDay() && expectedShift.getExpectedShift() != null) {
                 Shift shift = expectedShift.getExpectedShift();
                 attendance.setExpectedShiftId(shift.getId());
@@ -116,6 +110,7 @@ public class AttendanceProcessService {
 
         for (int i = 0; i < logs.size(); i++) {
             TimeLog log = logs.get(i);
+
             if ("IN".equalsIgnoreCase(log.getPunchType())) {
                 if (firstIn == null) firstIn = log.getPunchTime();
                 currentlyWorking = true;
@@ -139,16 +134,13 @@ public class AttendanceProcessService {
         } else if (logs.isEmpty()) {
             attendance.setStatus(AttendanceStatus.PENDING);
         } else if (attendance.getExpectedStartTime() == null) {
-            // They worked on an intentional off day
             attendance.setStatus(AttendanceStatus.PRESENT);
         } else {
-            long expectedMinutes = calculateExpectedMinutes(attendance, engineResult);
-            long graceMinutes = (attendance.getExpectedWorkMinutes() != null) ? attendance.getExpectedWorkMinutes() : 0;
+            long minRequiredMinutes = calculateMinimumRequiredMinutes(attendance, engineResult);
 
-            if (engineResult != null && engineResult.getActiveLeave() != null) graceMinutes = graceMinutes / 2;
-
-            if (totalMinutes >= (expectedMinutes - graceMinutes)) {
-                attendance.setStatus(engineResult != null && engineResult.getActiveLeave() != null ? AttendanceStatus.HALF_DAY_LEAVE : AttendanceStatus.PRESENT);
+            if (totalMinutes >= minRequiredMinutes) {
+                boolean isHalfDayLeave = engineResult != null && engineResult.getActiveLeave() != null && engineResult.getLeaveSession() != LeaveSession.FULL_DAY;
+                attendance.setStatus(isHalfDayLeave ? AttendanceStatus.HALF_DAY_LEAVE : AttendanceStatus.PRESENT);
             } else {
                 attendance.setStatus(AttendanceStatus.PARTIAL_DAY);
             }
@@ -157,24 +149,41 @@ public class AttendanceProcessService {
         attendanceRepository.save(attendance);
     }
 
-    private long calculateExpectedMinutes(Attendance attendance, DailyExpectedShift engineResult) {
-        LocalTime start = attendance.getExpectedStartTime();
-        LocalTime end = attendance.getExpectedEndTime();
+    private long calculateMinimumRequiredMinutes(Attendance attendance, DailyExpectedShift engineResult) {
 
-        if (engineResult != null && engineResult.getLeaveSession() != null && engineResult.getLeaveSession() != LeaveSession.FULL_DAY) {
+        if (engineResult != null && engineResult.getActiveLeave() != null && engineResult.getLeaveSession() != null) {
             Shift shift = engineResult.getExpectedShift();
             if (shift != null) {
                 if (engineResult.getLeaveSession() == LeaveSession.FIRST_HALF) {
-                    start = shift.getSecondHalfStartTime() != null ? shift.getSecondHalfStartTime() : start;
+                    LocalTime start = shift.getSecondHalfStartTime() != null ? shift.getSecondHalfStartTime() : shift.getStartTime();
+                    return calculateDurationInMinutes(start, shift.getEndTime(), shift.getCrossesMidnight());
                 } else if (engineResult.getLeaveSession() == LeaveSession.SECOND_HALF) {
-                    end = shift.getFirstHalfEndTime() != null ? shift.getFirstHalfEndTime() : end;
+                    LocalTime end = shift.getFirstHalfEndTime() != null ? shift.getFirstHalfEndTime() : shift.getEndTime();
+                    return calculateDurationInMinutes(shift.getStartTime(), end, false);
                 }
             }
         }
 
-        if (Boolean.TRUE.equals(attendance.getCrossesMidnight()) && end.isBefore(start)) {
-            return Duration.between(start, LocalTime.MAX).toMinutes() + Duration.between(LocalTime.MIDNIGHT, end).toMinutes() + 1;
+        if (attendance.getExpectedWorkMinutes() != null && attendance.getExpectedWorkMinutes() > 0) {
+            return attendance.getExpectedWorkMinutes();
         }
+
+        if (attendance.getExpectedStartTime() != null && attendance.getExpectedEndTime() != null) {
+            return calculateDurationInMinutes(attendance.getExpectedStartTime(), attendance.getExpectedEndTime(), attendance.getCrossesMidnight());
+        }
+
+        return 0;
+    }
+
+    private long calculateDurationInMinutes(LocalTime start, LocalTime end, Boolean crossesMidnight) {
+        if (start == null || end == null) return 0;
+
+        if (Boolean.TRUE.equals(crossesMidnight) && end.isBefore(start)) {
+            long minutesBeforeMidnight = Duration.between(start, LocalTime.MAX).toMinutes() + 1;
+            long minutesAfterMidnight = Duration.between(LocalTime.MIDNIGHT, end).toMinutes();
+            return minutesBeforeMidnight + minutesAfterMidnight;
+        }
+
         return Duration.between(start, end).toMinutes();
     }
 
@@ -190,8 +199,6 @@ public class AttendanceProcessService {
         log.info("Successfully recalculated attendance for Employee {} on {}", employeeId, targetDate);
     }
 
-    // Keep your getTodayAttendance, getEmployeeAttendanceHistory, getTodayTeamAttendanceSummary methods
-    // NOTE: For getTodayTeamAttendanceSummary, replace the shiftAssignmentRepository call with scheduleCalculationService.calculateBatchShifts()
     public Optional<Attendance> getTodayAttendance(Long employeeId) {
         return attendanceRepository.findByEmployeeIdAndAttendanceDate(employeeId, LocalDate.now());
     }
@@ -208,10 +215,8 @@ public class AttendanceProcessService {
             return new TeamAttendanceSummaryDTO(0, 0, 0);
         }
 
-        // 1. Ask the Batch Engine for today's schedule for the entire team
         Map<Long, List<DailyExpectedShift>> batchSchedules = scheduleCalculationService.calculateBatchShifts(reportingEmployees, today, today);
 
-        // 2. Extract ONLY the IDs of employees who are expected to work today (not off, not on full-day leave)
         List<Long> expectedEmployeeIds = new ArrayList<>();
         for (Employee emp : reportingEmployees) {
             List<DailyExpectedShift> scheduleList = batchSchedules.getOrDefault(emp.getId(), Collections.emptyList());
@@ -220,7 +225,6 @@ public class AttendanceProcessService {
             }
         }
 
-        // 3. Fetch actual attendance records for the team
         List<Long> teamIds = reportingEmployees.stream().map(Employee::getId).toList();
         List<Attendance> todayAttendances = attendanceRepository.findByEmployeeIdsAndAttendanceDate(teamIds, today);
 
@@ -228,63 +232,8 @@ public class AttendanceProcessService {
         int expectedCount = 0;
         int absentOrLeaveCount = 0;
 
-        // 4. Calculate metrics based strictly on who the engine says should be here
         for (Long expectedId : expectedEmployeeIds) {
-            Attendance att = todayAttendances.stream()
-                    .filter(a -> a.getEmployee().getId().equals(expectedId))
-                    .findFirst()
-                    .orElse(null);
-
-            if (att == null) {
-                expectedCount++;
-            } else {
-                if (att.getFirstCheckIn() != null) {
-                    presentCount++;
-                } else if (AttendanceStatus.ON_LEAVE.equals(att.getStatus()) || AttendanceStatus.ABSENT.equals(att.getStatus())) {
-                    absentOrLeaveCount++;
-                } else {
-                    expectedCount++;
-                }
-            }
-        }
-
-        return new TeamAttendanceSummaryDTO(presentCount, expectedCount, absentOrLeaveCount);
-    }
-    @Transactional(readOnly = true)
-    public TeamAttendanceSummaryDTO getGlobalDailyAttendanceSummary(LocalDate date) {
-        // 1. Get all active employees in the company
-        List<Employee> allActiveEmployees = employeeRepository.findByActiveTrue();
-
-        if (allActiveEmployees.isEmpty()) {
-            return new TeamAttendanceSummaryDTO(0, 0, 0);
-        }
-
-        // 2. Ask the Batch Engine for today's schedule for EVERYONE
-        Map<Long, List<DailyExpectedShift>> batchSchedules = scheduleCalculationService.calculateBatchShifts(allActiveEmployees, date, date);
-
-        // 3. Extract IDs of employees expected to work today
-        List<Long> expectedEmployeeIds = new ArrayList<>();
-        for (Employee emp : allActiveEmployees) {
-            List<DailyExpectedShift> scheduleList = batchSchedules.getOrDefault(emp.getId(), Collections.emptyList());
-            if (!scheduleList.isEmpty() && scheduleList.get(0).isWorkingDay()) {
-                expectedEmployeeIds.add(emp.getId());
-            }
-        }
-
-        // 4. Fetch actual attendance records for today
-        List<Long> allIds = allActiveEmployees.stream().map(Employee::getId).toList();
-        List<Attendance> attendances = attendanceRepository.findByEmployeeIdsAndAttendanceDate(allIds, date);
-
-        int presentCount = 0;
-        int expectedCount = 0; // "Yet to Check-in"
-        int absentOrLeaveCount = 0;
-
-        // 5. Calculate metrics
-        for (Long expectedId : expectedEmployeeIds) {
-            Attendance att = attendances.stream()
-                    .filter(a -> a.getEmployee().getId().equals(expectedId))
-                    .findFirst()
-                    .orElse(null);
+            Attendance att = todayAttendances.stream().filter(a -> a.getEmployee().getId().equals(expectedId)).findFirst().orElse(null);
 
             if (att == null) {
                 expectedCount++;

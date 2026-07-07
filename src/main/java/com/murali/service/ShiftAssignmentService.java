@@ -199,8 +199,6 @@ public class ShiftAssignmentService {
         LocalDate newStart = dto.getStartDate();
         LocalDate newEnd = dto.getEndDate();
 
-        // 1. SCENARIO A: The original assignment hasn't started yet (Entirely in the future).
-        // It is safe to just mutate the row directly.
         if (originalStart.isAfter(today)) {
             boolean hasConflict = shiftAssignmentRepository.existsConflictExcludingAssignment(dto.getEmployeeId(), newStart, newEnd, existing.getId());
             if (hasConflict) throw new ShiftConflictException("Cannot update boundaries: Overlaps with another assigned shift.");
@@ -216,21 +214,15 @@ public class ShiftAssignmentService {
                     String.format("{ \"shiftId\": %d, \"startDate\": \"%s\", \"endDate\": \"%s\" }", newShift.getId(), newStart, newEnd));
             return;
         }
-
-        // 2. SCENARIO B: The assignment started in the past. We must SPLIT it to protect historical data.
         if (!newStart.isAfter(today)) {
             throw new IllegalArgumentException("Cannot apply edits to past or active dates. Effective start date must be tomorrow or later.");
         }
 
-        // Truncate the original assignment so it ends right before the new edits take effect
-        // (e.g. Original: Jan 1 - Jan 31. Edit: Jan 16. Original becomes Jan 1 - Jan 15).
         existing.setEndDate(newStart.minusDays(1));
         shiftAssignmentRepository.saveAndFlush(existing);
 
-        // Punch a hole in case there are any other weird overlaps in the new future window
         punchHoleInExistingShifts(existing.getEmployee().getId(), newStart, newEnd);
 
-        // Create the new future segment
         ShiftAssignment newSegment = new ShiftAssignment();
         newSegment.setEmployee(existing.getEmployee());
         newSegment.setShift(newShift);
@@ -379,7 +371,6 @@ public class ShiftAssignmentService {
     public Map<String, Long> getTodayShiftCounts(LocalDate date) {
         List<Employee> activeEmployees = employeeRepository.findByActiveTrue();
 
-        // Ask the engine who is supposed to be working today!
         Map<Long, List<DailyExpectedShift>> batchSchedules = scheduleCalculationService.calculateBatchShifts(activeEmployees, date, date);
 
         Map<String, Long> stats = new java.util.HashMap<>();
@@ -389,7 +380,6 @@ public class ShiftAssignmentService {
             if (!expectations.isEmpty()) {
                 DailyExpectedShift expected = expectations.get(0);
 
-                // Only count them if they are actually scheduled to work (not off, not on full day leave)
                 if (expected.isWorkingDay() && expected.getExpectedShift() != null) {
                     String shiftName = expected.getExpectedShift().getName();
                     stats.put(shiftName, stats.getOrDefault(shiftName, 0L) + 1L);
@@ -402,7 +392,6 @@ public class ShiftAssignmentService {
     public List<DailyCellDTO> getResolvedCalendarData(LocalDate startDate, LocalDate endDate) {
         List<Employee> activeEmployees = employeeRepository.findByActiveTrue();
 
-        // 1. Ask the High-Speed Engine for the calendar view!
         Map<Long, List<DailyExpectedShift>> batchSchedules = scheduleCalculationService.calculateBatchShifts(activeEmployees, startDate, endDate);
 
         List<DailyCellDTO> resolvedData = new ArrayList<>();
@@ -427,7 +416,6 @@ public class ShiftAssignmentService {
                 if (expected.isWorkingDay() && expected.getExpectedShift() != null) {
                     Shift virtualShift = expected.getExpectedShift();
 
-                    // Map the virtual/actual shift to the UI DTO
                     ShiftAssignmentDTO shiftDto = new ShiftAssignmentDTO();
                     shiftDto.setId(expected.getAssignmentId());
                     shiftDto.setShiftId(virtualShift.getId());

@@ -79,16 +79,11 @@ public class HodWorkspace extends VerticalLayout {
             return;
         }
 
-        // 1. Fetch ALL employees in this HOD's department
         List<Employee> departmentEmployees = employeeRepository.findByDepartmentId(hod.getDepartment().getId());
 
-        // 2. Pre-load bulk data for today to avoid N+1 queries in the Grid
         loadBulkDailyData(departmentEmployees);
 
-        // 3. Build the Manager -> Direct Reports mapping for the TreeGrid
         buildHierarchyMap(departmentEmployees, hod.getId());
-
-        // --- Render UI ---
 
         add(createPersonalHeader(hod));
         add(new Hr());
@@ -116,7 +111,6 @@ public class HodWorkspace extends VerticalLayout {
             }
         });
 
-        // Load Attendances
         List<Attendance> attendances = attendanceRepository.findByEmployeeIdsAndAttendanceDate(empIds, today);
         attendances.forEach(a -> todayAttendanceMap.put(a.getEmployee().getId(), a));
     }
@@ -124,7 +118,6 @@ public class HodWorkspace extends VerticalLayout {
     private void buildHierarchyMap(List<Employee> deptEmployees, Long hodId) {
         managerToDirectReportsMap.clear();
         for (Employee emp : deptEmployees) {
-            // Skip the HOD themselves from being a child of anyone
             if (emp.getId().equals(hodId)) continue;
 
             Long managerId = emp.getManager() != null ? emp.getManager().getId() : hodId; // Default orphans to HOD
@@ -136,11 +129,10 @@ public class HodWorkspace extends VerticalLayout {
         HorizontalLayout kpiLayout = new HorizontalLayout();
         kpiLayout.setWidthFull();
         kpiLayout.setSpacing(true);
-        // This ensures the cards stay horizontal and scroll sideways on smaller screens
         kpiLayout.getStyle().set("overflow-x", "auto");
         kpiLayout.getStyle().set("padding-bottom", "8px");
 
-        int totalHeadcount = deptEmployees.size() - 1; // Exclude HOD
+        int totalHeadcount = deptEmployees.size() - 1;
         int managersCount = (int) deptEmployees.stream().filter(e -> "ROLE_MANAGER".equals(e.getUser().getRole().getName())).count();
 
         int presentCount = 0;
@@ -210,16 +202,13 @@ public class HodWorkspace extends VerticalLayout {
         treeGrid.getStyle().set("border", "1px solid var(--lumo-contrast-10pct)").set("border-radius", "8px");
         treeGrid.setHeight("400px");
 
-        // Hierarchy Column (Shows Expand/Collapse arrows)
         treeGrid.addHierarchyColumn(emp -> emp.getFirstName() + " (" + emp.getEmployeeCode() + ")").setHeader("Employee Name").setFlexGrow(2);
 
-        // Role Column
         treeGrid.addColumn(emp -> {
             String roleName = emp.getUser() != null ? emp.getUser().getRole().getName() : "N/A";
             return roleName.replace("ROLE_", "").replace("_", " ");
         }).setHeader("Role").setAutoWidth(true);
 
-        // Expected Shift Column
         treeGrid.addColumn(emp -> {
             DailyExpectedShift expected = todayScheduleMap.get(emp.getId());
             if (expected == null || !expected.isWorkingDay()) return "Off-Day";
@@ -227,7 +216,6 @@ public class HodWorkspace extends VerticalLayout {
             return shift != null ? shift.getName() : "Unknown";
         }).setHeader("Today's Shift").setAutoWidth(true);
 
-        // Live Status Badge Column
         treeGrid.addComponentColumn(emp -> {
             Attendance att = todayAttendanceMap.get(emp.getId());
             DailyExpectedShift expected = todayScheduleMap.get(emp.getId());
@@ -253,14 +241,10 @@ public class HodWorkspace extends VerticalLayout {
 
         treeGrid.addComponentColumn(emp -> createViewLeavesBtn(emp)).setHeader("Actions").setAutoWidth(true);
 
-        // Populate the TreeGrid
-        // Root items: Employees reporting directly to the HOD
         List<Employee> directReportsToHod = managerToDirectReportsMap.getOrDefault(hodId, Collections.emptyList());
 
-        // Set items recursively using our pre-built map
         treeGrid.setItems(directReportsToHod, emp -> managerToDirectReportsMap.getOrDefault(emp.getId(), Collections.emptyList()));
 
-        // Auto-expand the first level so the HOD immediately sees their direct managers
         treeGrid.expand(directReportsToHod);
 
         section.add(title, treeGrid);

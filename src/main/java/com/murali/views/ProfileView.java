@@ -66,7 +66,6 @@ public class ProfileView extends VerticalLayout {
         FormLayout detailsLayout = new FormLayout();
         detailsLayout.setResponsiveSteps(new FormLayout.ResponsiveStep("0", 1), new FormLayout.ResponsiveStep("500px", 2));
 
-        // User Fields
         TextField usernameField = new TextField("Username");
         usernameField.setValue(user.getUsername() != null ? user.getUsername() : "");
         usernameField.setReadOnly(true);
@@ -81,7 +80,6 @@ public class ProfileView extends VerticalLayout {
 
         detailsLayout.add(usernameField, emailField, roleField);
 
-        // Employee Fields (if linked)
         if (emp != null) {
             TextField empCode = new TextField("Employee Code");
             empCode.setValue(emp.getEmployeeCode() != null ? emp.getEmployeeCode() : "");
@@ -110,7 +108,7 @@ public class ProfileView extends VerticalLayout {
 
     private VerticalLayout createPasswordCard(String username) {
         VerticalLayout card = new VerticalLayout();
-        card.setWidthFull(); // Constrain card container
+        card.setWidthFull();
         card.addClassNames(
                 LumoUtility.Background.BASE,
                 LumoUtility.Border.ALL, LumoUtility.BorderColor.CONTRAST_10,
@@ -123,7 +121,6 @@ public class ProfileView extends VerticalLayout {
         sectionTitle.addClassNames(LumoUtility.Margin.Top.NONE);
 
         FormLayout passwordLayout = new FormLayout();
-        // Explicitly make the form fields scale cleanly down to 1 column on tiny viewports
         passwordLayout.setResponsiveSteps(
                 new FormLayout.ResponsiveStep("0", 1),
                 new FormLayout.ResponsiveStep("500px", 2)
@@ -134,7 +131,6 @@ public class ProfileView extends VerticalLayout {
         PasswordField newPassword = new PasswordField("New Password");
         PasswordField confirmPassword = new PasswordField("Confirm New Password");
 
-        // Explicitly set all individual components to fill their layout cells safely
         oldPassword.setWidthFull();
         newPassword.setWidthFull();
         confirmPassword.setWidthFull();
@@ -166,15 +162,12 @@ public class ProfileView extends VerticalLayout {
         });
         saveButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
 
-        // Layout configuration logic:
         passwordLayout.add(oldPassword, newPassword, confirmPassword);
 
-        // Spanning rules:
-        passwordLayout.setColspan(oldPassword, 2);     // Takes row 1 entirely
-        passwordLayout.setColspan(newPassword, 1);     // Takes row 2, column 1
-        passwordLayout.setColspan(confirmPassword, 1); // Takes row 2, column 2
+        passwordLayout.setColspan(oldPassword, 2);
+        passwordLayout.setColspan(newPassword, 1);
+        passwordLayout.setColspan(confirmPassword, 1);
 
-        // Wraps button separately inside a layout container to avoid grid overflow clipping
         HorizontalLayout buttonLayout = new HorizontalLayout(saveButton);
         buttonLayout.setWidthFull();
         buttonLayout.setPadding(false);

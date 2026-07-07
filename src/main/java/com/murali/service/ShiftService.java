@@ -71,28 +71,21 @@ public class ShiftService {
     }
 
     private void validateAndPrepareShift(Shift shift) {
-        // Name validation applies to all shifts
         shiftRepository.findByNameIgnoreCase(shift.getName()).ifPresent(existingShift -> {
             if (shift.getId() == null || !existingShift.getId().equals(shift.getId())) {
                 throw new IllegalArgumentException("A shift with the name '" + shift.getName() + "' already exists.");
             }
         });
 
-        // If it's a Rotational Shift container, skip standard time/day validations
         if (Boolean.TRUE.equals(shift.getIsRotationalShift())) {
             shift.setCrossesMidnight(false);
 
-            // --- THE FIX: Satisfy the database NOT NULL constraints ---
-            // We inject dummy times so the database doesn't crash.
-            // The Schedule Engine ignores these and uses the Sequence times instead.
             shift.setStartTime(LocalTime.MIDNIGHT);
             shift.setEndTime(LocalTime.MIDNIGHT);
-            // ----------------------------------------------------------
 
             return;
         }
 
-        // Standard Shift Validations
         if (shift.getWorkingDays() == null || shift.getWorkingDays().isEmpty()) {
             throw new IllegalArgumentException("At least one working day is required.");
         }

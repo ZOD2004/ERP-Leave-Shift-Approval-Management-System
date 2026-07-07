@@ -67,7 +67,6 @@ public class ShiftView extends VerticalLayout {
     private final TimePicker startTimeField = new TimePicker("Shift Start Time");
     private final TimePicker endTimeField = new TimePicker("Shift End Time");
 
-    // New Fields
     private final TimePicker firstHalfEndTimeField = new TimePicker("1st Half Ends At");
     private final TimePicker secondHalfStartTimeField = new TimePicker("2nd Half Starts At");
     private final IntegerField gracePeriodField = new IntegerField("Required Work Time (Minutes)");
@@ -75,7 +74,6 @@ public class ShiftView extends VerticalLayout {
     private final Button saveBtn = new Button("Save");
     private final Button cancelBtn = new Button("Cancel");
 
-    // FIXED: Using standard Binder instead of BeanValidationBinder
     private final Binder<Shift> binder = new Binder<>(Shift.class);
     private Shift currentShift;
     private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm");
@@ -140,16 +138,14 @@ public class ShiftView extends VerticalLayout {
 
     private void configureForm() {
         formDialog.setHeaderTitle("Shift Details");
-        formDialog.setWidth("600px"); // Wider to accommodate the side-by-side time fields
+        formDialog.setWidth("600px");
 
-        // UI Setup
         shiftTypeField.setItems(Shifts.values());
         shiftTypeField.setAllowCustomValue(false);
         shiftTypeField.setItemLabelGenerator(type -> type.name().replace("_", " "));
 
         workingDaysField.setItems(WorkingDay.values());
 
-        // Set Step Increments
         startTimeField.setStep(Duration.ofMinutes(15));
         endTimeField.setStep(Duration.ofMinutes(15));
         firstHalfEndTimeField.setStep(Duration.ofMinutes(15));
@@ -219,8 +215,6 @@ public class ShiftView extends VerticalLayout {
             gracePeriodField.setVisible(!isRotational);
             rotationSequenceContainer.setVisible(isRotational);
 
-            // e.isFromClient() ensures this ONLY runs when the user manually clicks the checkbox,
-            // preventing bugs when binder.readBean() loads data in the background.
             if (e.isFromClient() && isRotational && rotationSequenceContainer.getComponentCount() == 0) {
                 rotationSequenceContainer.removeAll();
                 rotationSequenceContainer.add(new H4("Rotation Segments"));
@@ -230,8 +224,6 @@ public class ShiftView extends VerticalLayout {
                         rotationSequenceContainer.addComponentAtIndex(rotationSequenceContainer.getComponentCount() - 1, new RotationSegmentEditor())
                 );
 
-                // We no longer auto-spawn an empty RotationSegmentEditor here.
-                // It stays perfectly clean until the user clicks "Add Segment".
                 rotationSequenceContainer.add(addSegmentBtn);
             }
         });
@@ -242,12 +234,10 @@ public class ShiftView extends VerticalLayout {
         VerticalLayout dialogLayout = new VerticalLayout(topLayout, mainTimesHeader, mainTimesLayout, sessionTimesHeader, sessionTimesLayout, bottomLayout, rotationSequenceContainer);
         dialogLayout.setPadding(false);
 
-        // Binder Bindings
         binder.forField(nameField).asRequired("Shift Name is required").bind(Shift::getName, Shift::setName);
         binder.forField(shiftTypeField).asRequired("Shift Type is required").bind(Shift::getShiftType, Shift::setShiftType);
         binder.forField(isRotationalShiftField).bind(Shift::getIsRotationalShift, Shift::setIsRotationalShift);
 
-        // CONDITIONAL VALIDATORS: Only require these fields if it is NOT a rotational shift
         binder.forField(workingDaysField)
                 .withValidator(days -> isRotationalShiftField.getValue() || (days != null && !days.isEmpty()), "Select at least one working day")
                 .bind(Shift::getWorkingDays, Shift::setWorkingDays);
@@ -259,7 +249,6 @@ public class ShiftView extends VerticalLayout {
         binder.forField(endTimeField)
                 .withValidator(time -> isRotationalShiftField.getValue() || time != null, "End Time is required")
                 .bind(Shift::getEndTime, Shift::setEndTime);
-        // New field bindings (Optional, so no .asRequired())
         binder.forField(firstHalfEndTimeField).bind(Shift::getFirstHalfEndTime, Shift::setFirstHalfEndTime);
         binder.forField(secondHalfStartTimeField).bind(Shift::getSecondHalfStartTime, Shift::setSecondHalfStartTime);
         binder.forField(gracePeriodField)
@@ -337,26 +326,22 @@ public class ShiftView extends VerticalLayout {
                 }
             }
 
-            // Vaadin checks our conditional validators here!
             binder.writeBean(currentShift);
 
-            // --- NEW EXTRACTION LOGIC FOR CUSTOM SEGMENTS ---
             if (isRotational) {
                 List<RotationSequence> sequences = new ArrayList<>();
                 int order = 1;
 
-                // Loop through the UI components to grab the segment data
                 for (Component c : rotationSequenceContainer.getChildren().toList()) {
                     if (c instanceof RotationSegmentEditor) {
                         RotationSequence seq = ((RotationSegmentEditor) c).getSegment(order++);
 
-                        // Safety Check: Ensure segment name isn't blank
                         if (seq.getName() == null || seq.getName().trim().isEmpty()) {
                             Notification.show("All segments must have a Segment Name.", 3000, Notification.Position.MIDDLE).addThemeVariants(NotificationVariant.LUMO_ERROR);
                             return;
                         }
 
-                        seq.setParentShift(currentShift); // Tie it to the parent!
+                        seq.setParentShift(currentShift);
                         sequences.add(seq);
                     }
                 }
@@ -366,7 +351,6 @@ public class ShiftView extends VerticalLayout {
                     return;
                 }
 
-                // Ensure JPA properly removes orphaned sequences if they were deleted in the UI
                 if (currentShift.getRotationSequences() != null) {
                     currentShift.getRotationSequences().clear();
                     currentShift.getRotationSequences().addAll(sequences);
@@ -375,7 +359,6 @@ public class ShiftView extends VerticalLayout {
                 }
 
             } else {
-                // If they unchecked the box, clear out any attached sequences
                 if (currentShift.getRotationSequences() != null) {
                     currentShift.getRotationSequences().clear();
                 }
@@ -440,16 +423,13 @@ public class ShiftView extends VerticalLayout {
         notification.addThemeVariants(variant);
     }
     private boolean isTimeBetwee(LocalTime time, LocalTime start, LocalTime end, boolean isNightShift) {
-        // Allow the boundary to be exactly on the start or end time if needed
         if (time.equals(start) || time.equals(end)) {
             return true;
         }
 
         if (!isNightShift) {
-            // Standard Day Shift: time must be literally between start and end
             return time.isAfter(start) && time.isBefore(end);
         } else {
-            // Night Shift (e.g., 22:00 to 06:00): time must be late at night OR early morning
             return time.isAfter(start) || time.isBefore(end);
         }
     }
@@ -468,7 +448,6 @@ public class ShiftView extends VerticalLayout {
         public RotationSegmentEditor() {
             typeBox.setItems(RotationSegmentType.values());
             shiftType.setItems(Shifts.values());
-            // Inline CSS to create a Card look
             getStyle().set("border", "1px solid var(--lumo-contrast-20pct)");
             getStyle().set("border-radius", "var(--lumo-border-radius-m)");
             getStyle().set("padding", "var(--lumo-space-m)");
@@ -484,13 +463,12 @@ public class ShiftView extends VerticalLayout {
             start.setLocale(Locale.UK);
             end.setLocale(Locale.UK);
 
-            // Auto-calculate bounds and grace period
             HasValue.ValueChangeListener<AbstractField.ComponentValueChangeEvent<TimePicker, LocalTime>> timeCalc = event -> {
                 LocalTime s = start.getValue();
                 LocalTime e = end.getValue();
                 if (s != null && e != null) {
                     long durationMinutes = Duration.between(s, e).toMinutes();
-                    if (durationMinutes < 0) durationMinutes += 24 * 60; // Crosses midnight
+                    if (durationMinutes < 0) durationMinutes += 24 * 60;
 
                     if (durationMinutes > 60) {
                         long halfDuration = durationMinutes / 2;
@@ -506,7 +484,6 @@ public class ShiftView extends VerticalLayout {
             start.addValueChangeListener(timeCalc);
             end.addValueChangeListener(timeCalc);
 
-            // Default settings
             durationDays.setMin(1);
             durationDays.setValue(1);
             typeBox.setValue(RotationSegmentType.WORK);
@@ -525,7 +502,6 @@ public class ShiftView extends VerticalLayout {
             removeBtn.addThemeVariants(ButtonVariant.LUMO_ERROR, ButtonVariant.LUMO_TERTIARY);
             removeBtn.addClickListener(e -> rotationSequenceContainer.remove(this));
 
-            // Move fields into a responsive FormLayout instead of cramming into a row
             FormLayout formLayout = new FormLayout();
             formLayout.add(segmentName, typeBox, durationDays, shiftType, start, end, firstHalf, secondHalf, requiredMins);
             formLayout.setResponsiveSteps(

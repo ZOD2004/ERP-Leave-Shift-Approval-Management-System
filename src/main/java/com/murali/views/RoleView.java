@@ -77,7 +77,7 @@ public class RoleView extends VerticalLayout {
         HorizontalLayout toolbar = new HorizontalLayout(searchField, addBtn);
         toolbar.setWidthFull();
         toolbar.setAlignItems(Alignment.CENTER);
-        toolbar.setFlexGrow(1, searchField); // Pushes the add button to the right
+        toolbar.setFlexGrow(1, searchField);
 
         add(title, toolbar, grid);
         updateList();

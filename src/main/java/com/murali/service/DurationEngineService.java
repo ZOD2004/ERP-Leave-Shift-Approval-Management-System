@@ -29,8 +29,6 @@ public class DurationEngineService {
 
     private final AuditLogService auditLoggingService;
     private final EmployeeRepository employeeRepository;
-
-    // Inject the new Master Calculation Engine
     private final ScheduleCalculationService scheduleCalculationService;
 
     @Transactional(readOnly = true)
@@ -42,17 +40,14 @@ public class DurationEngineService {
             throw new PastDateException("End date cannot be before Start date");
         }
 
-        // 1. Ask the Batch Engine for the entire leave window in one go!
         Map<Long, List<DailyExpectedShift>> batchSchedules = scheduleCalculationService.calculateBatchShifts(List.of(employee), startDate, endDate);
         List<DailyExpectedShift> expectations = batchSchedules.getOrDefault(employee.getId(), Collections.emptyList());
 
         BigDecimal baseWorkingDays = BigDecimal.ZERO;
         int offDaysCount = 0;
 
-        // 2. Evaluate each day based purely on the Engine's output
         for (DailyExpectedShift expected : expectations) {
 
-            // The engine naturally sets isWorkingDay = false for Holidays, Intentional Off Days, and Full-Day Leaves.
             if (expected.isWorkingDay()) {
                 baseWorkingDays = baseWorkingDays.add(BigDecimal.ONE);
             } else {
@@ -69,7 +64,6 @@ public class DurationEngineService {
         BigDecimal netLeaveDays = baseWorkingDays;
         BigDecimal sandwichPenaltyDays = BigDecimal.ZERO;
 
-        // 3. Apply Sandwich Rule (Now includes Holidays since they are non-working days)
         if (applySandwichRulePolicy && offDaysCount > 0) {
             sandwichRuleTriggered = true;
             sandwichPenaltyDays = BigDecimal.valueOf(offDaysCount);
@@ -77,7 +71,6 @@ public class DurationEngineService {
             log.info("Sandwich rule applied. Added {} non-working days to total.", offDaysCount);
         }
 
-        // 4. Handle Half-Day Sessions
         if (startDate.equals(endDate)) {
             if (startSession == LeaveSession.FIRST_HALF || startSession == LeaveSession.SECOND_HALF) {
                 netLeaveDays = netLeaveDays.subtract(new BigDecimal("0.5"));
@@ -122,11 +115,9 @@ public class DurationEngineService {
         int safeguard = 0;
 
         while (safeguard < 30) {
-            // Ask the single-day engine! No manual DB checks needed.
             DailyExpectedShift expected = scheduleCalculationService.calculateDailyShift(employee, current);
 
-            // If the engine says they are supposed to work, we found our adjacent day!
-            if (expected.isWorkingDay()) {
+           if (expected.isWorkingDay()) {
                 return current;
             }
 

@@ -33,7 +33,7 @@ public class AttendanceCronJobService {
     private LocalDateTime lastRunTime;
     private String lastRunStatus = "WAITING";
 
-    @Scheduled(cron = "0 25 18 * * ?")
+    @Scheduled(cron = "0 16 12 * * ?")
     @Transactional
     public void attendanceRunner() {
         LocalDateTime now = LocalDateTime.now();
@@ -48,17 +48,14 @@ public class AttendanceCronJobService {
             List<Employee> activeEmployees = employeeRepository.findByActiveTrue();
             List<Long> empIds = activeEmployees.stream().map(Employee::getId).toList();
 
-            // 1. Run the super-fast memory engine!
             Map<Long, List<DailyExpectedShift>> expectedSchedules = scheduleCalculationService.calculateBatchShifts(activeEmployees, yesterday, today);
 
-            // 2. Fetch existing attendances
             List<Attendance> attendances = new ArrayList<>();
             for (LocalDate date : datesToCheck) {
                 attendances.addAll(attendanceRepository.findByEmployeeIdInAndAttendanceDate(empIds, date));
             }
             Map<Long, Map<LocalDate, Attendance>> attendanceMap = buildAttendanceMap(attendances);
 
-            // 3. Evaluate Reality vs. Engine Expectations
             for (Employee emp : activeEmployees) {
                 Long empId = emp.getId();
                 List<DailyExpectedShift> expectations = expectedSchedules.getOrDefault(empId, Collections.emptyList());
@@ -89,20 +86,15 @@ public class AttendanceCronJobService {
         Shift shift = expected.getExpectedShift();
         LocalDate targetDate = expected.getTargetDate();
 
-        LocalDateTime shiftEndDT = (shift.getCrossesMidnight() != null && shift.getCrossesMidnight())
-                ? targetDate.plusDays(1).atTime(shift.getEndTime())
-                : targetDate.atTime(shift.getEndTime());
+        LocalDateTime shiftEndDT = (shift.getCrossesMidnight() != null && shift.getCrossesMidnight()) ? targetDate.plusDays(1).atTime(shift.getEndTime()) : targetDate.atTime(shift.getEndTime());
 
-        // Only evaluate if the shift has actually finished
         if (now.isAfter(shiftEndDT) && now.isBefore(shiftEndDT.plusHours(24))) {
 
             if (attendance != null && attendance.getFirstCheckIn() != null) {
-                // They punched in, but check if they missed hours
                 if (AttendanceStatus.WORKING.equals(attendance.getStatus()) || AttendanceStatus.PARTIAL_DAY.equals(attendance.getStatus())) {
                     attendanceCorrectionService.evaluateAndRouteAnomaly(attendance);
                 }
             } else {
-                // They missed their shift entirely!
                 AttendanceStatus exactStatus;
                 double penaltyDays = 0;
                 String penaltyDesc = "";
@@ -123,7 +115,6 @@ public class AttendanceCronJobService {
                     attRecord.setAttendanceDate(targetDate);
                     attRecord.setStatus(exactStatus);
 
-                    // Snapshot expected times
                     attRecord.setExpectedShiftId(shift.getId());
                     attRecord.setExpectedShiftName(shift.getName());
                     attRecord.setExpectedStartTime(shift.getStartTime());
@@ -146,7 +137,9 @@ public class AttendanceCronJobService {
 
             AttendanceStatus exactStatus = AttendanceStatus.OFF_DAY;
             if (expected.isHoliday()) exactStatus = AttendanceStatus.PUBLIC_HOLIDAY;
-            if (expected.getActiveLeave() != null && expected.getLeaveSession() == LeaveSession.FULL_DAY) exactStatus = AttendanceStatus.ON_LEAVE;
+            if (expected.getActiveLeave() != null && expected.getLeaveSession() == LeaveSession.FULL_DAY) {
+                exactStatus = AttendanceStatus.ON_LEAVE;
+            }
 
             Attendance attRecord = (attendance != null) ? attendance : new Attendance();
             attRecord.setEmployee(emp);
@@ -160,8 +153,7 @@ public class AttendanceCronJobService {
     }
 
     private void deductPenalty(Employee employee, String leaveTypeName, double days, int year, String desc) {
-        LeaveType type = leaveTypeRepository.findByNameContainingIgnoreCaseOrCodeContainingIgnoreCase(leaveTypeName, "UPL-001").stream().findFirst()
-                .orElseThrow(() -> new IllegalStateException("Leave type not found!"));
+        LeaveType type = leaveTypeRepository.findByNameContainingIgnoreCaseOrCodeContainingIgnoreCase(leaveTypeName, "UPL-001").stream().findFirst().orElseThrow(() -> new IllegalStateException("Leave type not found!"));
         leaveBalanceService.deductPenalty(employee, type, java.math.BigDecimal.valueOf(days), year, desc);
     }
 
@@ -173,6 +165,11 @@ public class AttendanceCronJobService {
         return map;
     }
 
-    public LocalDateTime getLastRunTime() { return lastRunTime; }
-    public String getLastRunStatus() { return lastRunStatus; }
+    public LocalDateTime getLastRunTime() {
+        return lastRunTime;
+    }
+
+    public String getLastRunStatus() {
+        return lastRunStatus;
+    }
 }

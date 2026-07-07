@@ -76,7 +76,6 @@ public class ManagerApprovalView extends VerticalLayout {
         H2 title = new H2("Approval Inbox");
         title.addClassNames(LumoUtility.Margin.NONE);
 
-        // --- Tabs Setup ---
         Tab leaveTab = new Tab(VaadinIcon.FLIGHT_TAKEOFF.create(), new Span(" Leave Requests"));
         Tab correctionTab = new Tab(VaadinIcon.CLOCK.create(), new Span(" Attendance Corrections"));
         Tabs tabs = new Tabs(leaveTab, correctionTab);
@@ -88,15 +87,13 @@ public class ManagerApprovalView extends VerticalLayout {
             correctionWrapper.setVisible(!isLeaveTab);
         });
 
-        // --- Leave Wrapper Setup ---
         leaveWrapper.setSizeFull();
         leaveWrapper.setPadding(false);
         leaveWrapper.add(createLeaveToolbar(), leaveGrid);
 
-        // --- Correction Wrapper Setup ---
         correctionWrapper.setSizeFull();
         correctionWrapper.setPadding(false);
-        correctionWrapper.setVisible(false); // Hidden by default
+        correctionWrapper.setVisible(false);
         correctionWrapper.add(createCorrectionToolbar(), correctionGrid);
 
         add(title, tabs, leaveWrapper, correctionWrapper);
@@ -124,7 +121,6 @@ public class ManagerApprovalView extends VerticalLayout {
 
         leaveGrid.addComponentColumn(approval -> createEmployeeBadge(approval.getLeaveRequest().getEmployee())).setHeader("Employee").setFlexGrow(1).setAutoWidth(true);
 
-        // MODIFIED: Show a badge if it is a Cancellation Request
         leaveGrid.addComponentColumn(approval -> {
             VerticalLayout cell = new VerticalLayout();
             cell.setPadding(false);
@@ -133,7 +129,6 @@ public class ManagerApprovalView extends VerticalLayout {
             Span leaveName = new Span(approval.getLeaveRequest().getLeaveType().getName());
             cell.add(leaveName);
 
-            // Assuming your enum is imported: ApprovalType.CANCELLATION
             if (approval.getApprovalType() == ApprovalType.CANCELLATION) {
                 Span cancelBadge = new Span("CANCELLATION REQ");
                 cancelBadge.getElement().getThemeList().add("badge error small");
@@ -172,10 +167,9 @@ public class ManagerApprovalView extends VerticalLayout {
         LeaveRequest request = approval.getLeaveRequest();
         Component heroSection = createHeroSection(request, isCancellation);
 
-        // FIX 2: Create a master wrapper for all the content so it can scroll
         VerticalLayout contentLayout = new VerticalLayout();
         contentLayout.setPadding(false);
-        contentLayout.setSpacing(true); // Adds a little breathing room between sections
+        contentLayout.setSpacing(true);
 
 
         Component reasonPanel = createReadOnlyPanel(isCancellation ? "Original Reason" : "Reason for Leave", request.getReason());
@@ -196,7 +190,6 @@ public class ManagerApprovalView extends VerticalLayout {
             }
         }
 
-        // 1. Calculate the raw Net Deduction for this specific request
         BigDecimal netDeduction = request.getDurationDays();
 
         if (request.getParentLeave() != null) {
@@ -242,13 +235,10 @@ public class ManagerApprovalView extends VerticalLayout {
         body.setAlignItems(FlexComponent.Alignment.START);
 
         contentLayout.add(heroSection, body);
-
-        // FIX 3: Put the master content layout inside a Scroller
         Scroller scroller = new Scroller(contentLayout);
         scroller.setSizeFull();
-        scroller.getStyle().set("padding-right", "8px"); // Prevents scrollbar from covering text
+        scroller.getStyle().set("padding-right", "8px");
 
-        // Add the Scroller to the dialog instead of the individual pieces
         dialog.add(scroller);
 
 
@@ -314,7 +304,6 @@ public class ManagerApprovalView extends VerticalLayout {
         searchField.setPlaceholder("Search employee name...");
         searchField.setPrefixComponent(VaadinIcon.SEARCH.create());
         searchField.addValueChangeListener(e -> {
-            // Note: Replace getPendingCorrectionsForApprover with your actual manager-specific fetch method
             correctionGrid.setItems(attendanceCorrectionService.getPendingCorrectionsForApprover(currentUser.getId()).stream().filter(c -> c.getAttendance().getEmployee().getFirstName().toLowerCase().contains(e.getValue().toLowerCase())).toList());
         });
 
@@ -359,7 +348,6 @@ public class ManagerApprovalView extends VerticalLayout {
 
         Attendance attendance = correction.getAttendance();
 
-        // NEW LOGIC: Use the snapshotted Engine expectations directly!
         LocalTime effectiveEnd = attendance.getExpectedEndTime();
         String expectedShiftName = attendance.getExpectedShiftName();
 
@@ -395,11 +383,9 @@ public class ManagerApprovalView extends VerticalLayout {
             detailsLayout.add(createDetailRow("Expected Shift End:", effectiveEnd.toString()));
         }
 
-        // Time Picker for check-out
         TimePicker manualCheckOutPicker = new TimePicker("Manual Check-out Time");
         manualCheckOutPicker.setWidthFull();
 
-        // PRE-FILL: Automatically set the check-out time to the employee's snapshotted expected shift end time
         if (effectiveEnd != null) {
             manualCheckOutPicker.setValue(effectiveEnd);
         }
@@ -415,7 +401,6 @@ public class ManagerApprovalView extends VerticalLayout {
                 return;
             }
             try {
-                // Combine attendance date with the manually selected time
                 LocalDateTime checkOutDateTime = attendance.getAttendanceDate().atTime(manualCheckOutPicker.getValue());
 
                 attendanceCorrectionService.resolveCorrection(correction.getId(), "APPROVED", checkOutDateTime, commentsArea.getValue(), currentUser.getId());
@@ -431,7 +416,7 @@ public class ManagerApprovalView extends VerticalLayout {
         rejectBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY, ButtonVariant.LUMO_ERROR);
         rejectBtn.addClickListener(e -> {
             try {
-                attendanceCorrectionService.resolveCorrection(correction.getId(), "REJECTED", null, // Not needed for rejection
+                attendanceCorrectionService.resolveCorrection(correction.getId(), "REJECTED", null,
                         commentsArea.getValue(), currentUser.getId());
                 Notification.show("Correction Rejected. Penalty applied.", 3000, Notification.Position.TOP_END).addThemeVariants(NotificationVariant.LUMO_SUCCESS);
                 dialog.close();
@@ -531,7 +516,6 @@ public class ManagerApprovalView extends VerticalLayout {
             badges.add(cancelBadge);
         }
 
-        // Merged Leave Visual Indicator
         boolean isMerged = request.getParentLeave() != null || (request.getMergedLeaves() != null && !request.getMergedLeaves().isEmpty());
         if (isMerged) {
             Span mergedBadge = new Span("MERGED LEAVE");
@@ -557,7 +541,6 @@ public class ManagerApprovalView extends VerticalLayout {
         String dateStr = request.getStartDate() + " to " + request.getEndDate();
         requestPanel.add(createDetailRow("Dates", dateStr));
 
-        // Only show sessions if it's not a standard Full Day to Full Day request
         if (!"FULL_DAY".equals(request.getStartSession().name()) || !"FULL_DAY".equals(request.getEndSession().name())) {
             String sessionStr = "Start: " + request.getStartSession().name() + " | End: " + request.getEndSession().name();
             requestPanel.add(createDetailRow("Sessions", sessionStr));
@@ -565,14 +548,12 @@ public class ManagerApprovalView extends VerticalLayout {
 
         requestPanel.add(createDetailRow("Total Duration", request.getDurationDays().toPlainString() + " Days"));
 
-        // Visual indicator for Sandwich Rule Penalties
         if (Boolean.TRUE.equals(request.getIsSandwichLeave()) && request.getSandwichPenaltyDays() != null && request.getSandwichPenaltyDays().compareTo(BigDecimal.ZERO) > 0) {
 
             HorizontalLayout penaltyRow = createDetailRow("Sandwich Penalty Included", "+" + request.getSandwichPenaltyDays().toPlainString() + " Days");
             penaltyRow.getStyle().set("color", "var(--lumo-error-text-color)");
             penaltyRow.getStyle().set("font-weight", "bold");
 
-            // Add a little top margin to separate it from the duration
             penaltyRow.getStyle().set("margin-top", "8px");
             requestPanel.add(penaltyRow);
         }
@@ -614,7 +595,6 @@ public class ManagerApprovalView extends VerticalLayout {
         mathLayout.setWidthFull();
         mathLayout.setJustifyContentMode(FlexComponent.JustifyContentMode.BETWEEN);
 
-        // Column 1: Available
         VerticalLayout availCol = new VerticalLayout(new Span("Available"), new Span(available.toPlainString()));
         availCol.setPadding(false);
         availCol.setSpacing(false);
@@ -626,7 +606,6 @@ public class ManagerApprovalView extends VerticalLayout {
         minus.addClassNames(LumoUtility.FontSize.LARGE, LumoUtility.FontWeight.BOLD, LumoUtility.TextColor.SECONDARY);
         minus.getStyle().set("margin-top", "16px");
 
-        // Column 2: Duration
         VerticalLayout durCol = new VerticalLayout(new Span("Deduction"), new Span(duration.toPlainString()));
         durCol.setPadding(false);
         durCol.setSpacing(false);
@@ -638,7 +617,6 @@ public class ManagerApprovalView extends VerticalLayout {
         equals.addClassNames(LumoUtility.FontSize.LARGE, LumoUtility.FontWeight.BOLD, LumoUtility.TextColor.SECONDARY);
         equals.getStyle().set("margin-top", "16px");
 
-        // Column 3: Remaining
         VerticalLayout remCol = new VerticalLayout(new Span("Remaining"), new Span(remaining.toPlainString()));
         remCol.setPadding(false);
         remCol.setSpacing(false);
@@ -646,7 +624,6 @@ public class ManagerApprovalView extends VerticalLayout {
         ((Span) remCol.getComponentAt(0)).addClassNames(LumoUtility.FontSize.XSMALL, LumoUtility.TextColor.SECONDARY);
         ((Span) remCol.getComponentAt(1)).addClassNames(LumoUtility.FontSize.LARGE, LumoUtility.FontWeight.BOLD);
 
-        // Highlight Remaining in Red if negative
         if (remaining.compareTo(BigDecimal.ZERO) < 0) {
             ((Span) remCol.getComponentAt(1)).getStyle().set("color", "var(--lumo-error-text-color)");
         } else {

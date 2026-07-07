@@ -2,6 +2,7 @@ package com.murali.views;
 
 import com.vaadin.flow.component.html.H1;
 import com.vaadin.flow.component.login.LoginForm;
+import com.vaadin.flow.component.login.LoginI18n;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.router.BeforeEnterEvent;
 import com.vaadin.flow.router.BeforeEnterObserver;
@@ -21,12 +22,19 @@ public class LoginView extends VerticalLayout implements BeforeEnterObserver {
         setSizeFull();
         setAlignItems(Alignment.CENTER);
         setJustifyContentMode(JustifyContentMode.CENTER);
-        login.setForgotPasswordButtonVisible(false);
 
+        LoginI18n i18n = LoginI18n.createDefault();
+
+        i18n.getForm().setUsername("Email");
+        i18n.getForm().setTitle("Sign in");
+        i18n.getForm().setSubmit("Login");
+        i18n.getForm().setPassword("Password");
+
+        login.setI18n(i18n);
+        login.setForgotPasswordButtonVisible(false);
         login.setAction("login");
 
         H1 title = new H1("ERP Leave & Shift Approval Management System");
-        title.getStyle().set("margin-bottom", "var(--lumo-space-m)");
 
         add(title, login);
     }

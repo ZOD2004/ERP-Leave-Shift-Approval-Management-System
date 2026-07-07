@@ -24,12 +24,9 @@ public class LoginSuccessListener implements ApplicationListener<AuthenticationS
 
         if (principal instanceof UserDetails userDetails) {
             String username = userDetails.getUsername();
-
-            // Optional: Get the user ID if you want to attach it to the record_id
             User user = userRepository.findByUsername(username);
             Long userId = (user != null) ? user.getId() : 0L;
 
-            // Log the action
             auditLogService.saveAuditLog(
                     userId,
                     "LOGIN",

@@ -37,11 +37,6 @@ public class Shift {
     @Column(name = "end_time", nullable = false)
     private LocalTime endTime;
 
-    // 4 column are new gracePeriod,crossesMidnight,firstHalfEndTime,secondHalfStartTime
-    // grace period added so hr can choose the minimum working time for the shift
-    // to see its night and help the @schedule annotation not to calculate this
-    // to split 2 session for shift was handled in shift assignment which was wrong
-
     @Column(name = "min_required_work_time")
     private Long requiredWorkTime;
 
