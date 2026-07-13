@@ -53,9 +53,7 @@ public class AuditDashboardView extends VerticalLayout {
         this.leaveRequestService = leaveRequestService;
 
         setSizeFull();
-        setPadding(true);
-        setSpacing(true);
-        this.getStyle().set("overflow-y", "auto");
+        addClassName("standard-view-container"); // Standard global layout margins
 
         add(
                 createHeader(),
@@ -74,7 +72,8 @@ public class AuditDashboardView extends VerticalLayout {
     private Component createKpiSection() {
         HorizontalLayout kpiLayout = new HorizontalLayout();
         kpiLayout.setWidthFull();
-        kpiLayout.setSpacing(true);
+        kpiLayout.setSpacing(false);
+        kpiLayout.getStyle().set("gap", "var(--app-padding)"); // Enforce standard global spacing
 
 //        long manualOverrides = dashboardService.getManualOverridesCount();
         long missingPunches = dashboardService.getMissingPunchesCount();
@@ -93,10 +92,7 @@ public class AuditDashboardView extends VerticalLayout {
     }
     private Component createCard(String title, String value, String subtitle) {
         VerticalLayout card = new VerticalLayout();
-        card.addClassNames(
-                LumoUtility.Background.BASE, LumoUtility.BorderRadius.MEDIUM,
-                LumoUtility.BoxShadow.XSMALL, LumoUtility.Padding.MEDIUM
-        );
+        card.addClassNames("standard-surface", "hoverable");
         card.setSpacing(false);
         card.getStyle().set("flex", "1");
 
@@ -124,6 +120,7 @@ public class AuditDashboardView extends VerticalLayout {
 
         // Filters
         TextField empFilter = new TextField("Employee Name/ID");
+        empFilter.focus(); // Automatically focus search bar on view load
         DatePicker dateFilter = new DatePicker("Date");
         ComboBox<String> typeFilter = new ComboBox<>("Transaction Type");
         typeFilter.setItems(LeaveBalanceService.ALLOCATION, LeaveBalanceService.PENDING_HOLD,
@@ -133,10 +130,15 @@ public class AuditDashboardView extends VerticalLayout {
         HorizontalLayout filters = new HorizontalLayout(empFilter, dateFilter, typeFilter);
         filters.setDefaultVerticalComponentAlignment(FlexComponent.Alignment.BASELINE);
 
-        // Grid
         Grid<LeaveBalanceTransaction> grid = new Grid<>(LeaveBalanceTransaction.class, false);
         grid.setSelectionMode(Grid.SelectionMode.NONE); // Strictly Read-Only
         grid.addThemeVariants(GridVariant.LUMO_ROW_STRIPES, GridVariant.LUMO_COMPACT);
+        grid.addClassName("standard-surface");
+        grid.addItemDoubleClickListener(e -> {
+            if (e.getItem().getReferenceId() != null) {
+                openLeaveRequestDialog(e.getItem().getReferenceId()); // Read-only double-click invoke
+            }
+        });
         grid.setHeight("300px");
 
         grid.addColumn(tx -> tx.getCreatedAt().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")))
@@ -230,6 +232,8 @@ public class AuditDashboardView extends VerticalLayout {
         Grid<AuditLog> grid = new Grid<>(AuditLog.class, false);
         grid.setSelectionMode(Grid.SelectionMode.NONE);
         grid.addThemeVariants(GridVariant.LUMO_ROW_STRIPES, GridVariant.LUMO_COMPACT);
+        grid.addClassName("standard-surface");
+        grid.addItemDoubleClickListener(e -> grid.setDetailsVisible(e.getItem(), !grid.isDetailsVisible(e.getItem()))); // Double-click to toggle details
         grid.setHeight("400px"); // Slightly taller to fit details comfortably
 
         grid.addColumn(log -> log.getTimestamp() != null ?
@@ -269,8 +273,8 @@ public class AuditDashboardView extends VerticalLayout {
             diffLayout.addClassNames(LumoUtility.Background.CONTRAST_5);
             diffLayout.getStyle().set("box-shadow", "inset 0px 2px 4px rgba(0,0,0,0.05)");
 
-            VerticalLayout oldLayout = createStateBox("Old State (Before)", auditLog.getOldState(), "var(--lumo-error-color)");
-            VerticalLayout newLayout = createStateBox("New State (After)", auditLog.getNewState(), "var(--lumo-success-color)");
+            VerticalLayout oldLayout = createStateBox("Old State (Before)", auditLog.getOldState(), "#da1e28"); // Standard error red
+            VerticalLayout newLayout = createStateBox("New State (After)", auditLog.getNewState(), "#24a148"); // Standard success green
 
             diffLayout.add(oldLayout, newLayout);
             diffLayout.setFlexGrow(1, oldLayout);
@@ -285,15 +289,12 @@ public class AuditDashboardView extends VerticalLayout {
         return auditLayout;
     }
 
-    // --- HELPER METHOD FOR JSON DIFF UI ---
     private VerticalLayout createStateBox(String titleText, String jsonContent, String topBorderColor) {
         VerticalLayout layout = new VerticalLayout();
         layout.setPadding(true);
         layout.setSpacing(false);
-        layout.getStyle().set("background-color", "var(--lumo-base-color)");
-        layout.getStyle().set("border-radius", "var(--lumo-border-radius-m)");
+        layout.addClassName("standard-surface");
         layout.getStyle().set("border-top", "4px solid " + topBorderColor);
-        layout.getStyle().set("box-shadow", "var(--lumo-box-shadow-xs)");
         layout.setWidth("50%"); // Ensure strictly 50% split
 
         Span header = new Span(titleText);

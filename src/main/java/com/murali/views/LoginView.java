@@ -18,7 +18,7 @@ public class LoginView extends VerticalLayout implements BeforeEnterObserver {
     private final LoginForm login = new LoginForm();
 
     public LoginView() {
-        addClassName("login-view");
+        addClassNames("login-view", "standard-view-container"); // Standard global layout margins
         setSizeFull();
         setAlignItems(Alignment.CENTER);
         setJustifyContentMode(JustifyContentMode.CENTER);
@@ -33,8 +33,10 @@ public class LoginView extends VerticalLayout implements BeforeEnterObserver {
         login.setI18n(i18n);
         login.setForgotPasswordButtonVisible(false);
         login.setAction("login");
+        login.addClassName("standard-surface"); // Applies standard border/shadow to login box
 
         H1 title = new H1("ERP Leave & Shift Approval Management System");
+        title.getStyle().set("text-align", "center"); // Ensures title is centered above box
 
         add(title, login);
     }

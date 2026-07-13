@@ -27,6 +27,7 @@ import com.vaadin.flow.data.binder.BeanValidationBinder;
 import com.vaadin.flow.data.binder.ValidationException;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
+import com.vaadin.flow.theme.lumo.LumoUtility;
 import jakarta.annotation.security.PermitAll;
 import jakarta.annotation.security.RolesAllowed;
 
@@ -59,6 +60,7 @@ public class UserView extends VerticalLayout {
         this.roleService = roleService;
 
         setSizeFull();
+        addClassName("standard-view-container"); // Standard global layout margins
         configureGrid();
         configureForm();
 
@@ -66,9 +68,10 @@ public class UserView extends VerticalLayout {
         addBtn.addClickListener(e -> openForm(new User()));
 
         H1 title = new H1("User Management");
-        title.getStyle().set("margin", "0");
+        title.addClassName(LumoUtility.Margin.NONE);
 
         HorizontalLayout toolbar = new HorizontalLayout(title, addBtn);
+
         toolbar.setWidthFull();
         toolbar.setAlignItems(Alignment.CENTER);
         toolbar.setJustifyContentMode(JustifyContentMode.BETWEEN);
@@ -79,13 +82,17 @@ public class UserView extends VerticalLayout {
 
     private void configureGrid() {
         grid.setSizeFull();
+        grid.addClassName("standard-surface");
+        grid.addItemDoubleClickListener(e -> openForm(e.getItem())); // Invoke existing edit handler
+
         grid.addColumn(User::getUsername).setHeader("Username").setSortable(true);
+
         grid.addColumn(User::getEmail).setHeader("Email").setSortable(true);
         grid.addColumn(user -> user.getRole() != null ? user.getRole().getName() : "No Role").setHeader("Role");
 
         grid.addComponentColumn(user -> {
             Icon icon = user.getActive() ? VaadinIcon.CHECK_CIRCLE.create() : VaadinIcon.CLOSE_CIRCLE.create();
-            icon.setColor(user.getActive() ? "green" : "red");
+            icon.setColor(user.getActive() ? "#24a148" : "#da1e28"); // Standardized success green and error red
             return icon;
         }).setHeader("Active");
 

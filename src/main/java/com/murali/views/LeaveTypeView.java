@@ -64,13 +64,14 @@ public class LeaveTypeView extends VerticalLayout {
         this.ruleService = ruleService;
 
         setSizeFull();
+        addClassName("standard-view-container"); // Standard global layout margins
         configureGrid();
         configureForm();
-
         searchField.setPlaceholder("Search by name or code...");
         searchField.setClearButtonVisible(true);
         searchField.setValueChangeMode(ValueChangeMode.LAZY);
         searchField.addValueChangeListener(e -> updateList());
+        searchField.focus(); // Automatically focus search bar on view load
 
         addBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
         addBtn.addClickListener(e -> openForm(new LeaveType()));
@@ -87,6 +88,9 @@ public class LeaveTypeView extends VerticalLayout {
     private void configureGrid() {
 
         grid.setSizeFull();
+        grid.addClassName("standard-surface");
+        grid.addItemDoubleClickListener(e -> openForm(e.getItem())); // Invoke existing edit handler
+
         grid.addColumn(LeaveType::getName).setHeader("Name").setSortable(true);
         grid.addColumn(LeaveType::getCode).setHeader("Code").setSortable(true);
         grid.addColumn(leaveType -> leaveType.getPaid() ? "Paid" : "Unpaid").setHeader("Status");

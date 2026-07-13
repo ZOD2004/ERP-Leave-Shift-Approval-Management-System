@@ -62,7 +62,7 @@ public class ManagerApprovalView extends VerticalLayout {
         this.leaveBalanceService = leaveBalanceService;
 
         setSizeFull();
-        addClassNames(LumoUtility.Padding.LARGE);
+        addClassName("standard-view-container"); // Standard global layout margins
 
         buildUI();
         configureLeaveGrid();
@@ -104,6 +104,7 @@ public class ManagerApprovalView extends VerticalLayout {
         TextField searchField = new TextField();
         searchField.setPlaceholder("Search employee name...");
         searchField.setPrefixComponent(VaadinIcon.SEARCH.create());
+        searchField.focus(); // Automatically focus search bar on view load
         searchField.addValueChangeListener(e -> {
             leaveGrid.setItems(approvalRoutingService.getPendingApprovalsForUser(currentUser.getId()).stream().filter(a -> a.getLeaveRequest().getEmployee().getFirstName().toLowerCase().contains(e.getValue().toLowerCase())).toList());
         });
@@ -117,6 +118,8 @@ public class ManagerApprovalView extends VerticalLayout {
     private void configureLeaveGrid() {
         leaveGrid.addThemeVariants(GridVariant.LUMO_ROW_STRIPES, GridVariant.LUMO_NO_BORDER);
         leaveGrid.setSizeFull();
+        leaveGrid.addClassName("standard-surface");
+        leaveGrid.addItemDoubleClickListener(e -> openLeaveReviewDialog(e.getItem())); // Invoke existing edit handler
         leaveGrid.setPartNameGenerator(approval -> approval.getApprovalType() == ApprovalType.CANCELLATION ? "cancellation-row" : null);
 
         leaveGrid.addComponentColumn(approval -> createEmployeeBadge(approval.getLeaveRequest().getEmployee())).setHeader("Employee").setFlexGrow(1).setAutoWidth(true);
@@ -303,6 +306,7 @@ public class ManagerApprovalView extends VerticalLayout {
         TextField searchField = new TextField();
         searchField.setPlaceholder("Search employee name...");
         searchField.setPrefixComponent(VaadinIcon.SEARCH.create());
+        searchField.focus(); // Focus when tab is active
         searchField.addValueChangeListener(e -> {
             correctionGrid.setItems(attendanceCorrectionService.getPendingCorrectionsForApprover(currentUser.getId()).stream().filter(c -> c.getAttendance().getEmployee().getFirstName().toLowerCase().contains(e.getValue().toLowerCase())).toList());
         });
@@ -316,6 +320,8 @@ public class ManagerApprovalView extends VerticalLayout {
     private void configureCorrectionGrid() {
         correctionGrid.addThemeVariants(GridVariant.LUMO_ROW_STRIPES, GridVariant.LUMO_NO_BORDER);
         correctionGrid.setSizeFull();
+        correctionGrid.addClassName("standard-surface");
+        correctionGrid.addItemDoubleClickListener(e -> openCorrectionDialog(e.getItem())); // Invoke existing edit handler
 
         correctionGrid.addComponentColumn(correction -> createEmployeeBadge(correction.getAttendance().getEmployee())).setHeader("Employee").setFlexGrow(1).setAutoWidth(true);
 
@@ -533,8 +539,8 @@ public class ManagerApprovalView extends VerticalLayout {
         VerticalLayout requestPanel = new VerticalLayout();
         requestPanel.setPadding(true);
         requestPanel.setSpacing(false);
-        requestPanel.getStyle().set("border-radius", "12px");
-        requestPanel.getStyle().set("background", "var(--lumo-contrast-5pct)");
+        requestPanel.addClassName("standard-surface");
+        requestPanel.getStyle().set("background", "var(--app-accent-color)"); // Standardized accent background
 
         requestPanel.add(createDetailRow("Leave Type", request.getLeaveType().getName()));
 
@@ -551,7 +557,7 @@ public class ManagerApprovalView extends VerticalLayout {
         if (Boolean.TRUE.equals(request.getIsSandwichLeave()) && request.getSandwichPenaltyDays() != null && request.getSandwichPenaltyDays().compareTo(BigDecimal.ZERO) > 0) {
 
             HorizontalLayout penaltyRow = createDetailRow("Sandwich Penalty Included", "+" + request.getSandwichPenaltyDays().toPlainString() + " Days");
-            penaltyRow.getStyle().set("color", "var(--lumo-error-text-color)");
+            penaltyRow.getStyle().set("color", "#da1e28"); // Standard error red
             penaltyRow.getStyle().set("font-weight", "bold");
 
             penaltyRow.getStyle().set("margin-top", "8px");
@@ -565,8 +571,8 @@ public class ManagerApprovalView extends VerticalLayout {
         VerticalLayout panel = new VerticalLayout();
         panel.setPadding(true);
         panel.setSpacing(false);
-        panel.getStyle().set("border-radius", "12px");
-        panel.getStyle().set("background", "var(--lumo-contrast-5pct)");
+        panel.addClassName("standard-surface");
+        panel.getStyle().set("background", "var(--app-accent-color)"); // Standardized accent background
         panel.setWidthFull();
 
         Span titleSpan = new Span(title);
@@ -584,8 +590,7 @@ public class ManagerApprovalView extends VerticalLayout {
         VerticalLayout card = new VerticalLayout();
         card.setPadding(true);
         card.setSpacing(false);
-        card.getStyle().set("border", "1px solid var(--lumo-contrast-20pct)");
-        card.getStyle().set("border-radius", "8px");
+        card.addClassName("standard-surface");
 
         Span title = new Span("Balance Impact: " + leaveType.getCode());
         title.addClassNames(LumoUtility.FontSize.SMALL, LumoUtility.FontWeight.BOLD, LumoUtility.TextColor.SECONDARY);
@@ -625,9 +630,9 @@ public class ManagerApprovalView extends VerticalLayout {
         ((Span) remCol.getComponentAt(1)).addClassNames(LumoUtility.FontSize.LARGE, LumoUtility.FontWeight.BOLD);
 
         if (remaining.compareTo(BigDecimal.ZERO) < 0) {
-            ((Span) remCol.getComponentAt(1)).getStyle().set("color", "var(--lumo-error-text-color)");
+            ((Span) remCol.getComponentAt(1)).getStyle().set("color", "#da1e28"); // Standard error red
         } else {
-            ((Span) remCol.getComponentAt(1)).getStyle().set("color", "var(--lumo-success-text-color)");
+            ((Span) remCol.getComponentAt(1)).getStyle().set("color", "#24a148"); // Standard success green
         }
 
         mathLayout.add(availCol, minus, durCol, equals, remCol);
@@ -647,13 +652,13 @@ public class ManagerApprovalView extends VerticalLayout {
         Span text;
 
         if (remainingAfterApproval.compareTo(BigDecimal.ZERO) < 0) {
-            banner.getStyle().set("background", "var(--lumo-error-color-10pct)");
-            banner.getStyle().set("color", "var(--lumo-error-text-color)");
+            banner.getStyle().set("background", "#fff1f1"); // Standard soft red background
+            banner.getStyle().set("color", "#da1e28"); // Standard error red
             icon = VaadinIcon.WARNING.create();
             text = new Span("Insufficient balance. Approval disabled.");
         } else {
-            banner.getStyle().set("background", "var(--lumo-success-color-10pct)");
-            banner.getStyle().set("color", "var(--lumo-success-text-color)");
+            banner.getStyle().set("background", "#defbe6"); // Standard soft green background
+            banner.getStyle().set("color", "#24a148"); // Standard success green
             icon = VaadinIcon.CHECK_CIRCLE.create();
             text = new Span("Sufficient balance to approve.");
         }

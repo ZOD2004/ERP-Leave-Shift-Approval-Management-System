@@ -12,8 +12,6 @@ import com.vaadin.flow.component.Text;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.combobox.MultiSelectComboBox;
-import com.vaadin.flow.component.dependency.CssImport;
-import com.vaadin.flow.component.timepicker.TimePicker;
 import com.vaadin.flow.component.combobox.ComboBox;
 import com.vaadin.flow.component.datepicker.DatePicker;
 import com.vaadin.flow.component.dialog.Dialog;
@@ -60,7 +58,6 @@ public class ShiftAssignmentView extends VerticalLayout {
     private final Tabs tabs = new Tabs();
     private final VerticalLayout contentArea = new VerticalLayout();
 
-
     private final Grid<ShiftAssignmentDTO> listGrid = new Grid<>(ShiftAssignmentDTO.class, false);
     private final DatePicker filterDate = new DatePicker("Filter by Date");
     private final TextField searchEmployee = new TextField("Search Employee");
@@ -102,9 +99,8 @@ public class ShiftAssignmentView extends VerticalLayout {
         this.employeeService = employeeService;
         this.shiftService = shiftService;
 
-
         setSizeFull();
-        setPadding(false);
+        addClassName("standard-view-container");
         contentArea.setSizeFull();
         contentArea.getStyle().set("overflow", "hidden");
 
@@ -152,8 +148,6 @@ public class ShiftAssignmentView extends VerticalLayout {
         header.setWidthFull();
         header.setJustifyContentMode(FlexComponent.JustifyContentMode.BETWEEN);
         header.setAlignItems(FlexComponent.Alignment.CENTER);
-        header.getStyle().set("padding", "1rem");
-        header.getStyle().set("box-sizing", "border-box");
 
         add(header, dashboardLayout, tabs, contentArea);
         setFlexGrow(1, contentArea);
@@ -166,15 +160,31 @@ public class ShiftAssignmentView extends VerticalLayout {
 
     private void buildDashboard() {
         dashboardLayout.setWidthFull();
-        dashboardLayout.getStyle().set("padding", "1rem").set("background-color", "var(--lumo-contrast-5pct)");
+        dashboardLayout.getStyle().set("gap", "var(--app-padding)");
+        dashboardLayout.getStyle().set("flex-wrap", "wrap");
 
         Map<String, Long> stats = assignmentService.getTodayShiftCounts(LocalDate.now());
         stats.forEach((shiftName, count) -> {
-            Div card = new Div();
-            card.getStyle().set("background", "white").set("padding", "1rem").set("border-radius", "8px").set("box-shadow", "0 2px 4px rgba(0,0,0,0.1)");
+            // Converted to HorizontalLayout for a sleeker profile
+            HorizontalLayout card = new HorizontalLayout();
+            card.addClassNames("standard-surface", "hoverable");
+            card.setAlignItems(FlexComponent.Alignment.CENTER);
+            card.setJustifyContentMode(FlexComponent.JustifyContentMode.BETWEEN);
 
-            card.add(new H4(shiftName));
-            card.add(new Span(count + " Employees"));
+            // Added subtle border, rounded corners, and stopped stretching
+            card.getStyle()
+                    .set("border", "1px solid var(--lumo-contrast-20pct)")
+                    .set("border-radius", "var(--lumo-border-radius-m)")
+                    .set("padding", "var(--lumo-space-s) var(--lumo-space-m)")
+                    .set("flex", "0 1 auto");
+
+            Span title = new Span(shiftName);
+            title.addClassNames(com.vaadin.flow.theme.lumo.LumoUtility.FontSize.SMALL, com.vaadin.flow.theme.lumo.LumoUtility.TextColor.SECONDARY, com.vaadin.flow.theme.lumo.LumoUtility.FontWeight.BOLD);
+
+            H4 value = new H4(count + " Emp");
+            value.getStyle().set("margin", "0");
+
+            card.add(title, value);
             dashboardLayout.add(card);
         });
     }
@@ -187,12 +197,15 @@ public class ShiftAssignmentView extends VerticalLayout {
         searchEmployee.setClearButtonVisible(true);
         searchEmployee.setValueChangeMode(ValueChangeMode.LAZY);
         searchEmployee.addValueChangeListener(e -> refreshListGrid());
-
+        searchEmployee.focus();
         HorizontalLayout toolbar = new HorizontalLayout(filterDate, searchEmployee);
         toolbar.setWidthFull();
 
         listGrid.setSizeFull();
+        listGrid.addClassName("standard-surface");
+        listGrid.addItemDoubleClickListener(e -> openListEditDialog(e.getItem()));
         listGrid.removeAllColumns();
+
         listGrid.addColumn(ShiftAssignmentDTO::getEmployeeName).setHeader("Employee");
         listGrid.addColumn(dto -> {
             if (dto.getStartDate().equals(dto.getEndDate())) {
@@ -236,7 +249,9 @@ public class ShiftAssignmentView extends VerticalLayout {
             return new HorizontalLayout(editBtn, deleteBtn);
         }).setHeader("Actions");
 
-        DataProvider<ShiftAssignmentDTO, Void> dataProvider = DataProvider.fromCallbacks(query -> assignmentService.fetchAssignmentsForGrid(query.getOffset(), query.getLimit(), filterDate.getValue(), searchEmployee.getValue()).stream(), query -> (int) assignmentService.fetchAssignmentsForGrid(0, Integer.MAX_VALUE, filterDate.getValue(), searchEmployee.getValue()).getTotalElements());
+        DataProvider<ShiftAssignmentDTO, Void> dataProvider = DataProvider.fromCallbacks(
+                query -> assignmentService.fetchAssignmentsForGrid(query.getOffset(), query.getLimit(), filterDate.getValue(), searchEmployee.getValue()).stream(),
+                query -> (int) assignmentService.fetchAssignmentsForGrid(0, Integer.MAX_VALUE, filterDate.getValue(), searchEmployee.getValue()).getTotalElements());
         listGrid.setDataProvider(dataProvider);
 
         VerticalLayout layout = new VerticalLayout(toolbar, listGrid);
@@ -257,6 +272,7 @@ public class ShiftAssignmentView extends VerticalLayout {
             }
         });
         pivotGrid.setSizeFull();
+        pivotGrid.addClassName("standard-surface");
         setupPivotColumns(LocalDate.now());
 
         VerticalLayout layout = new VerticalLayout(weekSelector, pivotGrid);
@@ -278,18 +294,29 @@ public class ShiftAssignmentView extends VerticalLayout {
             pivotGrid.addColumn(new ComponentRenderer<>(row -> {
                 DailyCellDTO cell = row.getCellForDate(currentDate);
                 Button cellBtn = new Button();
-                cellBtn.addThemeVariants(ButtonVariant.LUMO_SMALL);
+
+                // Set base styles and make it a Tertiary button
+                cellBtn.addThemeVariants(ButtonVariant.LUMO_SMALL, ButtonVariant.LUMO_TERTIARY);
                 cellBtn.getStyle().set("padding", "0").set("margin", "0").set("width", "100%");
 
-                if (cell == null) return new Span();
+                // 1. EMPTY CELL
+                if (cell == null) {
+                    cellBtn.setText("-");
+                    cellBtn.setTooltipText("No Schedule Data");
+                    cellBtn.getStyle().set("color", "var(--app-text-secondary)");
+                    cellBtn.setEnabled(false);
+                    return cellBtn;
+                }
 
+                // 2. FULL DAY LEAVE
                 if (cell.isOnLeave() && cell.getLeaveSession() == LeaveSession.FULL_DAY) {
                     cellBtn.setText("Leave");
-                    cellBtn.addThemeVariants(ButtonVariant.LUMO_ERROR, ButtonVariant.LUMO_PRIMARY);
+                    cellBtn.getStyle().set("color", "var(--app-error-color)");
                     cellBtn.addClickListener(e -> showNotification("Employee on Full Day Leave", NotificationVariant.LUMO_WARNING));
                     return cellBtn;
                 }
 
+                // 3. SHIFT ASSIGNMENT
                 if (cell.getAssignment() != null) {
                     String shortCode;
                     if (Boolean.TRUE.equals(cell.getAssignment().getIsRotational())) {
@@ -303,10 +330,10 @@ public class ShiftAssignmentView extends VerticalLayout {
                     if (cell.isOnLeave()) {
                         String sessionStr = cell.getLeaveSession() == LeaveSession.FIRST_HALF ? "L(1st)" : "L(2nd)";
                         cellBtn.setText(sessionStr + " / " + shortCode);
-                        cellBtn.addThemeVariants(ButtonVariant.LUMO_WARNING, ButtonVariant.LUMO_PRIMARY);
+                        cellBtn.getStyle().set("color", "var(--app-warning-color)");
                     } else {
                         cellBtn.setText(shortCode);
-                        cellBtn.addThemeVariants(ButtonVariant.LUMO_SUCCESS, ButtonVariant.LUMO_TERTIARY);
+                        cellBtn.getStyle().set("color", "var(--app-success-color)");
                     }
 
                     if (!cell.getDate().isAfter(LocalDate.now())) {
@@ -317,21 +344,26 @@ public class ShiftAssignmentView extends VerticalLayout {
                     return cellBtn;
                 }
 
+                // 4. HOLIDAY
                 if (cell.isHoliday()) {
-                    cellBtn.setText("Holiday");
-                    cellBtn.addThemeVariants(ButtonVariant.LUMO_ERROR, ButtonVariant.LUMO_TERTIARY);
-                    cellBtn.addClickListener(e -> handleEmptyCellClick(cell));
-                    return cellBtn;
-                }
-                if (cell.isIntentionalOffDay()) {
-                    cellBtn.setText("Off");
-                    cellBtn.addThemeVariants(ButtonVariant.LUMO_CONTRAST, ButtonVariant.LUMO_TERTIARY);
+                    cellBtn.setText("H");
+                    cellBtn.getStyle().set("color", "var(--app-error-color)");
                     cellBtn.addClickListener(e -> handleEmptyCellClick(cell));
                     return cellBtn;
                 }
 
+                // 5. OFF DAY (The invisible text fix)
+                if (cell.isIntentionalOffDay()) {
+                    cellBtn.setText("Off");
+                    // We remove LUMO_CONTRAST and just force a grey text color
+                    cellBtn.getStyle().set("color", "var(--app-text-secondary)");
+                    cellBtn.addClickListener(e -> handleEmptyCellClick(cell));
+                    return cellBtn;
+                }
+
+                // 6. DEFAULT UNASSIGNED
                 cellBtn.setIcon(new Icon(VaadinIcon.PLUS));
-                cellBtn.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
+                cellBtn.getStyle().set("color", "var(--app-primary-color)");
                 if (!cell.getDate().isAfter(LocalDate.now())) {
                     cellBtn.setEnabled(false);
                 } else {
@@ -345,19 +377,15 @@ public class ShiftAssignmentView extends VerticalLayout {
 
     private void refreshPivotGrid() {
         LocalDate selectedDate = weekSelector.getValue() != null ? weekSelector.getValue() : LocalDate.now();
-
         LocalDate startOfWeek = selectedDate.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
         LocalDate endOfWeek = startOfWeek.plusDays(6);
 
         setupPivotColumns(startOfWeek);
-
         List<DailyCellDTO> resolvedCells = assignmentService.getResolvedCalendarData(startOfWeek, endOfWeek);
-
         Map<String, RowDTO> pivotData = new HashMap<>();
 
         for (DailyCellDTO cell : resolvedCells) {
             RowDTO row = pivotData.computeIfAbsent(cell.getEmployeeName(), k -> new RowDTO(cell.getEmployeeName()));
-
             row.addCell(cell.getDate(), cell);
         }
 
@@ -393,7 +421,6 @@ public class ShiftAssignmentView extends VerticalLayout {
 
         FormLayout singleForm = new FormLayout(singleDatePicker);
         FormLayout bulkForm = new FormLayout(startDatePicker, endDatePicker);
-
 
         dialogContentArea.add(singleForm);
         dialogContentArea.setPadding(false);
@@ -459,7 +486,6 @@ public class ShiftAssignmentView extends VerticalLayout {
             assignmentDialog.close();
 
             if (currentBatchPreview.getHardConflicts().isEmpty()) {
-
                 executeFinalSave();
             } else {
                 buildAndOpenConflictDialog();
@@ -488,7 +514,8 @@ public class ShiftAssignmentView extends VerticalLayout {
         controls.setWidthFull();
 
         monthlyGrid.setSizeFull();
-
+        monthlyGrid.addClassName("standard-surface");
+        monthlyGrid.addClassName("monthly-calendar-grid");
         monthlyGrid.addThemeVariants(GridVariant.LUMO_COMPACT, GridVariant.LUMO_COLUMN_BORDERS);
 
         VerticalLayout layout = new VerticalLayout(controls, monthlyGrid);
@@ -512,78 +539,139 @@ public class ShiftAssignmentView extends VerticalLayout {
 
     private void setupMonthlyColumns() {
         monthlyGrid.removeAllColumns();
-        monthlyGrid.addColumn(MonthlyRowDTO::getEmployeeName).setHeader("Employee").setFrozen(true).setWidth("180px").setFlexGrow(0);
+
+        // Truncate Employee Name and reduce width to 120px
+        monthlyGrid.addColumn(new ComponentRenderer<>(row -> {
+            Span nameSpan = new Span(row.getEmployeeName());
+            nameSpan.getStyle()
+                    .set("white-space", "nowrap")
+                    .set("overflow", "hidden")
+                    .set("text-overflow", "ellipsis")
+                    .set("display", "block")
+                    .set("width", "100%");
+            nameSpan.getElement().setProperty("title", row.getEmployeeName());
+            return nameSpan;
+        })).setHeader("Employee").setFrozen(true).setWidth("120px").setFlexGrow(0);
 
         int daysInMonth = currentMonth.lengthOfMonth();
         for (int i = 1; i <= daysInMonth; i++) {
             final int day = i;
 
             monthlyGrid.addColumn(new ComponentRenderer<>(row -> {
-                DailyCellDTO cell = row.getCellForDay(day);
-                Button cellBtn = new Button();
-                cellBtn.addThemeVariants(ButtonVariant.LUMO_SMALL);
-                cellBtn.getStyle().set("padding", "0").set("margin", "0").set("width", "100%");
+                        DailyCellDTO cell = row.getCellForDay(day);
+                        Button cellBtn = new Button();
 
-                if (cell == null) return new Span();
+                        // 1. UNIFORM STRUCTURE FOR EVERY BUTTON
+                        cellBtn.getStyle()
+                                .set("padding", "0")
+                                .set("margin", "0")
+                                .set("min-width", "32px")
+                                .set("height", "32px")
+                                .set("border-radius", "6px")
+                                .set("font-weight", "bold")
+                                .set("font-size", "0.75rem");
 
-                if (cell.isOnLeave() && cell.getLeaveSession() == LeaveSession.FULL_DAY) {
-                    cellBtn.setText("Leave");
-                    cellBtn.addThemeVariants(ButtonVariant.LUMO_ERROR, ButtonVariant.LUMO_PRIMARY);
-                    cellBtn.addClickListener(e -> showNotification("Employee on Full Day Leave", NotificationVariant.LUMO_WARNING));
-                    return cellBtn;
-                }
+                        // Base Tertiary setup
+                        cellBtn.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
 
-                if (cell.getAssignment() != null) {
-                    String shortCode;
-                    if (Boolean.TRUE.equals(cell.getAssignment().getIsRotational())) {
-                        String seg = cell.getAssignment().getSegmentName();
-                        shortCode = (seg != null && seg.length() > 4) ? seg.substring(0, 4) : (seg != null ? seg : "ROT");
-                    } else {
-                        String shiftName = cell.getAssignment().getShiftName();
-                        shortCode = shiftName.length() > 4 ? shiftName.substring(0, 4) : shiftName;
-                    }
+                        // 2. EMPTY CELL (No Data)
+                        if (cell == null) {
+                            cellBtn.setText("-");
+                            cellBtn.setTooltipText("No Schedule Data");
+                            cellBtn.getStyle().set("color", "var(--lumo-contrast-30pct)");
+                            cellBtn.setEnabled(false);
+                            return cellBtn;
+                        }
 
-                    if (cell.isOnLeave()) {
-                        String sessionStr = cell.getLeaveSession() == LeaveSession.FIRST_HALF ? "L(1st)" : "L(2nd)";
-                        cellBtn.setText(sessionStr + " / " + shortCode);
-                        cellBtn.addThemeVariants(ButtonVariant.LUMO_WARNING, ButtonVariant.LUMO_PRIMARY);
-                    } else {
-                        cellBtn.setText(shortCode);
-                        cellBtn.addThemeVariants(ButtonVariant.LUMO_SUCCESS, ButtonVariant.LUMO_TERTIARY);
-                    }
+                        // 3. FULL DAY LEAVE
+                        if (cell.isOnLeave() && cell.getLeaveSession() == LeaveSession.FULL_DAY) {
+                            cellBtn.setText("L");
+                            cellBtn.setTooltipText("Full Day Leave");
+                            cellBtn.getStyle().set("color", "var(--lumo-error-text-color)");
+                            cellBtn.addClickListener(e -> showNotification("Employee on Full Day Leave", NotificationVariant.LUMO_WARNING));
+                            return cellBtn;
+                        }
 
-                    if (!cell.getDate().isAfter(LocalDate.now())) {
-                        cellBtn.addClickListener(e -> showNotification("Locked: Cannot edit past or current day shifts.", NotificationVariant.LUMO_ERROR));
-                    } else {
-                        cellBtn.addClickListener(e -> openEditDialog(cell.getAssignment(), cell.getDate()));
-                    }
-                    return cellBtn;
-                }
+                        // 4. HOLIDAY
+                        if (cell.isHoliday()) {
+                            cellBtn.setText("H");
+                            cellBtn.setTooltipText("Holiday");
+                            cellBtn.getStyle().set("color", "var(--lumo-error-text-color)");
+                            cellBtn.addClickListener(e -> handleEmptyCellClick(cell));
+                            return cellBtn;
+                        }
 
-                if (cell.isHoliday()) {
-                    cellBtn.setText("Holiday");
-                    cellBtn.addThemeVariants(ButtonVariant.LUMO_ERROR, ButtonVariant.LUMO_TERTIARY);
-                    cellBtn.addClickListener(e -> handleEmptyCellClick(cell));
-                    return cellBtn;
-                }
-                if (cell.isIntentionalOffDay()) {
-                    cellBtn.setText("Off");
-                    cellBtn.addThemeVariants(ButtonVariant.LUMO_CONTRAST, ButtonVariant.LUMO_TERTIARY);
-                    cellBtn.addClickListener(e -> handleEmptyCellClick(cell));
-                    return cellBtn;
-                }
+                        // 5. OFF DAY
+                        if (cell.isIntentionalOffDay()) {
+                            cellBtn.setText("O");
+                            cellBtn.setTooltipText("Off Day");
+                            cellBtn.getStyle().set("color", "var(--lumo-contrast-50pct)");
+                            cellBtn.addClickListener(e -> handleEmptyCellClick(cell));
+                            return cellBtn;
+                        }
 
-                cellBtn.setIcon(new Icon(VaadinIcon.PLUS));
-                cellBtn.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
-                if (!cell.getDate().isAfter(LocalDate.now())) {
-                    cellBtn.setEnabled(false);
-                } else {
-                    cellBtn.addClickListener(e -> handleEmptyCellClick(cell));
-                }
+                        // 6. SHIFT ASSIGNMENT
+                        if (cell.getAssignment() != null) {
+                            String shiftTypeStr = cell.getAssignment().getShiftType() != null
+                                    ? cell.getAssignment().getShiftType().name().toLowerCase()
+                                    : "";
+
+                            String shiftName;
+                            String code;
+
+                            if (Boolean.TRUE.equals(cell.getAssignment().getIsRotational())) {
+                                shiftName = cell.getAssignment().getSegmentName();
+                                code = (shiftName != null && !shiftName.isBlank())
+                                        ? shiftName.substring(0, 1).toUpperCase()
+                                        : "R";
+                            } else {
+                                shiftName = cell.getAssignment().getShiftName();
+                                code = (shiftName != null && !shiftName.isBlank())
+                                        ? shiftName.substring(0, 1).toUpperCase()
+                                        : "S";
+                            }
+
+                            if (cell.isOnLeave()) {
+                                cellBtn.setText("L");
+                                cellBtn.setTooltipText("Half Leave / Shift: " + shiftName);
+                                cellBtn.getStyle().set("color", "var(--lumo-warning-text-color)");
+                            } else {
+                                cellBtn.setText(code);
+                                cellBtn.setTooltipText(shiftName);
+
+                                // Color handling specifically for Tertiary (modifying text, not background)
+                                if (shiftTypeStr.contains("morning")) {
+                                    cellBtn.getStyle().set("color", "var(--lumo-success-text-color)");
+                                } else if (shiftTypeStr.contains("night")) {
+                                    cellBtn.getStyle().set("color", "var(--lumo-primary-text-color)");
+                                } else {
+                                    cellBtn.getStyle().set("color", "var(--lumo-body-text-color)");
+                                }
+                            }
+
+                            if (!cell.getDate().isAfter(LocalDate.now())) {
+                                cellBtn.addClickListener(e -> showNotification("Locked: Cannot edit past shifts.", NotificationVariant.LUMO_ERROR));
+                            } else {
+                                cellBtn.addClickListener(e -> openEditDialog(cell.getAssignment(), cell.getDate()));
+                            }
+                            return cellBtn;
+                        }
+
+                        // 7. DEFAULT UNASSIGNED (Future assignable)
+                        cellBtn.setText("+");
+                        cellBtn.setTooltipText("Assign Shift");
+                        cellBtn.getStyle().set("color", "var(--lumo-primary-color)");
+
+                        if (!cell.getDate().isAfter(LocalDate.now())) {
+                            cellBtn.setEnabled(false);
+                        } else {
+                            cellBtn.addClickListener(e -> handleEmptyCellClick(cell));
+                        }
 
                         return cellBtn;
-                    })).setHeader(String.valueOf(day))
-                    .setWidth("75px")
+                    }))
+                    .setHeader(String.valueOf(day))
+                    .setWidth("46px")
                     .setFlexGrow(0)
                     .setResizable(false);
         }
@@ -591,12 +679,9 @@ public class ShiftAssignmentView extends VerticalLayout {
 
     private void refreshMonthlyGrid() {
         setupMonthlyColumns();
-
         LocalDate startOfMonth = currentMonth.withDayOfMonth(1);
         LocalDate endOfMonth = currentMonth.withDayOfMonth(currentMonth.lengthOfMonth());
-
         List<DailyCellDTO> resolvedCells = assignmentService.getResolvedCalendarData(startOfMonth, endOfMonth);
-
         Map<String, MonthlyRowDTO> pivotData = new HashMap<>();
 
         for (DailyCellDTO cell : resolvedCells) {
@@ -606,7 +691,6 @@ public class ShiftAssignmentView extends VerticalLayout {
                 row.addCell(cell.getDate().getDayOfMonth(), cell);
             }
         }
-
         monthlyGrid.setItems(pivotData.values());
     }
 
@@ -681,6 +765,7 @@ public class ShiftAssignmentView extends VerticalLayout {
             layout.add(new H4("Hard Conflicts (Will be Skipped)"));
 
             hardConflictGrid.removeAllColumns();
+            hardConflictGrid.addClassName("standard-surface");
             hardConflictGrid.setItems(currentBatchPreview.getHardConflicts());
             hardConflictGrid.addColumn(ShiftConflictDTO::getEmployeeName).setHeader("Employee");
             hardConflictGrid.addColumn(ShiftConflictDTO::getConflictDate).setHeader("Date");
@@ -691,16 +776,13 @@ public class ShiftAssignmentView extends VerticalLayout {
                 skipBtn.addThemeVariants(ButtonVariant.LUMO_ERROR, ButtonVariant.LUMO_TERTIARY);
                 skipBtn.addClickListener(e -> {
                     currentBatchPreview.getHardConflicts().remove(conflict);
-
                     hardConflictGrid.getDataProvider().refreshAll();
-
                 });
                 return skipBtn;
             }).setHeader("Action");
 
             layout.add(hardConflictGrid);
         }
-
 
         Button proceedBtn = new Button("Proceed with Valid Assignments", e -> executeFinalSave());
         proceedBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
@@ -809,7 +891,6 @@ public class ShiftAssignmentView extends VerticalLayout {
         LocalDate today = LocalDate.now();
         LocalDate minSelectableDate = assignment.getStartDate().isBefore(today) ? today : assignment.getStartDate();
 
-
         DatePicker startPicker = new DatePicker("Start Date to Remove");
         startPicker.setMin(minSelectableDate);
         startPicker.setMax(assignment.getEndDate());
@@ -869,7 +950,6 @@ public class ShiftAssignmentView extends VerticalLayout {
         dialogTabs.setVisible(false);
         singleDatePicker.setValue(cell.getDate());
         singleDatePicker.setReadOnly(true);
-
 
         String dayName = cell.getDate().getDayOfWeek().name();
         List<Shift> validShifts = shiftService.getStandardShifts().stream()
@@ -946,7 +1026,7 @@ public class ShiftAssignmentView extends VerticalLayout {
                 showNotification("Error: " + ex.getMessage(), NotificationVariant.LUMO_ERROR);
             }
         });
-        saveBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+        saveBtn.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
 
         Button cancelBtn = new Button("Cancel", e -> editDialog.close());
 

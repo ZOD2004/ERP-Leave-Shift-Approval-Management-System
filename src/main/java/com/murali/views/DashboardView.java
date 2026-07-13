@@ -36,8 +36,7 @@ public class DashboardView extends VerticalLayout {
 
         setSizeFull();
         setSpacing(false);
-        getStyle().set("overflow", "auto");
-        addClassNames(LumoUtility.Padding.LARGE);
+        addClassName("standard-view-container");
 
         routeUserToWorkspace();
     }

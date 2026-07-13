@@ -94,7 +94,7 @@ public class LeaveApplicationView extends VerticalLayout {
     }
 
     private void buildMainView() {
-        addClassNames(LumoUtility.Padding.LARGE);
+        addClassName("standard-view-container"); // Standard global layout margins
         setSizeFull();
 
         H2 title = new H2("My Leave Dashboard");
@@ -160,6 +160,7 @@ public class LeaveApplicationView extends VerticalLayout {
 
         historyGrid.addThemeVariants(GridVariant.LUMO_NO_BORDER, GridVariant.LUMO_ROW_STRIPES);
         historyGrid.setSizeFull();
+        historyGrid.addClassName("standard-surface"); // Applies standardized grid container styles
 
         VerticalLayout wrapper = new VerticalLayout(title, historyGrid);
         wrapper.setPadding(false);
@@ -219,7 +220,7 @@ public class LeaveApplicationView extends VerticalLayout {
 
     private Component createBalanceCard(String title, BigDecimal remaining, double used, BigDecimal total, String themeColor, VaadinIcon iconType) {
         VerticalLayout card = new VerticalLayout();
-        card.addClassNames(LumoUtility.Background.BASE, LumoUtility.Border.ALL, LumoUtility.BorderColor.CONTRAST_10, LumoUtility.BorderRadius.LARGE, LumoUtility.Padding.LARGE, LumoUtility.BoxShadow.SMALL);
+        card.addClassNames("standard-surface", "hoverable"); // Centralized standard card styling
         card.setWidth("280px");
         card.setSpacing(false);
 
@@ -595,7 +596,9 @@ public class LeaveApplicationView extends VerticalLayout {
         }).setHeader("Action").setAutoWidth(true);
 
         draftGrid.addThemeVariants(GridVariant.LUMO_NO_BORDER, GridVariant.LUMO_ROW_STRIPES);
+        draftGrid.addClassName("standard-surface");
         draftGrid.setAllRowsVisible(true);
+        draftGrid.addItemDoubleClickListener(e -> openApplyLeaveDialog(e.getItem())); // Invoke existing edit handler
 
         draftSection.add(title, draftGrid);
         draftSection.setPadding(false);
@@ -634,16 +637,11 @@ public class LeaveApplicationView extends VerticalLayout {
 
                 // 1. Card Container Spacing Enhancements
                 VerticalLayout entryCard = new VerticalLayout();
-                entryCard.addClassNames(
-                        LumoUtility.Background.CONTRAST_5,
-                        LumoUtility.BorderRadius.MEDIUM,
-                        LumoUtility.Padding.MEDIUM, // Increased from SMALL to MEDIUM for inner breathing room
-                        LumoUtility.Gap.XSMALL // Adds a tiny, consistent gap between elements INSIDE the card
-                );
+                entryCard.addClassName("standard-surface");
                 entryCard.setSpacing(false);
 
                 // Colored left border with an explicit left-padding so text doesn't hug the line
-                String threadColor = isCancellation ? "var(--lumo-error-color)" : "var(--lumo-primary-color)";
+                String threadColor = isCancellation ? "#da1e28" : "var(--app-primary-color)"; // Standardized fixed colors
                 entryCard.getStyle().set("border-left", "5px solid " + threadColor);
                 entryCard.getStyle().set("padding-left", "var(--lumo-space-m)");
 

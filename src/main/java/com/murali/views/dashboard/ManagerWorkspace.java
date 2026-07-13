@@ -70,6 +70,7 @@ public class ManagerWorkspace extends VerticalLayout {
         setPadding(false);
         setSpacing(true);
         setWidthFull();
+        getStyle().set("gap", "var(--app-layout-margin)"); // Applies consistent global block spacing
 
         buildUI();
     }
@@ -88,7 +89,7 @@ public class ManagerWorkspace extends VerticalLayout {
 
         // 1. Personal Section
         add(createPersonalHeader(manager));
-        add(new Hr());
+        // Removed unnecessary spacer Hr tag
 
         // 2. Team Section
         H3 teamHeader = new H3("My Team Overview");
@@ -191,7 +192,8 @@ public class ManagerWorkspace extends VerticalLayout {
     private Component createTeamKpiSection(Long managerEmployeeId, Long managerUserId) {
         HorizontalLayout kpiLayout = new HorizontalLayout();
         kpiLayout.setWidthFull();
-        kpiLayout.setSpacing(true);
+        kpiLayout.setSpacing(false);
+        kpiLayout.getStyle().set("gap", "var(--app-padding)");
         // This ensures the cards stay horizontal and scroll sideways on very tiny mobile screens
         // rather than stacking vertically and taking up page height.
         kpiLayout.getStyle().set("overflow-x", "auto");
@@ -201,10 +203,10 @@ public class ManagerWorkspace extends VerticalLayout {
         int pendingApprovals = approvalRoutingService.getPendingApprovalsForUser(managerUserId).size();
 
         kpiLayout.add(
-                createStatCard("Present Today", String.valueOf(summary.getPresentCount()), VaadinIcon.CHECK_CIRCLE, "var(--lumo-success-color)"),
-                createStatCard("Yet to Check-in", String.valueOf(summary.getExpectedCount()), VaadinIcon.CLOCK, "var(--lumo-warning-color)"),
-                createStatCard("On Leave / Off", String.valueOf(summary.getAbsentOrLeaveCount()), VaadinIcon.FLIGHT_TAKEOFF, "var(--lumo-secondary-text-color)"),
-                createStatCard("Pending Approvals", String.valueOf(pendingApprovals), VaadinIcon.INBOX, "var(--lumo-error-color)")
+                createStatCard("Present Today", String.valueOf(summary.getPresentCount()), VaadinIcon.CHECK_CIRCLE, "#24a148"),
+                createStatCard("Yet to Check-in", String.valueOf(summary.getExpectedCount()), VaadinIcon.CLOCK, "#f1c21b"),
+                createStatCard("On Leave / Off", String.valueOf(summary.getAbsentOrLeaveCount()), VaadinIcon.FLIGHT_TAKEOFF, "var(--app-text-secondary)"),
+                createStatCard("Pending Approvals", String.valueOf(pendingApprovals), VaadinIcon.INBOX, "#da1e28")
         );
 
         return kpiLayout;
@@ -212,8 +214,7 @@ public class ManagerWorkspace extends VerticalLayout {
 
     private Component createStatCard(String title, String value, VaadinIcon iconEnum, String iconColor) {
         VerticalLayout card = new VerticalLayout();
-        card.addClassNames(LumoUtility.Background.BASE, LumoUtility.BorderRadius.MEDIUM,
-                LumoUtility.BoxShadow.SMALL, LumoUtility.Padding.MEDIUM, LumoUtility.Border.ALL);
+        card.addClassNames("standard-surface", "hoverable");
         card.setSpacing(false);
         card.setMinWidth("150px");
         card.getStyle().set("flex-grow", "1");
@@ -248,7 +249,7 @@ public class ManagerWorkspace extends VerticalLayout {
 
         Grid<Employee> grid = new Grid<>(Employee.class, false);
         grid.addThemeVariants(GridVariant.LUMO_ROW_STRIPES, GridVariant.LUMO_COMPACT, GridVariant.LUMO_NO_BORDER);
-        grid.getStyle().set("border", "1px solid var(--lumo-contrast-10pct)").set("border-radius", "8px");
+        grid.addClassName("standard-surface");
         grid.setHeight("300px");
 
         grid.addColumn(Employee::getFirstName).setHeader("Employee").setAutoWidth(true);
@@ -311,7 +312,7 @@ public class ManagerWorkspace extends VerticalLayout {
 
         Grid<LeaveApproval> grid = new Grid<>(LeaveApproval.class, false);
         grid.addThemeVariants(GridVariant.LUMO_ROW_STRIPES, GridVariant.LUMO_COMPACT, GridVariant.LUMO_NO_BORDER);
-        grid.getStyle().set("border", "1px solid var(--lumo-contrast-10pct)").set("border-radius", "8px");
+        grid.addClassName("standard-surface");
         grid.setHeight("300px");
 
         grid.addColumn(approval -> approval.getLeaveRequest().getEmployee().getFirstName())
@@ -342,7 +343,7 @@ public class ManagerWorkspace extends VerticalLayout {
 
         Grid<DailyExpectedShift> grid = new Grid<>(DailyExpectedShift.class, false);
         grid.addThemeVariants(GridVariant.LUMO_ROW_STRIPES, GridVariant.LUMO_COMPACT, GridVariant.LUMO_NO_BORDER);
-        grid.getStyle().set("border", "1px solid var(--lumo-contrast-10pct)").set("border-radius", "8px");
+        grid.addClassName("standard-surface");
         grid.setHeight("300px");
 
         grid.addColumn(shift -> shift.getTargetDate().toString() + " (" + shift.getTargetDate().getDayOfWeek().name().substring(0, 3) + ")")

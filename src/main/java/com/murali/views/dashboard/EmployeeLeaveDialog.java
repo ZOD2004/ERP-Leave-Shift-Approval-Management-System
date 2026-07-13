@@ -41,7 +41,7 @@ public class EmployeeLeaveDialog extends Dialog {
         FlexLayout cardsLayout = new FlexLayout();
         cardsLayout.setWidthFull();
         cardsLayout.setFlexWrap(FlexLayout.FlexWrap.WRAP);
-        cardsLayout.getStyle().set("gap", "var(--lumo-space-s)");
+        cardsLayout.getStyle().set("gap", "var(--app-padding)");
 
         List<LeaveBalance> balances = leaveBalanceService.getBalancesForEmployee(employee.getId(), LocalDate.now().getYear());
         for (LeaveBalance balance : balances) {
@@ -54,7 +54,7 @@ public class EmployeeLeaveDialog extends Dialog {
 
         Grid<LeaveRequest> grid = new Grid<>(LeaveRequest.class, false);
         grid.addThemeVariants(GridVariant.LUMO_ROW_STRIPES, GridVariant.LUMO_COMPACT, GridVariant.LUMO_NO_BORDER);
-        grid.getStyle().set("border", "1px solid var(--lumo-contrast-10pct)").set("border-radius", "8px");
+        grid.addClassName("standard-surface");
         grid.setHeight("250px");
 
         grid.addColumn(r -> r.getLeaveType().getName()).setHeader("Type").setAutoWidth(true);
@@ -83,7 +83,7 @@ public class EmployeeLeaveDialog extends Dialog {
 
     private VerticalLayout createMiniBalanceCard(LeaveBalance balance, LeaveBalanceService leaveBalanceService) {
         VerticalLayout card = new VerticalLayout();
-        card.addClassNames(LumoUtility.Background.BASE, LumoUtility.BorderRadius.MEDIUM, LumoUtility.Border.ALL);
+        card.addClassNames("standard-surface", "hoverable");
         card.setPadding(true);
         card.setSpacing(false);
         card.setMinWidth("180px");
@@ -102,7 +102,7 @@ public class EmployeeLeaveDialog extends Dialog {
         type.addClassNames(LumoUtility.FontSize.SMALL, LumoUtility.FontWeight.BOLD);
 
         Span left = new Span(remaining.toPlainString() + " Left");
-        left.getElement().getThemeList().add("badge success primary small");
+        left.getElement().getThemeList().add("badge success");
 
         header.add(type, left);
 

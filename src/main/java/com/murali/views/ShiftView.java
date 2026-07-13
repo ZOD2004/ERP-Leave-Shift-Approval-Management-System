@@ -82,6 +82,7 @@ public class ShiftView extends VerticalLayout {
         this.shiftService = shiftService;
 
         setSizeFull();
+        addClassName("standard-view-container"); // Standard global layout margins
         configureGrid();
         configureForm();
 
@@ -90,7 +91,7 @@ public class ShiftView extends VerticalLayout {
         searchField.setClearButtonVisible(true);
         searchField.setValueChangeMode(ValueChangeMode.LAZY);
         searchField.addValueChangeListener(e -> updateList());
-
+        searchField.focus(); // Automatically focus search bar on view load
         addBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
         addBtn.addClickListener(e -> openForm(new Shift()));
 
@@ -105,6 +106,12 @@ public class ShiftView extends VerticalLayout {
 
     private void configureGrid() {
         grid.setSizeFull();
+        grid.addClassName("standard-surface");
+        grid.addItemDoubleClickListener(e -> {
+            Shift freshShift = shiftService.getShiftWithSequences(e.getItem().getId());
+            openForm(freshShift);
+        }); // Invoke existing edit handler
+
         grid.addColumn(Shift::getName).setHeader("Name").setSortable(true).setAutoWidth(true);
         grid.addColumn(Shift::getShiftType).setHeader("Type").setSortable(true).setAutoWidth(true);
 
@@ -448,11 +455,7 @@ public class ShiftView extends VerticalLayout {
         public RotationSegmentEditor() {
             typeBox.setItems(RotationSegmentType.values());
             shiftType.setItems(Shifts.values());
-            getStyle().set("border", "1px solid var(--lumo-contrast-20pct)");
-            getStyle().set("border-radius", "var(--lumo-border-radius-m)");
-            getStyle().set("padding", "var(--lumo-space-m)");
-            getStyle().set("margin-bottom", "var(--lumo-space-m)");
-            getStyle().set("box-shadow", "0 2px 4px rgba(0,0,0,0.05)");
+            addClassName("standard-surface"); // Applies standardized surface border, shadow, and radius
 
             firstHalf.setStep(Duration.ofMinutes(15));
             secondHalf.setStep(Duration.ofMinutes(15));

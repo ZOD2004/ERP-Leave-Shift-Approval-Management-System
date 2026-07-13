@@ -23,6 +23,7 @@ import com.vaadin.flow.data.binder.ValidationException;
 import com.vaadin.flow.data.value.ValueChangeMode;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
+import com.vaadin.flow.theme.lumo.LumoUtility;
 import jakarta.annotation.security.RolesAllowed;
 
 import java.util.List;
@@ -59,20 +60,22 @@ public class RoleView extends VerticalLayout {
         this.roleService = roleService;
 
         setSizeFull();
-        configureGrid();
+        addClassName("standard-view-container");
         configureForm();
+        configureGrid();
 
         searchField.setPlaceholder("Search roles...");
         searchField.setPrefixComponent(new Icon(VaadinIcon.SEARCH));
         searchField.setClearButtonVisible(true);
         searchField.setValueChangeMode(ValueChangeMode.LAZY);
         searchField.addValueChangeListener(e -> updateList());
+        searchField.focus();
 
         addBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
         addBtn.addClickListener(e -> openForm(new Role()));
 
         H2 title = new H2("Role Configuration");
-        title.getStyle().set("margin-top", "0");
+        title.addClassName(LumoUtility.Margin.Top.NONE);
 
         HorizontalLayout toolbar = new HorizontalLayout(searchField, addBtn);
         toolbar.setWidthFull();
@@ -85,11 +88,13 @@ public class RoleView extends VerticalLayout {
 
     private void configureGrid() {
         grid.setSizeFull();
+        grid.addClassName("standard-surface");
+        grid.addItemDoubleClickListener(e -> openForm(e.getItem())); // Invoke existing edit handler
 
         grid.addColumn(Role::getName)
                 .setHeader("Role Name")
                 .setSortable(true)
-                .setAutoWidth(true);
+                .setFlexGrow(1);
 
         grid.addComponentColumn(role -> {
             Button editBtn = new Button(new Icon(VaadinIcon.EDIT));
@@ -144,7 +149,7 @@ public class RoleView extends VerticalLayout {
         saveBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
         saveBtn.addClickListener(e -> saveRole());
 
-        cancelBtn.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
+        cancelBtn.addThemeVariants(ButtonVariant.LUMO_CONTRAST);
         cancelBtn.addClickListener(e -> formDialog.close());
 
         formDialog.add(formLayout);

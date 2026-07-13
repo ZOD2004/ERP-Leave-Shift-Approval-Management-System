@@ -38,7 +38,7 @@ public class ProfileView extends VerticalLayout {
 
         setWidthFull(); setMaxWidth("800px");
         setAlignItems(Alignment.STRETCH);
-        addClassNames(LumoUtility.Padding.LARGE, LumoUtility.Margin.Horizontal.AUTO);
+        addClassNames("standard-view-container", LumoUtility.Margin.Horizontal.AUTO); // Standard global layout margins
 
         User currentUser = securityService.getAuthenticatedUser();
         Employee currentEmployee = securityService.getCurrentEmployee();
@@ -51,14 +51,7 @@ public class ProfileView extends VerticalLayout {
 
     private VerticalLayout createDetailsCard(User user, Employee emp) {
         VerticalLayout card = new VerticalLayout();
-        card.addClassNames(
-                LumoUtility.Background.BASE,
-                LumoUtility.Border.ALL, LumoUtility.BorderColor.CONTRAST_10,
-                LumoUtility.BorderRadius.LARGE,
-                LumoUtility.Padding.LARGE,
-                LumoUtility.Margin.Bottom.LARGE,
-                LumoUtility.BoxShadow.SMALL
-        );
+        card.addClassName("standard-surface");
 
         H3 sectionTitle = new H3("Account Details");
         sectionTitle.addClassNames(LumoUtility.Margin.Top.NONE);
@@ -102,20 +95,14 @@ public class ProfileView extends VerticalLayout {
 
         detailsLayout.setWidthFull();
         card.setWidthFull();
-        card.add(sectionTitle, new Hr(), detailsLayout);
+        card.add(sectionTitle, detailsLayout); // Removed unnecessary spacer Hr tag
         return card;
     }
 
     private VerticalLayout createPasswordCard(String username) {
         VerticalLayout card = new VerticalLayout();
         card.setWidthFull();
-        card.addClassNames(
-                LumoUtility.Background.BASE,
-                LumoUtility.Border.ALL, LumoUtility.BorderColor.CONTRAST_10,
-                LumoUtility.BorderRadius.LARGE,
-                LumoUtility.Padding.LARGE,
-                LumoUtility.BoxShadow.SMALL
-        );
+        card.addClassName("standard-surface");
 
         H3 sectionTitle = new H3("Security Details");
         sectionTitle.addClassNames(LumoUtility.Margin.Top.NONE);
@@ -173,7 +160,7 @@ public class ProfileView extends VerticalLayout {
         buttonLayout.setPadding(false);
         buttonLayout.setMargin(false);
 
-        card.add(sectionTitle, new Hr(), passwordLayout, buttonLayout);
+        card.add(sectionTitle, passwordLayout, buttonLayout); // Removed unnecessary spacer Hr tag
         return card;
     }
 }

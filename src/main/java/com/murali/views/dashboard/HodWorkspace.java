@@ -66,6 +66,7 @@ public class HodWorkspace extends VerticalLayout {
         setPadding(false);
         setSpacing(true);
         setWidthFull();
+        getStyle().set("gap", "var(--app-layout-margin)");
 
         buildUI();
     }
@@ -86,16 +87,12 @@ public class HodWorkspace extends VerticalLayout {
         buildHierarchyMap(departmentEmployees, hod.getId());
 
         add(createPersonalHeader(hod));
-        add(new Hr());
-
         H2 teamHeader = new H2(hod.getDepartment().getName() + " - Department Overview");
         teamHeader.addClassNames(LumoUtility.Margin.Top.NONE, LumoUtility.Margin.Bottom.MEDIUM, LumoUtility.TextColor.PRIMARY);
         add(teamHeader);
 
         add(createDepartmentKpis(departmentEmployees, currentUserId));
-        add(new Hr());
         add(createWeeklyScheduleWidget(hod));
-        add(new Hr());
         add(createHierarchyTreeGrid(hod.getId()));
     }
 
@@ -128,7 +125,8 @@ public class HodWorkspace extends VerticalLayout {
     private Component createDepartmentKpis(List<Employee> deptEmployees, Long hodUserId) {
         HorizontalLayout kpiLayout = new HorizontalLayout();
         kpiLayout.setWidthFull();
-        kpiLayout.setSpacing(true);
+        kpiLayout.setSpacing(false);
+        kpiLayout.getStyle().set("gap", "var(--app-padding)");
         kpiLayout.getStyle().set("overflow-x", "auto");
         kpiLayout.getStyle().set("padding-bottom", "8px");
 
@@ -152,11 +150,11 @@ public class HodWorkspace extends VerticalLayout {
         int pendingApprovals = approvalRoutingService.getPendingApprovalsForUser(hodUserId).size();
 
         kpiLayout.add(
-                createStatCard("Dept Headcount", String.valueOf(totalHeadcount), VaadinIcon.GROUP, "var(--lumo-primary-color)"),
-                createStatCard("Sub-Managers", String.valueOf(managersCount), VaadinIcon.USER_STAR, "var(--lumo-contrast-70pct)"),
-                createStatCard("Present Today", String.valueOf(presentCount), VaadinIcon.CHECK_CIRCLE, "var(--lumo-success-color)"),
-                createStatCard("On Leave", String.valueOf(onLeaveCount), VaadinIcon.FLIGHT_TAKEOFF, "var(--lumo-warning-color)"),
-                createStatCard("Action Required", String.valueOf(pendingApprovals), VaadinIcon.INBOX, "var(--lumo-error-color)")
+                createStatCard("Dept Headcount", String.valueOf(totalHeadcount), VaadinIcon.GROUP, "var(--app-primary-color)"),
+                createStatCard("Sub-Managers", String.valueOf(managersCount), VaadinIcon.USER_STAR, "var(--app-text-secondary)"),
+                createStatCard("Present Today", String.valueOf(presentCount), VaadinIcon.CHECK_CIRCLE, "#24a148"),
+                createStatCard("On Leave", String.valueOf(onLeaveCount), VaadinIcon.FLIGHT_TAKEOFF, "#f1c21b"),
+                createStatCard("Action Required", String.valueOf(pendingApprovals), VaadinIcon.INBOX, "#da1e28")
         );
 
         return kpiLayout;
@@ -164,8 +162,7 @@ public class HodWorkspace extends VerticalLayout {
 
     private Component createStatCard(String title, String value, VaadinIcon iconEnum, String iconColor) {
         VerticalLayout card = new VerticalLayout();
-        card.addClassNames(LumoUtility.Background.BASE, LumoUtility.BorderRadius.MEDIUM, LumoUtility.BoxShadow.SMALL, LumoUtility.Padding.MEDIUM, LumoUtility.Border.ALL);
-        card.setSpacing(false);
+        card.addClassNames("standard-surface", "hoverable");card.setSpacing(false);
         card.setMinWidth("180px");
         card.getStyle().set("flex-grow", "1");
 
@@ -199,7 +196,7 @@ public class HodWorkspace extends VerticalLayout {
 
         TreeGrid<Employee> treeGrid = new TreeGrid<>();
         treeGrid.addThemeVariants(GridVariant.LUMO_ROW_STRIPES, GridVariant.LUMO_COMPACT, GridVariant.LUMO_NO_BORDER);
-        treeGrid.getStyle().set("border", "1px solid var(--lumo-contrast-10pct)").set("border-radius", "8px");
+        treeGrid.addClassName("standard-surface");
         treeGrid.setHeight("400px");
 
         treeGrid.addHierarchyColumn(emp -> emp.getFirstName() + " (" + emp.getEmployeeCode() + ")").setHeader("Employee Name").setFlexGrow(2);
@@ -318,7 +315,7 @@ public class HodWorkspace extends VerticalLayout {
 
         Grid<DailyExpectedShift> grid = new Grid<>(DailyExpectedShift.class, false);
         grid.addThemeVariants(GridVariant.LUMO_ROW_STRIPES, GridVariant.LUMO_COMPACT, GridVariant.LUMO_NO_BORDER);
-        grid.getStyle().set("border", "1px solid var(--lumo-contrast-10pct)").set("border-radius", "8px");
+        grid.addClassName("standard-surface");
         grid.setHeight("250px");
 
         grid.addColumn(shift -> shift.getTargetDate().toString() + " (" + shift.getTargetDate().getDayOfWeek().name().substring(0, 3) + ")").setHeader("Date").setAutoWidth(true);

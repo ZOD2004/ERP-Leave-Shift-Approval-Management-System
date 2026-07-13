@@ -78,6 +78,7 @@ public class HrAdminWorkspace extends VerticalLayout {
         setPadding(false);
         setSpacing(true);
         setWidthFull();
+        getStyle().set("gap", "var(--app-layout-margin)"); // Applies consistent global block spacing
 
         buildUI();
     }
@@ -94,10 +95,9 @@ public class HrAdminWorkspace extends VerticalLayout {
         allActiveEmployees = employeeService.findAllActive();
         allDepartments = departmentRepository.findAll();
         loadBulkDailyData(allActiveEmployees);
-
-        // 1. Personal Header
+// 1. Personal Header
         add(createPersonalHeader(hrEmployee));
-        add(new Hr());
+        // Removed unnecessary spacer Hr tags
 
         H2 header = new H2("HR Global Workspace");
         header.addClassNames(LumoUtility.Margin.Top.NONE, LumoUtility.Margin.Bottom.MEDIUM, LumoUtility.TextColor.PRIMARY);
@@ -105,19 +105,15 @@ public class HrAdminWorkspace extends VerticalLayout {
 
         // 2. KPI Cards Section
         add(createGlobalKpiSection());
-        add(new Hr());
 
         // 3. Weekly Schedule
         add(createWeeklyScheduleWidget(hrEmployee));
-        add(new Hr());
 
         // 4. Middle Section: Leave Utilization
         add(createLeaveUtilizationWidget());
-        add(new Hr());
 
         // 5. Global Hierarchy TreeGrid
         add(createCompanyTreeGrid());
-        add(new Hr());
 
         // 6. Bottom Section: Anomalies Grid
         add(createGlobalAnomaliesWidget());
@@ -126,7 +122,8 @@ public class HrAdminWorkspace extends VerticalLayout {
     private Component createGlobalKpiSection() {
         HorizontalLayout kpiLayout = new HorizontalLayout();
         kpiLayout.setWidthFull();
-        kpiLayout.setSpacing(true);
+        kpiLayout.setSpacing(false);
+        kpiLayout.getStyle().set("gap", "var(--app-padding)");
         // This ensures the cards stay horizontal and scroll sideways on smaller screens
         kpiLayout.getStyle().set("overflow-x", "auto");
         kpiLayout.getStyle().set("padding-bottom", "8px");
@@ -157,24 +154,23 @@ public class HrAdminWorkspace extends VerticalLayout {
             }
         }
 
-        // Build Cards
         kpiLayout.add(
-                createStatCard("Total Headcount", String.valueOf(totalEmployees), VaadinIcon.GROUP, "var(--lumo-primary-color)"),
-                createStatCard("Present Today", String.valueOf(presentCount), VaadinIcon.CHECK_CIRCLE, "var(--lumo-success-color)"),
-                createStatCard("Yet to Check-in", String.valueOf(expectedCount), VaadinIcon.CLOCK, "var(--lumo-warning-color)"),
-                createStatCard("On Leave / Off", String.valueOf(absentOrLeaveCount), VaadinIcon.FLIGHT_TAKEOFF, "var(--lumo-secondary-text-color)"),
-                createStatCard("Pending Leaves", String.valueOf(pendingApprovals), VaadinIcon.INBOX, "var(--lumo-warning-color)"),
-                createStatCard("Pending Anomalies", String.valueOf(pendingAnomalies), VaadinIcon.WARNING, "var(--lumo-error-color)")
+                createStatCard("Total Headcount", String.valueOf(totalEmployees), VaadinIcon.GROUP, "var(--app-primary-color)"),
+                createStatCard("Present Today", String.valueOf(presentCount), VaadinIcon.CHECK_CIRCLE, "#24a148"),
+                createStatCard("Yet to Check-in", String.valueOf(expectedCount), VaadinIcon.CLOCK, "#f1c21b"),
+                createStatCard("On Leave / Off", String.valueOf(absentOrLeaveCount), VaadinIcon.FLIGHT_TAKEOFF, "var(--app-text-secondary)"),
+                createStatCard("Pending Leaves", String.valueOf(pendingApprovals), VaadinIcon.INBOX, "#f1c21b"),
+                createStatCard("Pending Anomalies", String.valueOf(pendingAnomalies), VaadinIcon.WARNING, "#da1e28")
         );
 
         return kpiLayout;
     }
     private Component createStatCard(String title, String value, VaadinIcon iconEnum, String iconColor) {
         VerticalLayout card = new VerticalLayout();
-        card.addClassNames(LumoUtility.Background.BASE, LumoUtility.BorderRadius.MEDIUM, LumoUtility.BoxShadow.SMALL, LumoUtility.Padding.MEDIUM, LumoUtility.Border.ALL);
+        card.addClassNames("standard-surface", "hoverable");
         card.setSpacing(false);
         card.setMinWidth("180px");
-        card.getStyle().set("flex-grow", "1"); // Allows cards to stretch and fill rows
+        card.getStyle().set("flex-grow", "1");
 
         HorizontalLayout header = new HorizontalLayout();
         header.setWidthFull();
@@ -259,9 +255,8 @@ public class HrAdminWorkspace extends VerticalLayout {
         Grid<AttendanceCorrection> grid = new Grid<>(AttendanceCorrection.class, false);
         grid.addThemeVariants(GridVariant.LUMO_ROW_STRIPES, GridVariant.LUMO_COMPACT, GridVariant.LUMO_NO_BORDER);
         grid.setHeight("300px");
-        grid.getStyle().set("border", "1px solid var(--lumo-contrast-10pct)").set("border-radius", "8px");
+        grid.addClassName("standard-surface");
 
-        // Employee Column
         grid.addColumn(ac -> ac.getAttendance().getEmployee().getFirstName() + " (ID: " + ac.getAttendance().getEmployee().getId() + ")").setHeader("Employee").setAutoWidth(true).setFlexGrow(1);
 
         // Date Column
@@ -350,7 +345,7 @@ public class HrAdminWorkspace extends VerticalLayout {
 
         Grid<DailyExpectedShift> grid = new Grid<>(DailyExpectedShift.class, false);
         grid.addThemeVariants(GridVariant.LUMO_ROW_STRIPES, GridVariant.LUMO_COMPACT, GridVariant.LUMO_NO_BORDER);
-        grid.getStyle().set("border", "1px solid var(--lumo-contrast-10pct)").set("border-radius", "8px");
+        grid.addClassName("standard-surface");
         grid.setHeight("250px");
 
         grid.addColumn(shift -> shift.getTargetDate().toString() + " (" + shift.getTargetDate().getDayOfWeek().name().substring(0, 3) + ")").setHeader("Date").setAutoWidth(true);
@@ -407,10 +402,10 @@ public class HrAdminWorkspace extends VerticalLayout {
         H3 title = new H3("Company Directory & Live Status");
         title.addClassNames(LumoUtility.Margin.Top.NONE, LumoUtility.Margin.Bottom.SMALL);
 
-        // We use TreeGrid<Object> so we can mix Departments (parents) and Employees (children)
+
         TreeGrid<Object> grid = new TreeGrid<>();
         grid.addThemeVariants(GridVariant.LUMO_ROW_STRIPES, GridVariant.LUMO_COMPACT, GridVariant.LUMO_NO_BORDER);
-        grid.getStyle().set("border", "1px solid var(--lumo-contrast-10pct)").set("border-radius", "8px");
+        grid.addClassName("standard-surface");
         grid.setHeight("400px");
 
         // Column 1: Hierarchy (Department Name OR Employee Name)

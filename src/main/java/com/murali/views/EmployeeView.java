@@ -87,6 +87,7 @@ public class EmployeeView extends VerticalLayout {
         this.leaveBalanceService = leaveBalanceService;
 
         setSizeFull();
+        addClassName("standard-view-container"); // Standard global layout margins
         configureGrid();
         configureForm();
 
@@ -94,6 +95,7 @@ public class EmployeeView extends VerticalLayout {
         searchField.setClearButtonVisible(true);
         searchField.setValueChangeMode(ValueChangeMode.LAZY);
         searchField.addValueChangeListener(e -> updateList());
+        searchField.focus(); // Automatically focus search bar on view load
 
         addBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
         addBtn.addClickListener(e -> openForm(new Employee(), new User()));
@@ -108,6 +110,9 @@ public class EmployeeView extends VerticalLayout {
 
     private void configureGrid() {
         grid.setSizeFull();
+        grid.addClassName("standard-surface");
+        grid.addItemDoubleClickListener(e -> openForm(e.getItem(), e.getItem().getUser() != null ? e.getItem().getUser() : new User())); // Invoke existing edit handler
+
         grid.addColumn(Employee::getEmployeeCode).setHeader("Code").setSortable(true);
         grid.addColumn(Employee::getFirstName).setHeader("First Name").setSortable(true);
         grid.addColumn(emp -> emp.getDepartment() != null ? emp.getDepartment().getName() : "None").setHeader("Department");

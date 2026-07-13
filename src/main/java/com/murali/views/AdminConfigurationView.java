@@ -65,7 +65,7 @@ public class AdminConfigurationView extends VerticalLayout {
         this.ruleService = ruleService;
 
         setSizeFull();
-        addClassNames(LumoUtility.Padding.LARGE, LumoUtility.Background.CONTRAST_5);
+        addClassName("standard-view-container"); // Standard global layout margins
 
         buildUI();
     }
@@ -104,12 +104,13 @@ public class AdminConfigurationView extends VerticalLayout {
 
         long upcomingCount = holidayService.countUpcomingHolidaysInMonth(today, today.getMonthValue(), today.getYear());
 
-        HorizontalLayout statsRow = new HorizontalLayout(createStatsCard("Total Holidays", String.valueOf(holidayService.getAllHolidays().size()), VaadinIcon.CALENDAR, "var(--lumo-primary-color)"), createStatsCard("Upcoming", String.valueOf(upcomingCount), VaadinIcon.CLOCK, "var(--lumo-success-color)") // Note: "3" is hardcoded visually, could be dynamically calculated
+        HorizontalLayout statsRow = new HorizontalLayout(createStatsCard("Total Holidays", String.valueOf(holidayService.getAllHolidays().size()), VaadinIcon.CALENDAR, "var(--app-primary-color)"), createStatsCard("Upcoming", String.valueOf(upcomingCount), VaadinIcon.CLOCK, "#24a148") // Standardized success green
         );
         statsRow.addClassNames(LumoUtility.Margin.Bottom.MEDIUM);
 
         TextField searchField = new TextField();
         searchField.setPlaceholder("Search holidays...");
+        searchField.focus(); // Automatically focus search bar on view load
         searchField.setPrefixComponent(VaadinIcon.SEARCH.create());
         searchField.setValueChangeMode(ValueChangeMode.LAZY);
         searchField.addValueChangeListener(e -> {
@@ -128,6 +129,8 @@ public class AdminConfigurationView extends VerticalLayout {
         holidayGrid.removeAllColumns();
         holidayGrid.addThemeVariants(GridVariant.LUMO_ROW_STRIPES, GridVariant.LUMO_NO_BORDER);
         holidayGrid.setSizeFull();
+        holidayGrid.addClassName("standard-surface");
+        holidayGrid.addItemDoubleClickListener(e -> openHolidayDialog(e.getItem())); // Invoke existing edit handler
 
         holidayGrid.addColumn(Holiday::getName).setHeader("Holiday Name").setSortable(true).setFlexGrow(1);
         holidayGrid.addColumn(new LocalDateRenderer<>(Holiday::getHolidayDate, "dd MMM yyyy")).setHeader("Date").setAutoWidth(true).setSortable(true);
@@ -138,9 +141,8 @@ public class AdminConfigurationView extends VerticalLayout {
         })).setHeader("Actions").setAutoWidth(true).setFlexGrow(0);
 
         holidayGrid.getStyle().set("--vaadin-grid-row-height", "60px");
-
         VerticalLayout gridContainer = new VerticalLayout(toolbar, holidayGrid);
-        gridContainer.addClassNames(LumoUtility.Background.BASE, LumoUtility.BorderRadius.LARGE, LumoUtility.BoxShadow.SMALL, LumoUtility.Padding.LARGE);
+        gridContainer.addClassName("standard-surface");
         gridContainer.setPadding(true);
         gridContainer.setSizeFull();
 
@@ -213,7 +215,7 @@ public class AdminConfigurationView extends VerticalLayout {
 
     private Component createStatsCard(String title, String value, VaadinIcon icon, String color) {
         VerticalLayout card = new VerticalLayout();
-        card.addClassNames(LumoUtility.Background.BASE, LumoUtility.Border.ALL, LumoUtility.BorderColor.CONTRAST_10, LumoUtility.BorderRadius.MEDIUM, LumoUtility.Padding.MEDIUM, LumoUtility.BoxShadow.SMALL);
+        card.addClassNames("standard-surface", "hoverable");
         card.setSpacing(false);
         card.setWidth("250px");
         card.getStyle().set("border-top", "4px solid " + color).set("min-height", "110px");
@@ -237,7 +239,7 @@ public class AdminConfigurationView extends VerticalLayout {
     private void showPoliciesView() {
         contentContainer.removeAll();
 
-        HorizontalLayout statsRow = new HorizontalLayout(createStatsCard("Active Policies", String.valueOf(ruleService.getAllPolicies().size()), VaadinIcon.FILE_TEXT, "var(--lumo-primary-color)"));
+        HorizontalLayout statsRow = new HorizontalLayout(createStatsCard("Active Policies", String.valueOf(ruleService.getAllPolicies().size()), VaadinIcon.FILE_TEXT, "var(--app-primary-color)"));
         statsRow.addClassNames(LumoUtility.Margin.Bottom.MEDIUM);
 
         Button addBtn = new Button("New Policy", VaadinIcon.PLUS.create());
@@ -251,6 +253,8 @@ public class AdminConfigurationView extends VerticalLayout {
         policyGrid.removeAllColumns();
         policyGrid.addThemeVariants(GridVariant.LUMO_NO_BORDER);
         policyGrid.setSizeFull();
+        policyGrid.addClassName("standard-surface");
+        policyGrid.addItemDoubleClickListener(e -> openPolicyDialog(ruleService.getPolicyById(e.getItem().getId()))); // Invoke existing edit handler
 
         policyGrid.addComponentColumn(this::createPolicyCard).setHeader("Policy Details").setAutoWidth(true).setFlexGrow(1);
 
@@ -273,9 +277,8 @@ public class AdminConfigurationView extends VerticalLayout {
         }).setHeader("Actions").setAutoWidth(true).setFlexGrow(0);
 
         policyGrid.getStyle().set("--vaadin-grid-row-height", "70px");
-
         VerticalLayout gridContainer = new VerticalLayout(toolbar, policyGrid);
-        gridContainer.addClassNames(LumoUtility.Background.BASE, LumoUtility.BorderRadius.LARGE, LumoUtility.BoxShadow.SMALL, LumoUtility.Padding.LARGE);
+        gridContainer.addClassName("standard-surface");
         gridContainer.setPadding(true);
         gridContainer.setSizeFull();
 
@@ -365,8 +368,8 @@ public class AdminConfigurationView extends VerticalLayout {
         TierUIContext tierContext = new TierUIContext();
 
         VerticalLayout tierCard = new VerticalLayout();
-        tierCard.addClassNames(LumoUtility.Background.BASE, LumoUtility.Border.ALL, LumoUtility.BorderColor.CONTRAST_10, LumoUtility.BorderRadius.MEDIUM, LumoUtility.Padding.LARGE, LumoUtility.BoxShadow.SMALL, LumoUtility.Margin.Bottom.LARGE);
-        tierCard.getStyle().set("border-left", "4px solid var(--lumo-primary-color)");
+        tierCard.addClassNames("standard-surface", "hoverable");
+        tierCard.getStyle().set("border-left", "4px solid var(--app-primary-color)");
         HorizontalLayout headerRow = new HorizontalLayout();
         headerRow.setWidthFull();
         headerRow.setAlignItems(FlexComponent.Alignment.END);

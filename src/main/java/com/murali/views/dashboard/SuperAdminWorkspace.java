@@ -52,6 +52,7 @@ public class SuperAdminWorkspace extends VerticalLayout {
         setPadding(false);
         setSpacing(true);
         setWidthFull();
+        getStyle().set("gap", "var(--app-layout-margin)"); // Applies consistent global block spacing
 
         buildUI();
     }
@@ -64,7 +65,7 @@ public class SuperAdminWorkspace extends VerticalLayout {
 
         // 2. KPI Cards Section
         add(createKpiSection());
-        add(new Hr());
+        // Removed unnecessary spacer Hr tag
 
         // 3. Middle Section: System Health & Activity
         HorizontalLayout middleSection = new HorizontalLayout();
@@ -85,7 +86,8 @@ public class SuperAdminWorkspace extends VerticalLayout {
     private Component createKpiSection() {
         HorizontalLayout kpiLayout = new HorizontalLayout();
         kpiLayout.setWidthFull();
-        kpiLayout.setSpacing(true);
+        kpiLayout.setSpacing(false);
+        kpiLayout.getStyle().set("gap", "var(--app-padding)");
         // Force horizontal layout and allow horizontal scrolling on small screens
         kpiLayout.getStyle().set("overflow-x", "auto");
         kpiLayout.getStyle().set("padding-bottom", "8px");
@@ -105,20 +107,19 @@ public class SuperAdminWorkspace extends VerticalLayout {
                 .count();
 
         kpiLayout.add(
-                createStatCard("Total Employees", String.valueOf(totalEmployees), VaadinIcon.USERS, "var(--lumo-primary-color)"),
-//                createStatCard("Active Logins Today", String.valueOf(activeLogins), VaadinIcon.SIGN_IN, "var(--lumo-success-color)"),
-                createStatCard("Departments", String.valueOf(totalDepts), VaadinIcon.BUILDING, "var(--lumo-contrast-70pct)"),
-                createStatCard("Managers & HODs", String.valueOf(totalManagers), VaadinIcon.USER, "var(--lumo-contrast-70pct)"),
-//                createStatCard("System Pending Approvals", String.valueOf(totalPendingApprovals), VaadinIcon.INBOX, "var(--lumo-warning-color)"),
-                createStatCard("Audit Events Today", String.valueOf(auditEventsToday), VaadinIcon.RECORDS, "var(--lumo-secondary-text-color)")
+                createStatCard("Total Employees", String.valueOf(totalEmployees), VaadinIcon.USERS, "var(--app-primary-color)"),
+//                createStatCard("Active Logins Today", String.valueOf(activeLogins), VaadinIcon.SIGN_IN, "#24a148"),
+                createStatCard("Departments", String.valueOf(totalDepts), VaadinIcon.BUILDING, "var(--app-text-secondary)"),
+                createStatCard("Managers & HODs", String.valueOf(totalManagers), VaadinIcon.USER, "var(--app-text-secondary)"),
+//                createStatCard("System Pending Approvals", String.valueOf(totalPendingApprovals), VaadinIcon.INBOX, "#f1c21b"),
+                createStatCard("Audit Events Today", String.valueOf(auditEventsToday), VaadinIcon.RECORDS, "var(--app-text-secondary)")
         );
 
         return kpiLayout;
     }
-
     private Component createStatCard(String title, String value, VaadinIcon iconEnum, String iconColor) {
         VerticalLayout card = new VerticalLayout();
-        card.addClassNames(LumoUtility.Background.BASE, LumoUtility.BorderRadius.MEDIUM, LumoUtility.BoxShadow.SMALL, LumoUtility.Padding.MEDIUM, LumoUtility.Border.ALL);
+        card.addClassNames("standard-surface", "hoverable");
         card.setSpacing(false);
         card.setMinWidth("220px");
 
@@ -157,7 +158,7 @@ public class SuperAdminWorkspace extends VerticalLayout {
 
         // Build the Health Card
         VerticalLayout healthCard = new VerticalLayout();
-        healthCard.addClassNames(LumoUtility.Background.BASE, LumoUtility.BorderRadius.MEDIUM, LumoUtility.BoxShadow.SMALL, LumoUtility.Padding.LARGE, LumoUtility.Border.ALL);
+        healthCard.addClassNames("standard-surface");
 
         Span jobTitle = new Span(VaadinIcon.AUTOMATION.create(), new Span(" Attendance Nightly Batch"));
         jobTitle.addClassNames(LumoUtility.FontWeight.BOLD, LumoUtility.FontSize.MEDIUM);
@@ -167,13 +168,13 @@ public class SuperAdminWorkspace extends VerticalLayout {
 
         if ("SUCCESS".equals(cronStatus)) {
             statusBadge.getElement().getThemeList().add("success");
-            healthCard.getStyle().set("border-left", "4px solid var(--lumo-success-color)");
+            healthCard.getStyle().set("border-left", "4px solid #24a148");
         } else if ("RUNNING".equals(cronStatus)) {
             statusBadge.getElement().getThemeList().add("primary");
-            healthCard.getStyle().set("border-left", "4px solid var(--lumo-primary-color)");
+            healthCard.getStyle().set("border-left", "4px solid var(--app-primary-color)");
         } else {
             statusBadge.getElement().getThemeList().add("error");
-            healthCard.getStyle().set("border-left", "4px solid var(--lumo-error-color)");
+            healthCard.getStyle().set("border-left", "4px solid #da1e28");
         }
 
         HorizontalLayout statusRow = new HorizontalLayout(new Span("Status:"), statusBadge);
@@ -199,7 +200,7 @@ public class SuperAdminWorkspace extends VerticalLayout {
         Grid<AuditLog> grid = new Grid<>(AuditLog.class, false);
         grid.addThemeVariants(GridVariant.LUMO_ROW_STRIPES, GridVariant.LUMO_COMPACT, GridVariant.LUMO_NO_BORDER);
         grid.setHeight("350px");
-        grid.getStyle().set("border", "1px solid var(--lumo-contrast-10pct)").set("border-radius", "8px");
+        grid.addClassName("standard-surface");
 
         grid.addColumn(log -> log.getTimestamp() != null ? log.getTimestamp().toLocalTime().format(DateTimeFormatter.ofPattern("HH:mm:ss")) : "").setHeader("Time").setAutoWidth(true).setFlexGrow(0);
 
@@ -246,13 +247,13 @@ public class SuperAdminWorkspace extends VerticalLayout {
         oldStateArea.setValue(log.getOldState() != null ? log.getOldState() : "NULL");
         oldStateArea.setReadOnly(true);
         oldStateArea.setWidth("50%");
-        oldStateArea.getStyle().set("color", "var(--lumo-error-text-color)");
+        oldStateArea.getStyle().set("color", "#da1e28"); // Standard error color
 
         TextArea newStateArea = new TextArea("New State");
         newStateArea.setValue(log.getNewState() != null ? log.getNewState() : "NULL");
         newStateArea.setReadOnly(true);
         newStateArea.setWidth("50%");
-        newStateArea.getStyle().set("color", "var(--lumo-success-text-color)");
+        newStateArea.getStyle().set("color", "#24a148"); // Standard success color
 
         diffLayout.add(oldStateArea, newStateArea);
 

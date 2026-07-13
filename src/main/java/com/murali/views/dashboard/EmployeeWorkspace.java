@@ -72,10 +72,10 @@ public class EmployeeWorkspace extends VerticalLayout {
         this.leaveBalanceService = leaveBalanceService;
         this.holidayRepository = holidayRepository;
         this.leaveRequestService = leaveRequestService;
-
         setPadding(false);
         setSpacing(true);
         setWidthFull();
+        getStyle().set("gap", "var(--app-layout-margin)");
 
         buildUI();
     }
@@ -91,11 +91,10 @@ public class EmployeeWorkspace extends VerticalLayout {
 
         // 1. Personal Header & Punch Button
         add(createPersonalHeader(employee));
-        add(new Hr());
+        // Removed unnecessary spacer Hr tags
 
         // 2. Today's Status Cards
         add(createTodayStatusWidget(employee));
-        add(new Hr());
 
         // 3. Middle Section: Upcoming Week & Holidays
         HorizontalLayout gridsLayout = new HorizontalLayout();
@@ -110,7 +109,7 @@ public class EmployeeWorkspace extends VerticalLayout {
         gridsLayout.setFlexGrow(1, holidayGrid);
 
         add(gridsLayout);
-        add(new Hr());
+        // Removed unnecessary spacer Hr tag
 
         // 4. History Section (Tabs)
         add(createMyHistoryWidget(employee));
@@ -182,7 +181,7 @@ public class EmployeeWorkspace extends VerticalLayout {
         FlexLayout kpiLayout = new FlexLayout();
         kpiLayout.setWidthFull();
         kpiLayout.setFlexWrap(FlexLayout.FlexWrap.WRAP);
-        kpiLayout.getStyle().set("gap", "var(--lumo-space-m)");
+        kpiLayout.getStyle().set("gap", "var(--app-padding)");
 
         LocalDate today = LocalDate.now();
         DailyExpectedShift todayExpected = scheduleCalculationService.calculateDailyShift(employee, today);
@@ -196,9 +195,8 @@ public class EmployeeWorkspace extends VerticalLayout {
             shiftName = "Public Holiday";
         }
 
-        // Card 2: Current Status
         String statusText = "Expected";
-        String color = "var(--lumo-warning-color)";
+        String color = "#f1c21b";
         VaadinIcon icon = VaadinIcon.CLOCK;
 
         if (todayAtt.isPresent()) {
@@ -207,37 +205,37 @@ public class EmployeeWorkspace extends VerticalLayout {
 
             if ("WORKING".equals(recordStatus)) {
                 statusText = "Active (In at " + att.getFirstCheckIn().toLocalTime() + ")";
-                color = "var(--lumo-primary-color)";
+                color = "var(--app-primary-color)";
                 icon = VaadinIcon.PLAY;
             } else if ("PRESENT".equals(recordStatus)) {
                 statusText = "Present (Completed)";
-                color = "var(--lumo-success-color)";
+                color = "#24a148"; // Standard success green
                 icon = VaadinIcon.CHECK_CIRCLE;
             } else if ("PARTIAL_DAY".equals(recordStatus)) {
                 statusText = "Partial Day";
-                color = "var(--lumo-error-color)";
+                color = "#da1e28"; // Standard error red
                 icon = VaadinIcon.EXCLAMATION_CIRCLE;
             } else if ("HALF_DAY_LEAVE".equals(recordStatus)) {
                 statusText = "Half Day / Present";
-                color = "var(--lumo-success-color)";
+                color = "#24a148";
                 icon = VaadinIcon.ADJUST;
             } else if ("ON_LEAVE".equals(recordStatus) || "FULL_LEAVE".equals(recordStatus)) {
                 statusText = "On Leave";
-                color = "var(--lumo-contrast-70pct)";
+                color = "var(--app-text-secondary)";
                 icon = VaadinIcon.FLIGHT_TAKEOFF;
             } else if ("ABSENT".equals(recordStatus)) {
                 statusText = "Absent";
-                color = "var(--lumo-error-color)";
+                color = "#da1e28";
                 icon = VaadinIcon.CLOSE_CIRCLE;
             } else if (att.getFirstCheckIn() != null) {
                 // Fallback for PENDING but clocked in
                 statusText = "Punched In (" + att.getFirstCheckIn().toLocalTime() + ")";
-                color = "var(--lumo-success-color)";
+                color = "#24a148";
                 icon = VaadinIcon.CHECK_CIRCLE;
             }
         } else if (!todayExpected.isWorkingDay()) {
             statusText = "Not Scheduled";
-            color = "var(--lumo-contrast-70pct)";
+            color = "var(--app-text-secondary)";
             icon = VaadinIcon.HOME_O;
         }
 
@@ -249,9 +247,9 @@ public class EmployeeWorkspace extends VerticalLayout {
         }
 
         kpiLayout.add(
-                createStatCard("Today's Shift", shiftName, VaadinIcon.CALENDAR_CLOCK, "var(--lumo-primary-color)"),
+                createStatCard("Today's Shift", shiftName, VaadinIcon.CALENDAR_CLOCK, "var(--app-primary-color)"),
                 createStatCard("Live Status", statusText, icon, color),
-                createStatCard("Tomorrow's Shift", tomorrowShift, VaadinIcon.ARROW_RIGHT, "var(--lumo-contrast-70pct)")
+                createStatCard("Tomorrow's Shift", tomorrowShift, VaadinIcon.ARROW_RIGHT, "var(--app-text-secondary)")
         );
 
         return kpiLayout;
@@ -259,8 +257,7 @@ public class EmployeeWorkspace extends VerticalLayout {
 
     private Component createStatCard(String title, String value, VaadinIcon iconEnum, String iconColor) {
         VerticalLayout card = new VerticalLayout();
-        card.addClassNames(LumoUtility.Background.BASE, LumoUtility.BorderRadius.MEDIUM,
-                LumoUtility.BoxShadow.SMALL, LumoUtility.Padding.MEDIUM, LumoUtility.Border.ALL);
+        card.addClassNames("standard-surface", "hoverable");
         card.setSpacing(false);
         card.setMinWidth("200px");
         card.getStyle().set("flex-grow", "1");
@@ -295,7 +292,7 @@ public class EmployeeWorkspace extends VerticalLayout {
 
         Grid<DailyExpectedShift> grid = new Grid<>(DailyExpectedShift.class, false);
         grid.addThemeVariants(GridVariant.LUMO_ROW_STRIPES, GridVariant.LUMO_COMPACT, GridVariant.LUMO_NO_BORDER);
-        grid.getStyle().set("border", "1px solid var(--lumo-contrast-10pct)").set("border-radius", "8px");
+        grid.addClassName("standard-surface");
         grid.setHeight("250px");
 
         grid.addColumn(shift -> shift.getTargetDate().toString() + " (" + shift.getTargetDate().getDayOfWeek().name().substring(0, 3) + ")")

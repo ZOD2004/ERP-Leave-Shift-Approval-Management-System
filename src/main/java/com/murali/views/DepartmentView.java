@@ -10,6 +10,7 @@ import com.vaadin.flow.component.dialog.Dialog;
 import com.vaadin.flow.component.formlayout.FormLayout;
 import com.vaadin.flow.component.grid.Grid;
 import com.vaadin.flow.component.html.H1;
+import com.vaadin.flow.component.html.H2;
 import com.vaadin.flow.component.icon.Icon;
 import com.vaadin.flow.component.icon.VaadinIcon;
 import com.vaadin.flow.component.notification.Notification;
@@ -52,14 +53,16 @@ public class DepartmentView extends VerticalLayout {
         this.departmentService = departmentService;
 
         setSizeFull();
+        addClassName("standard-view-container"); // Standard global layout margins
         configureGrid();
         configureForm();
 
         addBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
         addBtn.addClickListener(e -> openForm(new Department()));
 
-        HorizontalLayout toolbar = new HorizontalLayout(new H1("Department Configuration"), addBtn);
+        HorizontalLayout toolbar = new HorizontalLayout(new H2("Department Configuration"), addBtn);
         toolbar.setWidthFull();
+        toolbar.setAlignItems(Alignment.CENTER); // Prevents vertical stretching
         toolbar.setJustifyContentMode(JustifyContentMode.BETWEEN);
 
         add(toolbar, grid);
@@ -69,6 +72,9 @@ public class DepartmentView extends VerticalLayout {
 
     private void configureGrid() {
         grid.setSizeFull();
+        grid.addClassName("standard-surface");
+        grid.addItemDoubleClickListener(e -> openForm(e.getItem())); // Invoke existing edit handler
+
         grid.addColumn(Department::getName).setHeader("Department Name").setSortable(true);
 
         grid.addColumn(department -> {
@@ -98,7 +104,8 @@ public class DepartmentView extends VerticalLayout {
         FormLayout formLayout = new FormLayout();
         formLayout.add(nameField, hodField);
         formLayout.setResponsiveSteps(
-                new FormLayout.ResponsiveStep("0", 1)
+                new FormLayout.ResponsiveStep("0", 1),
+                new FormLayout.ResponsiveStep("500px", 2) // Makes it beautifully horizontal on standard screens
         );
 
         binder.forField(nameField)
@@ -190,7 +197,7 @@ public class DepartmentView extends VerticalLayout {
                 "This department has active employees. Select a new department to transfer them to. " +
                         "The current Head of Department will be demoted to a standard employee."
         );
-        warning.getStyle().set("color", "var(--lumo-error-text-color)");
+        warning.getStyle().set("color", "#da1e28");
 
         com.vaadin.flow.component.combobox.ComboBox<Department> newDeptCombo = new com.vaadin.flow.component.combobox.ComboBox<>("Select New Department");
 
