@@ -45,6 +45,7 @@ public class LeaveTypeView extends VerticalLayout {
     private final Grid<LeaveType> grid = new Grid<>(LeaveType.class, false);
     private final TextField searchField = new TextField();
     private final Button addBtn = new Button("Add New Leave Type", new Icon(VaadinIcon.PLUS));
+    private final Button bulkDeleteBtn = new Button("Delete Selected", new Icon(VaadinIcon.TRASH));
 
     private final Dialog formDialog = new Dialog();
     private final TextField nameField = new TextField("Name");
@@ -64,24 +65,26 @@ public class LeaveTypeView extends VerticalLayout {
         this.ruleService = ruleService;
 
         setSizeFull();
-        addClassName("standard-view-container"); // Standard global layout margins
+        addClassName("standard-view-container");
         configureGrid();
         configureForm();
         searchField.setPlaceholder("Search by name or code...");
         searchField.setClearButtonVisible(true);
         searchField.setValueChangeMode(ValueChangeMode.LAZY);
         searchField.addValueChangeListener(e -> updateList());
-        searchField.focus(); // Automatically focus search bar on view load
+        searchField.focus();
+
+        bulkDeleteBtn.addThemeVariants(ButtonVariant.LUMO_ERROR, ButtonVariant.LUMO_PRIMARY);
+        bulkDeleteBtn.setEnabled(false);
+        bulkDeleteBtn.addClickListener(e -> confirmAndBulkDelete(grid.getSelectedItems()));
 
         addBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
         addBtn.addClickListener(e -> openForm(new LeaveType()));
 
-        HorizontalLayout toolbar = new HorizontalLayout(searchField, addBtn);
+        HorizontalLayout toolbar = new HorizontalLayout(searchField, addBtn, bulkDeleteBtn);
         toolbar.setWidthFull();
         toolbar.setFlexGrow(1, searchField);
-
         add(new H2("Leave Types Configuration"), toolbar, grid);
-
         updateList();
     }
 
@@ -89,7 +92,13 @@ public class LeaveTypeView extends VerticalLayout {
 
         grid.setSizeFull();
         grid.addClassName("standard-surface");
-        grid.addItemDoubleClickListener(e -> openForm(e.getItem())); // Invoke existing edit handler
+
+        grid.setSelectionMode(Grid.SelectionMode.MULTI);
+        grid.addSelectionListener(e -> bulkDeleteBtn.setEnabled(!e.getAllSelectedItems().isEmpty()));
+
+        grid.addItemDoubleClickListener(e -> openForm(e.getItem()));
+
+        grid.addItemDoubleClickListener(e -> openForm(e.getItem()));
 
         grid.addColumn(LeaveType::getName).setHeader("Name").setSortable(true);
         grid.addColumn(LeaveType::getCode).setHeader("Code").setSortable(true);
@@ -250,5 +259,60 @@ public class LeaveTypeView extends VerticalLayout {
     private void showNotification(String message, NotificationVariant variant) {
         Notification notification = Notification.show(message, 3000, Notification.Position.TOP_CENTER);
         notification.addThemeVariants(variant);
+    }
+    private void confirmAndBulkDelete(Set<LeaveType> selectedLeaveTypes) {
+        if (selectedLeaveTypes == null || selectedLeaveTypes.isEmpty()) {
+            return;
+        }
+
+        ConfirmDialog dialog = new ConfirmDialog();
+        dialog.setHeader("Delete " + selectedLeaveTypes.size() + " Leave Types?");
+        dialog.setText("Are you sure you want to permanently delete the selected leave types? System reserved types will be skipped.");
+
+        dialog.setCancelable(true);
+        dialog.setCancelText("Cancel");
+
+        dialog.setConfirmText("Delete All");
+        dialog.setConfirmButtonTheme("error primary");
+
+        dialog.addConfirmListener(event -> executeBulkDelete(selectedLeaveTypes));
+
+        dialog.open();
+    }
+
+    private void executeBulkDelete(Set<LeaveType> selectedLeaveTypes) {
+        int successCount = 0;
+        int systemSkipCount = 0;
+        int inUseSkipCount = 0;
+
+        for (LeaveType leaveType : selectedLeaveTypes) {
+            if (leaveType.getCode() != null && SYSTEM_CODES.contains(leaveType.getCode().toUpperCase())) {
+                systemSkipCount++;
+                continue;
+            }
+
+            try {
+                leaveTypeService.deleteLeaveType(leaveType.getId());
+                successCount++;
+            } catch (DataIntegrityViolationException e) {
+                inUseSkipCount++;
+            } catch (Exception e) {
+                showNotification("Error deleting " + leaveType.getName() + ": " + e.getMessage(), NotificationVariant.LUMO_ERROR);
+            }
+        }
+
+        StringBuilder summary = new StringBuilder("Deleted " + successCount + " leave types.");
+        if (systemSkipCount > 0) {
+            summary.append(" Skipped ").append(systemSkipCount).append(" system types.");
+        }
+        if (inUseSkipCount > 0) {
+            summary.append(" Skipped ").append(inUseSkipCount).append(" types currently in use.");
+        }
+
+        NotificationVariant variant = (successCount > 0) ? NotificationVariant.LUMO_SUCCESS : NotificationVariant.LUMO_WARNING;
+        showNotification(summary.toString(), variant);
+
+        grid.deselectAll();
+        updateList();
     }
 }

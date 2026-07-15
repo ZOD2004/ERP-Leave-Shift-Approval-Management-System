@@ -295,7 +295,7 @@ public class AuditDashboardView extends VerticalLayout {
         layout.setSpacing(false);
         layout.addClassName("standard-surface");
         layout.getStyle().set("border-top", "4px solid " + topBorderColor);
-        layout.setWidth("50%"); // Ensure strictly 50% split
+        layout.setWidth("50%");
 
         Span header = new Span(titleText);
         header.addClassNames(LumoUtility.FontWeight.BOLD, LumoUtility.FontSize.XSMALL, LumoUtility.TextColor.SECONDARY);
@@ -303,7 +303,6 @@ public class AuditDashboardView extends VerticalLayout {
 
         Span codeText = new Span(jsonContent != null ? jsonContent : "NULL");
 
-        // CRITICAL: These CSS rules prevent the text from breaking the layout
         codeText.getStyle().set("font-family", "monospace");
         codeText.getStyle().set("font-size", "var(--lumo-font-size-xxs)");
         codeText.getStyle().set("color", "var(--lumo-body-text-color)");

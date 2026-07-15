@@ -313,3 +313,118 @@ vaadin-grid.monthly-calendar-grid::part(cell) {
     justify-content: center; /* Centers horizontally */
     align-items: center;     /* Centers vertically */
 }
+
+/* ==========================================================================
+   8. NOTIFICATION POLISH (Fixes the "Double Box" effect)
+   ========================================================================== */
+
+vaadin-notification-card {
+    /* Tell the notification to use your global theme variables */
+    --lumo-border-radius: var(--app-border-radius);
+    --lumo-box-shadow-m: var(--app-shadow-hover);
+}
+
+/* Strip away the hard borders from the inner overlay */
+vaadin-notification-card::part(overlay) {
+    border: none !important;
+    outline: none !important;
+    background-color: var(--app-surface-color);
+}
+
+/* Ensure colored variants (Success/Error) fill the whole box without a white gap */
+vaadin-notification-card[theme~="success"]::part(overlay) {
+    background-color: #defbe6;
+    color: var(--app-success-color);
+    border: 1px solid #8edba3 !important;
+}
+
+vaadin-notification-card[theme~="error"]::part(overlay) {
+    background-color: #fff1f1;
+    color: var(--app-error-color);
+    border: 1px solid #ffb3b8 !important;
+}
+
+vaadin-notification-card[theme~="warning"]::part(overlay) {
+    background-color: #fcf4d6;
+    color: var(--app-warning-color);
+    border: 1px solid #f5d661 !important;
+}
+
+/* ==========================================================================
+   9. CHECKBOX POLISH (Grid Multi-Select Visibility)
+   ========================================================================== */
+/* The box itself */
+vaadin-checkbox::part(checkbox) {
+    border: 2px solid var(--app-border-color);
+    border-radius: 4px;
+    background-color: var(--app-surface-color);
+    transition: all 0.2s ease;
+    width: 18px;
+    height: 18px;
+}
+
+/* Hover state: Soft border color change and subtle glow */
+vaadin-checkbox:hover::part(checkbox) {
+    border-color: var(--app-primary-color);
+    box-shadow: 0 0 0 3px rgba(15, 98, 254, 0.15); /* Soft blue glow using your primary color */
+}
+
+/* Checked state: Fill with primary brand color */
+vaadin-checkbox[checked]::part(checkbox) {
+    background-color: var(--app-primary-color);
+    border-color: var(--app-primary-color);
+}
+
+/* Ensure the checkmark icon inside is pure white */
+vaadin-checkbox[checked]::part(checkbox)::after {
+    border-color: #ffffff;
+}
+
+/* ==========================================================================
+   10. CONFIRM DIALOG & STANDARD BUTTON FIXES
+   ========================================================================== */
+/* Fixes the awkward gray background on Cancel/Standard buttons */
+vaadin-button:not([theme~="primary"]):not([theme~="tertiary"]):not([theme~="icon"]) {
+    background-color: var(--app-surface-color);
+    border: 1px solid var(--app-border-color);
+    color: var(--app-text-primary);
+    box-shadow: var(--app-shadow-subtle);
+}
+
+/* Clean hover for Cancel/Standard buttons */
+vaadin-button:not([theme~="primary"]):not([theme~="tertiary"]):not([theme~="icon"]):hover {
+    background-color: var(--app-accent-color);
+    border-color: #c1c7cd;
+}
+
+/* Ensures the Confirm Dialog popup matches your rounded cards perfectly */
+vaadin-confirm-dialog-overlay::part(overlay) {
+    background-color: var(--app-surface-color);
+    border-radius: var(--app-border-radius);
+    box-shadow: var(--app-shadow-hover);
+    border: 1px solid var(--app-border-color);
+}
+/* ==========================================================================
+   11. DISABLED BUTTON STATES
+   ========================================================================== */
+/* Fade out disabled buttons and change cursor, but KEEP the original color */
+vaadin-button[disabled] {
+    opacity: 0.4 !important;
+    cursor: not-allowed !important;
+    /* Removed the grayscale filter so your icons stay blue/red! */
+}
+
+/* Strip away all hover animations (lift, border-radius changes) for disabled buttons */
+vaadin-grid vaadin-button[disabled]:hover,
+vaadin-button[disabled]:hover {
+    transform: none !important;
+    box-shadow: none !important;
+    border-radius: var(--app-border-radius) !important;
+}
+
+/* Prevent the background color from appearing on hover for disabled grid buttons */
+vaadin-grid vaadin-button[theme~="tertiary"][disabled]:hover,
+vaadin-grid vaadin-button[theme~="tertiary"][theme~="error"][disabled]:hover {
+    background-color: transparent !important;
+    /* Removed the forced gray text color so it maintains its native hue */
+}
