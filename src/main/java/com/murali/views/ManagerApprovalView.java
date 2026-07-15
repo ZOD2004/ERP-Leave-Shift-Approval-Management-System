@@ -141,9 +141,11 @@ public class ManagerApprovalView extends VerticalLayout {
             return cell;
         }).setHeader("Leave Type").setAutoWidth(true);
 
-        leaveGrid.addColumn(approval -> approval.getLeaveRequest().getStartDate() + " to " + approval.getLeaveRequest().getEndDate()).setHeader("Dates").setAutoWidth(true);
+        leaveGrid.addColumn(approval -> approval.getLeaveRequest().getStartDate() + " to " + approval.getLeaveRequest().getEndDate()).setHeader("Dates").setAutoWidth(true)
+                .setTooltipGenerator(approval -> approval.getLeaveRequest().getStartDate() + " to " + approval.getLeaveRequest().getEndDate());
 
-        leaveGrid.addColumn(approval -> approval.getLeaveRequest().getDurationDays() + " days").setHeader("Duration").setAutoWidth(true);
+        leaveGrid.addColumn(approval -> approval.getLeaveRequest().getDurationDays() + " days").setHeader("Duration").setAutoWidth(true)
+                .setTooltipGenerator(approval -> approval.getLeaveRequest().getDurationDays() + " days");
 
         leaveGrid.addComponentColumn(approval -> {
             Span badge = new Span("Level " + approval.getApprovalLevel());
@@ -336,7 +338,10 @@ public class ManagerApprovalView extends VerticalLayout {
         correctionGrid.addColumn(correction -> {
             LocalDateTime in = correction.getAttendance().getFirstCheckIn();
             return in != null ? in.toLocalTime().toString() : "Missing";
-        }).setHeader("Check-In").setAutoWidth(true);
+        }).setHeader("Check-In").setAutoWidth(true)
+                .setTooltipGenerator(correction -> {
+                    LocalDateTime in = correction.getAttendance().getFirstCheckIn();
+                    return in != null ? in.toLocalTime().toString() : "Missing";});
 
         correctionGrid.addComponentColumn(correction -> {
             Button reviewBtn = new Button("Resolve", VaadinIcon.TOOLS.create());

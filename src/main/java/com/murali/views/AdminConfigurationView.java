@@ -132,7 +132,7 @@ public class AdminConfigurationView extends VerticalLayout {
         holidayGrid.addClassName("standard-surface");
         holidayGrid.addItemDoubleClickListener(e -> openHolidayDialog(e.getItem())); // Invoke existing edit handler
 
-        holidayGrid.addColumn(Holiday::getName).setHeader("Holiday Name").setSortable(true).setFlexGrow(1);
+        holidayGrid.addColumn(Holiday::getName).setHeader("Holiday Name").setSortable(true).setFlexGrow(1).setTooltipGenerator(Holiday::getName);
         holidayGrid.addColumn(new LocalDateRenderer<>(Holiday::getHolidayDate, "dd MMM yyyy")).setHeader("Date").setAutoWidth(true).setSortable(true);
 
         holidayGrid.addComponentColumn(holiday -> createDeleteButton("holiday '" + holiday.getName() + "'", () -> {

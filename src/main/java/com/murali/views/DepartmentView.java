@@ -75,12 +75,14 @@ public class DepartmentView extends VerticalLayout {
         grid.addClassName("standard-surface");
         grid.addItemDoubleClickListener(e -> openForm(e.getItem())); // Invoke existing edit handler
 
-        grid.addColumn(Department::getName).setHeader("Department Name").setSortable(true);
+        grid.addColumn(Department::getName).setHeader("Department Name").setSortable(true)
+                .setTooltipGenerator(Department::getName);
 
         grid.addColumn(department -> {
             Employee deptHod = department.getHod();
             return deptHod != null ? deptHod.getFirstName() : "Not Assigned";
-        }).setHeader("Head of Department");
+        }).setHeader("Head of Department")
+                .setTooltipGenerator(dt-> dt.getHod() != null ? dt.getHod().getFirstName() : "Not Assigned");
 
         grid.addComponentColumn(department -> {
             Button editBtn = new Button(new Icon(VaadinIcon.EDIT));

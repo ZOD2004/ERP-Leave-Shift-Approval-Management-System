@@ -1,4 +1,5 @@
 package com.murali.views;
+
 import com.murali.entity.RotationSequence;
 import com.murali.entity.Shift;
 import com.murali.entity.enums.RotationSegmentType;
@@ -20,6 +21,7 @@ import com.vaadin.flow.component.grid.Grid;
 import com.vaadin.flow.component.html.H2;
 import com.vaadin.flow.component.html.H4;
 import com.vaadin.flow.component.html.H5;
+import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.icon.Icon;
 import com.vaadin.flow.component.icon.VaadinIcon;
 import com.vaadin.flow.component.notification.Notification;
@@ -31,6 +33,7 @@ import com.vaadin.flow.component.textfield.TextField;
 import com.vaadin.flow.component.timepicker.TimePicker;
 import com.vaadin.flow.data.binder.Binder;
 import com.vaadin.flow.data.binder.ValidationException;
+import com.vaadin.flow.data.renderer.ComponentRenderer;
 import com.vaadin.flow.data.value.ValueChangeMode;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
@@ -110,22 +113,32 @@ public class ShiftView extends VerticalLayout {
         grid.addItemDoubleClickListener(e -> {
             Shift freshShift = shiftService.getShiftWithSequences(e.getItem().getId());
             openForm(freshShift);
-        }); // Invoke existing edit handler
+        });
+        grid.addColumn(new ComponentRenderer<>(shift -> {
+            Span span = new Span(shift.getName());
+            span.addClassName("text-ellipsis");
+            return span;
+        })).setHeader("Name").setSortable(true).setAutoWidth(true);
+        grid.addColumn(new ComponentRenderer<>(shift -> {
+            Span span = new Span(Boolean.TRUE.equals(shift.getIsRotationalShift()) ? "Variable (Rotational)" : shift.getStartTime().format(TIME_FORMATTER) + " - " + shift.getEndTime().format(TIME_FORMATTER));
+            span.addClassName("text-ellipsis");
+            return span;
+        })).setHeader("Timings").setAutoWidth(true);
 
-        grid.addColumn(Shift::getName).setHeader("Name").setSortable(true).setAutoWidth(true);
-        grid.addColumn(Shift::getShiftType).setHeader("Type").setSortable(true).setAutoWidth(true);
+        grid.addColumn(new ComponentRenderer<>(shift -> {
+            Span span = new Span(Boolean.TRUE.equals(shift.getIsRotationalShift()) ? "Variable" : (shift.getRequiredWorkTime() != null ? shift.getRequiredWorkTime() + " mins" : "None"));
+            span.addClassName("text-ellipsis");
+            return span;
+        })).setHeader("MinTime").setAutoWidth(true);
 
-        grid.addColumn(shift -> Boolean.TRUE.equals(shift.getIsRotationalShift()) ? "Variable (Rotational)" :
-                        shift.getStartTime().format(TIME_FORMATTER) + " - " + shift.getEndTime().format(TIME_FORMATTER))
-                .setHeader("Timings").setAutoWidth(true);
+        grid.addColumn(new ComponentRenderer<>(shift -> {
+            String text = Boolean.TRUE.equals(shift.getIsRotationalShift()) ? "Variable" : String.join(", ", shift.getWorkingDays().stream().map(day -> day.name().substring(0, 3)).toList());
 
-        grid.addColumn(shift -> Boolean.TRUE.equals(shift.getIsRotationalShift()) ? "Variable" :
-                        (shift.getRequiredWorkTime() != null ? shift.getRequiredWorkTime()+ " mins" : "None"))
-                .setHeader("Required Work Time").setAutoWidth(true);
+            Span span = new Span(text);
+            span.addClassName("text-ellipsis");
+            return span;
+        })).setHeader("Working Days").setAutoWidth(true);
 
-        grid.addColumn(shift -> Boolean.TRUE.equals(shift.getIsRotationalShift()) ? List.of("Variable") :
-                        shift.getWorkingDays().stream().map(day -> day.name().substring(0,3)).toList())
-                .setHeader("Working Days").setAutoWidth(true);
 
         grid.addComponentColumn(shift -> {
             Button editBtn = new Button(new Icon(VaadinIcon.EDIT));
@@ -196,7 +209,6 @@ public class ShiftView extends VerticalLayout {
         endTimeField.addValueChangeListener(timeChangeListener);
 
 
-
         FormLayout topLayout = new FormLayout(nameField, shiftTypeField, isRotationalShiftField, workingDaysField);
         topLayout.setResponsiveSteps(new FormLayout.ResponsiveStep("0", 1), new FormLayout.ResponsiveStep("500px", 2));
         topLayout.setColspan(workingDaysField, 2);
@@ -227,9 +239,7 @@ public class ShiftView extends VerticalLayout {
                 rotationSequenceContainer.add(new H4("Rotation Segments"));
 
                 Button addSegmentBtn = new Button("Add Segment", new Icon(VaadinIcon.PLUS));
-                addSegmentBtn.addClickListener(ev ->
-                        rotationSequenceContainer.addComponentAtIndex(rotationSequenceContainer.getComponentCount() - 1, new RotationSegmentEditor())
-                );
+                addSegmentBtn.addClickListener(ev -> rotationSequenceContainer.addComponentAtIndex(rotationSequenceContainer.getComponentCount() - 1, new RotationSegmentEditor()));
 
                 rotationSequenceContainer.add(addSegmentBtn);
             }
@@ -245,25 +255,14 @@ public class ShiftView extends VerticalLayout {
         binder.forField(shiftTypeField).asRequired("Shift Type is required").bind(Shift::getShiftType, Shift::setShiftType);
         binder.forField(isRotationalShiftField).bind(Shift::getIsRotationalShift, Shift::setIsRotationalShift);
 
-        binder.forField(workingDaysField)
-                .withValidator(days -> isRotationalShiftField.getValue() || (days != null && !days.isEmpty()), "Select at least one working day")
-                .bind(Shift::getWorkingDays, Shift::setWorkingDays);
+        binder.forField(workingDaysField).withValidator(days -> isRotationalShiftField.getValue() || (days != null && !days.isEmpty()), "Select at least one working day").bind(Shift::getWorkingDays, Shift::setWorkingDays);
 
-        binder.forField(startTimeField)
-                .withValidator(time -> isRotationalShiftField.getValue() || time != null, "Start Time is required")
-                .bind(Shift::getStartTime, Shift::setStartTime);
+        binder.forField(startTimeField).withValidator(time -> isRotationalShiftField.getValue() || time != null, "Start Time is required").bind(Shift::getStartTime, Shift::setStartTime);
 
-        binder.forField(endTimeField)
-                .withValidator(time -> isRotationalShiftField.getValue() || time != null, "End Time is required")
-                .bind(Shift::getEndTime, Shift::setEndTime);
+        binder.forField(endTimeField).withValidator(time -> isRotationalShiftField.getValue() || time != null, "End Time is required").bind(Shift::getEndTime, Shift::setEndTime);
         binder.forField(firstHalfEndTimeField).bind(Shift::getFirstHalfEndTime, Shift::setFirstHalfEndTime);
         binder.forField(secondHalfStartTimeField).bind(Shift::getSecondHalfStartTime, Shift::setSecondHalfStartTime);
-        binder.forField(gracePeriodField)
-                .withConverter(
-                        value -> value == null ? null : Long.valueOf(value),
-                        value -> value == null ? null : value.intValue()
-                )
-                .bind(Shift::getRequiredWorkTime, Shift::setRequiredWorkTime);
+        binder.forField(gracePeriodField).withConverter(value -> value == null ? null : Long.valueOf(value), value -> value == null ? null : value.intValue()).bind(Shift::getRequiredWorkTime, Shift::setRequiredWorkTime);
 
         saveBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
         saveBtn.addClickListener(e -> saveShift());
@@ -291,9 +290,7 @@ public class ShiftView extends VerticalLayout {
                 }
             }
             Button addSegmentBtn = new Button("Add Segment", new Icon(VaadinIcon.PLUS));
-            addSegmentBtn.addClickListener(ev ->
-                    rotationSequenceContainer.addComponentAtIndex(rotationSequenceContainer.getComponentCount() - 1, new RotationSegmentEditor())
-            );
+            addSegmentBtn.addClickListener(ev -> rotationSequenceContainer.addComponentAtIndex(rotationSequenceContainer.getComponentCount() - 1, new RotationSegmentEditor()));
             rotationSequenceContainer.add(addSegmentBtn);
         }
 
@@ -429,6 +426,7 @@ public class ShiftView extends VerticalLayout {
         Notification notification = Notification.show(message, 3000, Notification.Position.TOP_CENTER);
         notification.addThemeVariants(variant);
     }
+
     private boolean isTimeBetwee(LocalTime time, LocalTime start, LocalTime end, boolean isNightShift) {
         if (time.equals(start) || time.equals(end)) {
             return true;
@@ -440,6 +438,7 @@ public class ShiftView extends VerticalLayout {
             return time.isAfter(start) || time.isBefore(end);
         }
     }
+
     private class RotationSegmentEditor extends VerticalLayout {
         private final TextField segmentName = new TextField("Segment Name");
         private final ComboBox<RotationSegmentType> typeBox = new ComboBox<>("Type");
@@ -507,11 +506,7 @@ public class ShiftView extends VerticalLayout {
 
             FormLayout formLayout = new FormLayout();
             formLayout.add(segmentName, typeBox, durationDays, shiftType, start, end, firstHalf, secondHalf, requiredMins);
-            formLayout.setResponsiveSteps(
-                    new FormLayout.ResponsiveStep("0", 1),
-                    new FormLayout.ResponsiveStep("500px", 2),
-                    new FormLayout.ResponsiveStep("800px", 3)
-            );
+            formLayout.setResponsiveSteps(new FormLayout.ResponsiveStep("0", 1), new FormLayout.ResponsiveStep("500px", 2), new FormLayout.ResponsiveStep("800px", 3));
 
             HorizontalLayout header = new HorizontalLayout(new H5("Segment Details"), removeBtn);
             header.setWidthFull();
@@ -541,6 +536,7 @@ public class ShiftView extends VerticalLayout {
             }
             return seq;
         }
+
         public void setSegment(RotationSequence seq) {
             segmentName.setValue(seq.getName() != null ? seq.getName() : "");
             typeBox.setValue(seq.getSegmentType() != null ? seq.getSegmentType() : RotationSegmentType.WORK);

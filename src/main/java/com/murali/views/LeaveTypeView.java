@@ -100,13 +100,16 @@ public class LeaveTypeView extends VerticalLayout {
 
         grid.addItemDoubleClickListener(e -> openForm(e.getItem()));
 
-        grid.addColumn(LeaveType::getName).setHeader("Name").setSortable(true);
-        grid.addColumn(LeaveType::getCode).setHeader("Code").setSortable(true);
-        grid.addColumn(leaveType -> leaveType.getPaid() ? "Paid" : "Unpaid").setHeader("Status");
+        grid.addColumn(LeaveType::getName).setHeader("Name").setSortable(true).setTooltipGenerator(LeaveType::getName);
+        grid.addColumn(LeaveType::getCode).setHeader("Code").setSortable(true).setTooltipGenerator(LeaveType::getCode);
+        grid.addColumn(leaveType -> leaveType.getPaid() ? "Paid" : "Unpaid").setHeader("Status")
+                .setTooltipGenerator(leaveType -> leaveType.getPaid() ? "Paid" : "Unpaid");
         grid.addColumn(LeaveType::getMaxDaysPerYear).setHeader("Max Days");
         grid.addColumn(leaveType -> leaveType.getApprovalPolicy() != null ?
                         leaveType.getApprovalPolicy().getName() : "No Policy")
-                .setHeader("Approval Policy").setSortable(true);
+                .setHeader("Approval Policy").setSortable(true)
+                .setTooltipGenerator(leaveType -> leaveType.getApprovalPolicy() != null ?
+                        leaveType.getApprovalPolicy().getName() : "No Policy");
 
         grid.addComponentColumn(leaveType -> {
             Button editBtn = new Button(new Icon(VaadinIcon.EDIT));

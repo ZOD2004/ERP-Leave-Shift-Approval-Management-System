@@ -144,11 +144,14 @@ public class AuditDashboardView extends VerticalLayout {
         grid.addColumn(tx -> tx.getCreatedAt().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")))
                 .setHeader("Date").setSortable(true).setAutoWidth(true);
         grid.addColumn(tx -> tx.getEmployee().getId() + " - " + tx.getEmployee().getFirstName())
-                .setHeader("Employee").setAutoWidth(true);
+                .setHeader("Employee").setAutoWidth(true)
+                .setTooltipGenerator(tx -> tx.getEmployee().getId() + " - " + tx.getEmployee().getFirstName());
         grid.addColumn(tx -> tx.getLeaveType().getCode())
-                .setHeader("Leave Type").setAutoWidth(true);
+                .setHeader("Leave Type").setAutoWidth(true)
+                .setTooltipGenerator(tx -> tx.getLeaveType().getCode());;
         grid.addColumn(LeaveBalanceTransaction::getTransactionType)
-                .setHeader("Transaction Type").setAutoWidth(true);
+                .setHeader("Transaction Type").setAutoWidth(true)
+                .setTooltipGenerator(LeaveBalanceTransaction::getTransactionType);;
         grid.addColumn(LeaveBalanceTransaction::getDays)
                 .setHeader("Days (+/-)");
 
@@ -259,10 +262,12 @@ public class AuditDashboardView extends VerticalLayout {
         }).setHeader("Action").setAutoWidth(true).setFlexGrow(0);
 
         grid.addColumn(AuditLog::getEntityName)
-                .setHeader("Module").setAutoWidth(true).setFlexGrow(0);
+                .setHeader("Module").setAutoWidth(true).setFlexGrow(0)
+                .setTooltipGenerator(AuditLog::getEntityName);
 
         grid.addColumn(AuditLog::getPerformedBy)
-                .setHeader("Performed By").setAutoWidth(true).setFlexGrow(1);
+                .setHeader("Performed By").setAutoWidth(true).setFlexGrow(1)
+                .setTooltipGenerator(AuditLog::getPerformedBy);
 
         // ENHANCEMENT 2: Clean, Monospaced JSON Diff Viewer
         grid.setItemDetailsRenderer(new ComponentRenderer<>(auditLog -> {

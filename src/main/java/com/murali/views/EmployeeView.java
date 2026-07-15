@@ -113,10 +113,10 @@ public class EmployeeView extends VerticalLayout {
         grid.addClassName("standard-surface");
         grid.addItemDoubleClickListener(e -> openForm(e.getItem(), e.getItem().getUser() != null ? e.getItem().getUser() : new User())); // Invoke existing edit handler
 
-        grid.addColumn(Employee::getEmployeeCode).setHeader("Code").setSortable(true);
-        grid.addColumn(Employee::getFirstName).setHeader("First Name").setSortable(true);
-        grid.addColumn(emp -> emp.getDepartment() != null ? emp.getDepartment().getName() : "None").setHeader("Department");
-        grid.addColumn(emp -> emp.getManager() != null ? emp.getManager().getFirstName() : "None").setHeader("Manager");
+        grid.addColumn(Employee::getEmployeeCode).setHeader("Code").setSortable(true).setTooltipGenerator(Employee::getEmployeeCode);
+        grid.addColumn(Employee::getFirstName).setHeader("First Name").setSortable(true).setTooltipGenerator(Employee::getFirstName);
+        grid.addColumn(emp -> emp.getDepartment() != null ? emp.getDepartment().getName() : "None").setHeader("Department").setTooltipGenerator(emp -> emp.getDepartment() != null ? emp.getDepartment().getName() : "None");
+        grid.addColumn(emp -> emp.getManager() != null ? emp.getManager().getFirstName() : "None").setHeader("Manager").setTooltipGenerator(emp -> emp.getManager() != null ? emp.getManager().getFirstName() : "None");
 
         grid.addComponentColumn(employee -> {
             Button editBtn = new Button(new Icon(VaadinIcon.EDIT));

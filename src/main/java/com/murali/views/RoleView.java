@@ -94,7 +94,8 @@ public class RoleView extends VerticalLayout {
         grid.addColumn(Role::getName)
                 .setHeader("Role Name")
                 .setSortable(true)
-                .setFlexGrow(1);
+                .setFlexGrow(1)
+                .setTooltipGenerator(Role::getName);
 
         grid.addComponentColumn(role -> {
             Button editBtn = new Button(new Icon(VaadinIcon.EDIT));

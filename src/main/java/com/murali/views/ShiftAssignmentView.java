@@ -172,11 +172,7 @@ public class ShiftAssignmentView extends VerticalLayout {
             card.setJustifyContentMode(FlexComponent.JustifyContentMode.BETWEEN);
 
             // Added subtle border, rounded corners, and stopped stretching
-            card.getStyle()
-                    .set("border", "1px solid var(--lumo-contrast-20pct)")
-                    .set("border-radius", "var(--lumo-border-radius-m)")
-                    .set("padding", "var(--lumo-space-s) var(--lumo-space-m)")
-                    .set("flex", "0 1 auto");
+            card.getStyle().set("border", "1px solid var(--lumo-contrast-20pct)").set("border-radius", "var(--lumo-border-radius-m)").set("padding", "var(--lumo-space-s) var(--lumo-space-m)").set("flex", "0 1 auto");
 
             Span title = new Span(shiftName);
             title.addClassNames(com.vaadin.flow.theme.lumo.LumoUtility.FontSize.SMALL, com.vaadin.flow.theme.lumo.LumoUtility.TextColor.SECONDARY, com.vaadin.flow.theme.lumo.LumoUtility.FontWeight.BOLD);
@@ -206,13 +202,18 @@ public class ShiftAssignmentView extends VerticalLayout {
         listGrid.addItemDoubleClickListener(e -> openListEditDialog(e.getItem()));
         listGrid.removeAllColumns();
 
-        listGrid.addColumn(ShiftAssignmentDTO::getEmployeeName).setHeader("Employee");
+        listGrid.addColumn(ShiftAssignmentDTO::getEmployeeName).setHeader("Employee").setTooltipGenerator(ShiftAssignmentDTO::getEmployeeName);
         listGrid.addColumn(dto -> {
             if (dto.getStartDate().equals(dto.getEndDate())) {
                 return dto.getStartDate().toString();
             }
             return dto.getStartDate() + " to " + dto.getEndDate();
-        }).setHeader("Dates");
+        }).setHeader("Dates").setTooltipGenerator(dto -> {
+            if (dto.getStartDate().equals(dto.getEndDate())) {
+                return dto.getStartDate().toString();
+            }
+            return dto.getStartDate() + " to " + dto.getEndDate();
+        });
 
         listGrid.addColumn(new ComponentRenderer<>(assignment -> {
             Span badge = new Span(assignment.getShiftName());
@@ -249,9 +250,7 @@ public class ShiftAssignmentView extends VerticalLayout {
             return new HorizontalLayout(editBtn, deleteBtn);
         }).setHeader("Actions");
 
-        DataProvider<ShiftAssignmentDTO, Void> dataProvider = DataProvider.fromCallbacks(
-                query -> assignmentService.fetchAssignmentsForGrid(query.getOffset(), query.getLimit(), filterDate.getValue(), searchEmployee.getValue()).stream(),
-                query -> (int) assignmentService.fetchAssignmentsForGrid(0, Integer.MAX_VALUE, filterDate.getValue(), searchEmployee.getValue()).getTotalElements());
+        DataProvider<ShiftAssignmentDTO, Void> dataProvider = DataProvider.fromCallbacks(query -> assignmentService.fetchAssignmentsForGrid(query.getOffset(), query.getLimit(), filterDate.getValue(), searchEmployee.getValue()).stream(), query -> (int) assignmentService.fetchAssignmentsForGrid(0, Integer.MAX_VALUE, filterDate.getValue(), searchEmployee.getValue()).getTotalElements());
         listGrid.setDataProvider(dataProvider);
 
         VerticalLayout layout = new VerticalLayout(toolbar, listGrid);
@@ -283,7 +282,7 @@ public class ShiftAssignmentView extends VerticalLayout {
 
     private void setupPivotColumns(LocalDate selectedDate) {
         pivotGrid.removeAllColumns();
-        pivotGrid.addColumn(RowDTO::getEmployeeName).setHeader("Employee").setFrozen(true);
+        pivotGrid.addColumn(RowDTO::getEmployeeName).setHeader("Employee").setFrozen(true).setTooltipGenerator(RowDTO::getEmployeeName);
 
         LocalDate startOfWeek = selectedDate.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
 
@@ -543,12 +542,7 @@ public class ShiftAssignmentView extends VerticalLayout {
         // Truncate Employee Name and reduce width to 120px
         monthlyGrid.addColumn(new ComponentRenderer<>(row -> {
             Span nameSpan = new Span(row.getEmployeeName());
-            nameSpan.getStyle()
-                    .set("white-space", "nowrap")
-                    .set("overflow", "hidden")
-                    .set("text-overflow", "ellipsis")
-                    .set("display", "block")
-                    .set("width", "100%");
+            nameSpan.getStyle().set("white-space", "nowrap").set("overflow", "hidden").set("text-overflow", "ellipsis").set("display", "block").set("width", "100%");
             nameSpan.getElement().setProperty("title", row.getEmployeeName());
             return nameSpan;
         })).setHeader("Employee").setFrozen(true).setWidth("120px").setFlexGrow(0);
@@ -558,122 +552,105 @@ public class ShiftAssignmentView extends VerticalLayout {
             final int day = i;
 
             monthlyGrid.addColumn(new ComponentRenderer<>(row -> {
-                        DailyCellDTO cell = row.getCellForDay(day);
-                        Button cellBtn = new Button();
+                DailyCellDTO cell = row.getCellForDay(day);
+                Button cellBtn = new Button();
 
-                        // 1. UNIFORM STRUCTURE FOR EVERY BUTTON
-                        cellBtn.getStyle()
-                                .set("padding", "0")
-                                .set("margin", "0")
-                                .set("min-width", "32px")
-                                .set("height", "32px")
-                                .set("border-radius", "6px")
-                                .set("font-weight", "bold")
-                                .set("font-size", "0.75rem");
+                // 1. UNIFORM STRUCTURE FOR EVERY BUTTON
+                cellBtn.getStyle().set("padding", "0").set("margin", "0").set("min-width", "32px").set("height", "32px").set("border-radius", "6px").set("font-weight", "bold").set("font-size", "0.75rem");
 
-                        // Base Tertiary setup
-                        cellBtn.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
+                // Base Tertiary setup
+                cellBtn.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
 
-                        // 2. EMPTY CELL (No Data)
-                        if (cell == null) {
-                            cellBtn.setText("-");
-                            cellBtn.setTooltipText("No Schedule Data");
-                            cellBtn.getStyle().set("color", "var(--lumo-contrast-30pct)");
-                            cellBtn.setEnabled(false);
-                            return cellBtn;
-                        }
+                // 2. EMPTY CELL (No Data)
+                if (cell == null) {
+                    cellBtn.setText("-");
+                    cellBtn.setTooltipText("No Schedule Data");
+                    cellBtn.getStyle().set("color", "var(--lumo-contrast-30pct)");
+                    cellBtn.setEnabled(false);
+                    return cellBtn;
+                }
 
-                        // 3. FULL DAY LEAVE
-                        if (cell.isOnLeave() && cell.getLeaveSession() == LeaveSession.FULL_DAY) {
-                            cellBtn.setText("L");
-                            cellBtn.setTooltipText("Full Day Leave");
-                            cellBtn.getStyle().set("color", "var(--lumo-error-text-color)");
-                            cellBtn.addClickListener(e -> showNotification("Employee on Full Day Leave", NotificationVariant.LUMO_WARNING));
-                            return cellBtn;
-                        }
+                // 3. FULL DAY LEAVE
+                if (cell.isOnLeave() && cell.getLeaveSession() == LeaveSession.FULL_DAY) {
+                    cellBtn.setText("L");
+                    cellBtn.setTooltipText("Full Day Leave");
+                    cellBtn.getStyle().set("color", "var(--lumo-error-text-color)");
+                    cellBtn.addClickListener(e -> showNotification("Employee on Full Day Leave", NotificationVariant.LUMO_WARNING));
+                    return cellBtn;
+                }
 
-                        // 4. HOLIDAY
-                        if (cell.isHoliday()) {
-                            cellBtn.setText("H");
-                            cellBtn.setTooltipText("Holiday");
-                            cellBtn.getStyle().set("color", "var(--lumo-error-text-color)");
-                            cellBtn.addClickListener(e -> handleEmptyCellClick(cell));
-                            return cellBtn;
-                        }
+                // 4. HOLIDAY
+                if (cell.isHoliday()) {
+                    cellBtn.setText("H");
+                    cellBtn.setTooltipText("Holiday");
+                    cellBtn.getStyle().set("color", "var(--lumo-error-text-color)");
+                    cellBtn.addClickListener(e -> handleEmptyCellClick(cell));
+                    return cellBtn;
+                }
 
-                        // 5. OFF DAY
-                        if (cell.isIntentionalOffDay()) {
-                            cellBtn.setText("O");
-                            cellBtn.setTooltipText("Off Day");
-                            cellBtn.getStyle().set("color", "var(--lumo-contrast-50pct)");
-                            cellBtn.addClickListener(e -> handleEmptyCellClick(cell));
-                            return cellBtn;
-                        }
+                // 5. OFF DAY
+                if (cell.isIntentionalOffDay()) {
+                    cellBtn.setText("O");
+                    cellBtn.setTooltipText("Off Day");
+                    cellBtn.getStyle().set("color", "var(--lumo-contrast-50pct)");
+                    cellBtn.addClickListener(e -> handleEmptyCellClick(cell));
+                    return cellBtn;
+                }
 
-                        // 6. SHIFT ASSIGNMENT
-                        if (cell.getAssignment() != null) {
-                            String shiftTypeStr = cell.getAssignment().getShiftType() != null
-                                    ? cell.getAssignment().getShiftType().name().toLowerCase()
-                                    : "";
+                // 6. SHIFT ASSIGNMENT
+                if (cell.getAssignment() != null) {
+                    String shiftTypeStr = cell.getAssignment().getShiftType() != null ? cell.getAssignment().getShiftType().name().toLowerCase() : "";
 
-                            String shiftName;
-                            String code;
+                    String shiftName;
+                    String code;
 
-                            if (Boolean.TRUE.equals(cell.getAssignment().getIsRotational())) {
-                                shiftName = cell.getAssignment().getSegmentName();
-                                code = (shiftName != null && !shiftName.isBlank())
-                                        ? shiftName.substring(0, 1).toUpperCase()
-                                        : "R";
-                            } else {
-                                shiftName = cell.getAssignment().getShiftName();
-                                code = (shiftName != null && !shiftName.isBlank())
-                                        ? shiftName.substring(0, 1).toUpperCase()
-                                        : "S";
-                            }
+                    if (Boolean.TRUE.equals(cell.getAssignment().getIsRotational())) {
+                        shiftName = cell.getAssignment().getSegmentName();
+                        code = (shiftName != null && !shiftName.isBlank()) ? shiftName.substring(0, 1).toUpperCase() : "R";
+                    } else {
+                        shiftName = cell.getAssignment().getShiftName();
+                        code = (shiftName != null && !shiftName.isBlank()) ? shiftName.substring(0, 1).toUpperCase() : "S";
+                    }
 
-                            if (cell.isOnLeave()) {
-                                cellBtn.setText("L");
-                                cellBtn.setTooltipText("Half Leave / Shift: " + shiftName);
-                                cellBtn.getStyle().set("color", "var(--lumo-warning-text-color)");
-                            } else {
-                                cellBtn.setText(code);
-                                cellBtn.setTooltipText(shiftName);
+                    if (cell.isOnLeave()) {
+                        cellBtn.setText("L");
+                        cellBtn.setTooltipText("Half Leave / Shift: " + shiftName);
+                        cellBtn.getStyle().set("color", "var(--lumo-warning-text-color)");
+                    } else {
+                        cellBtn.setText(code);
+                        cellBtn.setTooltipText(shiftName);
 
-                                // Color handling specifically for Tertiary (modifying text, not background)
-                                if (shiftTypeStr.contains("morning")) {
-                                    cellBtn.getStyle().set("color", "var(--lumo-success-text-color)");
-                                } else if (shiftTypeStr.contains("night")) {
-                                    cellBtn.getStyle().set("color", "var(--lumo-primary-text-color)");
-                                } else {
-                                    cellBtn.getStyle().set("color", "var(--lumo-body-text-color)");
-                                }
-                            }
-
-                            if (!cell.getDate().isAfter(LocalDate.now())) {
-                                cellBtn.addClickListener(e -> showNotification("Locked: Cannot edit past shifts.", NotificationVariant.LUMO_ERROR));
-                            } else {
-                                cellBtn.addClickListener(e -> openEditDialog(cell.getAssignment(), cell.getDate()));
-                            }
-                            return cellBtn;
-                        }
-
-                        // 7. DEFAULT UNASSIGNED (Future assignable)
-                        cellBtn.setText("+");
-                        cellBtn.setTooltipText("Assign Shift");
-                        cellBtn.getStyle().set("color", "var(--lumo-primary-color)");
-
-                        if (!cell.getDate().isAfter(LocalDate.now())) {
-                            cellBtn.setEnabled(false);
+                        // Color handling specifically for Tertiary (modifying text, not background)
+                        if (shiftTypeStr.contains("morning")) {
+                            cellBtn.getStyle().set("color", "var(--lumo-success-text-color)");
+                        } else if (shiftTypeStr.contains("night")) {
+                            cellBtn.getStyle().set("color", "var(--lumo-primary-text-color)");
                         } else {
-                            cellBtn.addClickListener(e -> handleEmptyCellClick(cell));
+                            cellBtn.getStyle().set("color", "var(--lumo-body-text-color)");
                         }
+                    }
 
-                        return cellBtn;
-                    }))
-                    .setHeader(String.valueOf(day))
-                    .setWidth("46px")
-                    .setFlexGrow(0)
-                    .setResizable(false);
+                    if (!cell.getDate().isAfter(LocalDate.now())) {
+                        cellBtn.addClickListener(e -> showNotification("Locked: Cannot edit past shifts.", NotificationVariant.LUMO_ERROR));
+                    } else {
+                        cellBtn.addClickListener(e -> openEditDialog(cell.getAssignment(), cell.getDate()));
+                    }
+                    return cellBtn;
+                }
+
+                // 7. DEFAULT UNASSIGNED (Future assignable)
+                cellBtn.setText("+");
+                cellBtn.setTooltipText("Assign Shift");
+                cellBtn.getStyle().set("color", "var(--lumo-primary-color)");
+
+                if (!cell.getDate().isAfter(LocalDate.now())) {
+                    cellBtn.setEnabled(false);
+                } else {
+                    cellBtn.addClickListener(e -> handleEmptyCellClick(cell));
+                }
+
+                return cellBtn;
+            })).setHeader(String.valueOf(day)).setWidth("46px").setFlexGrow(0).setResizable(false);
         }
     }
 
@@ -952,9 +929,7 @@ public class ShiftAssignmentView extends VerticalLayout {
         singleDatePicker.setReadOnly(true);
 
         String dayName = cell.getDate().getDayOfWeek().name();
-        List<Shift> validShifts = shiftService.getStandardShifts().stream()
-                .filter(s -> s.getWorkingDays().stream().anyMatch(wd -> wd.name().equalsIgnoreCase(dayName)))
-                .toList();
+        List<Shift> validShifts = shiftService.getStandardShifts().stream().filter(s -> s.getWorkingDays().stream().anyMatch(wd -> wd.name().equalsIgnoreCase(dayName))).toList();
         shiftCombo.setItems(validShifts);
 
         assignmentDialog.open();
