@@ -4,6 +4,7 @@ import com.murali.entity.LeaveApprovalPolicy;
 import com.murali.entity.LeaveType;
 import com.murali.service.LeaveApprovalRuleService;
 import com.murali.service.LeaveTypeService;
+import com.murali.views.components.GlobalSearchComponent;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.checkbox.Checkbox;
@@ -13,6 +14,7 @@ import com.vaadin.flow.component.dialog.Dialog;
 import com.vaadin.flow.component.formlayout.FormLayout;
 import com.vaadin.flow.component.grid.Grid;
 import com.vaadin.flow.component.html.H2;
+import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.icon.Icon;
 import com.vaadin.flow.component.icon.VaadinIcon;
 import com.vaadin.flow.component.notification.Notification;
@@ -30,6 +32,7 @@ import com.vaadin.flow.router.Route;
 import jakarta.annotation.security.RolesAllowed;
 import org.springframework.dao.DataIntegrityViolationException;
 
+import java.util.List;
 import java.util.Set;
 
 @Route(value = "add-leave-types", layout = MainLayout.class)
@@ -43,11 +46,14 @@ public class LeaveTypeView extends VerticalLayout {
     private static final Set<String> SYSTEM_CODES = Set.of("HDL-001", "EMG-001", "SL-001","CL-001","EL-001","WFH-001", "UPL-001");
 
     private final Grid<LeaveType> grid = new Grid<>(LeaveType.class, false);
-    private final TextField searchField = new TextField();
     private final Button addBtn = new Button("Add New Leave Type", new Icon(VaadinIcon.PLUS));
     private final Button bulkDeleteBtn = new Button("Delete Selected", new Icon(VaadinIcon.TRASH));
 
     private final Dialog formDialog = new Dialog();
+
+    private final Span emptyMsg = new Span("No leave types found.");
+    private GlobalSearchComponent searchBox;
+    private String currentSearch = "";
     private final TextField nameField = new TextField("Name");
     private final TextField codeField = new TextField("Code");
     private final Checkbox paidCheckbox = new Checkbox("Is Paid");
@@ -68,11 +74,13 @@ public class LeaveTypeView extends VerticalLayout {
         addClassName("standard-view-container");
         configureGrid();
         configureForm();
-        searchField.setPlaceholder("Search by name or code...");
-        searchField.setClearButtonVisible(true);
-        searchField.setValueChangeMode(ValueChangeMode.LAZY);
-        searchField.addValueChangeListener(e -> updateList());
-        searchField.focus();
+
+        emptyMsg.addClassName("empty-grid-message");
+
+        searchBox = new GlobalSearchComponent(term -> {
+            currentSearch = term;
+            updateList();
+        });
 
         bulkDeleteBtn.addThemeVariants(ButtonVariant.LUMO_ERROR, ButtonVariant.LUMO_PRIMARY);
         bulkDeleteBtn.setEnabled(false);
@@ -82,10 +90,11 @@ public class LeaveTypeView extends VerticalLayout {
         addBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
         addBtn.addClickListener(e -> openForm(new LeaveType()));
 
-        HorizontalLayout toolbar = new HorizontalLayout(searchField, addBtn, bulkDeleteBtn);
+        HorizontalLayout toolbar = new HorizontalLayout(searchBox, addBtn, bulkDeleteBtn);
         toolbar.setWidthFull();
-        toolbar.setFlexGrow(1, searchField);
-        add(new H2("Leave Types Configuration"), toolbar, grid);
+        toolbar.expand(searchBox); // Expand search box to push buttons to the right
+
+        add(new H2("Leave Types Configuration"), toolbar, grid, emptyMsg);
         updateList();
     }
 
@@ -259,13 +268,24 @@ public class LeaveTypeView extends VerticalLayout {
     }
 
     private void updateList() {
-        String searchTerm = searchField.getValue();
-        if (searchTerm == null || searchTerm.isEmpty()) {
-            grid.setItems(leaveTypeService.getAllLeaveTypes());
+        List<LeaveType> items;
+        if (currentSearch == null || currentSearch.isBlank()) {
+            items = leaveTypeService.getAllLeaveTypes();
         } else {
-            grid.setItems(leaveTypeService.search(searchTerm));
+            items = leaveTypeService.search(currentSearch);
+        }
+
+        grid.setItems(items);
+
+        boolean isEmpty = items.isEmpty();
+        grid.setVisible(!isEmpty);
+        emptyMsg.setVisible(isEmpty);
+
+        if (searchBox != null) {
+            searchBox.hideSpinner();
         }
     }
+
 
     private void showNotification(String message, NotificationVariant variant) {
         Notification notification = Notification.show(message, 3000, Notification.Position.TOP_CENTER);

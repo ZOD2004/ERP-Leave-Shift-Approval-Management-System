@@ -3,6 +3,7 @@ package com.murali.views;
 import com.murali.entity.*;
 import com.murali.entity.enums.RotationSegmentType;
 import com.murali.service.*;
+import com.murali.views.components.GlobalSearchComponent;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.Text;
 import com.vaadin.flow.component.button.Button;
@@ -60,6 +61,13 @@ public class AdminConfigurationView extends VerticalLayout {
     private final Grid<LeaveApprovalPolicy> policyGrid = new Grid<>(LeaveApprovalPolicy.class, false);
     private final Grid<Holiday> holidayGrid = new Grid<>(Holiday.class, false);
 
+    private final Span holidayEmptyMsg = new Span("No holidays found.");
+    private final Span policyEmptyMsg = new Span("No policies found.");
+    private GlobalSearchComponent holidaySearchBox;
+    private GlobalSearchComponent policySearchBox;
+    private String currentHolidaySearch = "";
+    private String currentPolicySearch = "";
+
     public AdminConfigurationView(HolidayService holidayService, LeaveApprovalRuleService ruleService) {
         this.holidayService = holidayService;
         this.ruleService = ruleService;
@@ -108,22 +116,20 @@ public class AdminConfigurationView extends VerticalLayout {
         );
         statsRow.addClassNames(LumoUtility.Margin.Bottom.MEDIUM);
 
-        TextField searchField = new TextField();
-        searchField.setPlaceholder("Search holidays...");
-        searchField.focus(); // Automatically focus search bar on view load
-        searchField.setPrefixComponent(VaadinIcon.SEARCH.create());
-        searchField.setValueChangeMode(ValueChangeMode.LAZY);
-        searchField.addValueChangeListener(e -> {
-            holidayGrid.setItems(holidayService.getAllHolidays().stream().filter(h -> h.getName().toLowerCase().contains(e.getValue().toLowerCase())).toList());
+        holidayEmptyMsg.addClassName("empty-grid-message");
+
+        holidaySearchBox = new GlobalSearchComponent(term -> {
+            currentHolidaySearch = term.toLowerCase();
+            refreshHolidays();
         });
 
         Button addBtn = new Button("Add Holiday", VaadinIcon.PLUS.create());
         addBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
         addBtn.addClickListener(e -> openHolidayDialog(new Holiday()));
 
-        HorizontalLayout toolbar = new HorizontalLayout(searchField, addBtn);
+        HorizontalLayout toolbar = new HorizontalLayout(holidaySearchBox, addBtn);
         toolbar.setWidthFull();
-        toolbar.expand(searchField);
+        toolbar.expand(holidaySearchBox);
 
         // 3. Grid Enhancements
         holidayGrid.removeAllColumns();
@@ -141,7 +147,8 @@ public class AdminConfigurationView extends VerticalLayout {
         })).setHeader("Actions").setAutoWidth(true).setFlexGrow(0);
 
         holidayGrid.getStyle().set("--vaadin-grid-row-height", "60px");
-        VerticalLayout gridContainer = new VerticalLayout(toolbar, holidayGrid);
+        // Add the empty message to the layout
+        VerticalLayout gridContainer = new VerticalLayout(toolbar, holidayGrid, holidayEmptyMsg);
         gridContainer.addClassName("standard-surface");
         gridContainer.setPadding(true);
         gridContainer.setSizeFull();
@@ -182,10 +189,6 @@ public class AdminConfigurationView extends VerticalLayout {
         dialog.add(form);
         dialog.getFooter().add(cancelBtn, saveBtn);
         dialog.open();
-    }
-
-    private void refreshHolidays() {
-        holidayGrid.setItems(holidayService.getAllHolidays());
     }
 
 
@@ -242,13 +245,20 @@ public class AdminConfigurationView extends VerticalLayout {
         HorizontalLayout statsRow = new HorizontalLayout(createStatsCard("Active Policies", String.valueOf(ruleService.getAllPolicies().size()), VaadinIcon.FILE_TEXT, "var(--app-primary-color)"));
         statsRow.addClassNames(LumoUtility.Margin.Bottom.MEDIUM);
 
+        policyEmptyMsg.addClassName("empty-grid-message");
+
+        policySearchBox = new GlobalSearchComponent(term -> {
+            currentPolicySearch = term.toLowerCase();
+            refreshPolicies();
+        });
+
         Button addBtn = new Button("New Policy", VaadinIcon.PLUS.create());
         addBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
         addBtn.addClickListener(e -> openPolicyDialog(new LeaveApprovalPolicy()));
 
-        HorizontalLayout toolbar = new HorizontalLayout(addBtn);
+        HorizontalLayout toolbar = new HorizontalLayout(policySearchBox, addBtn);
         toolbar.setWidthFull();
-        toolbar.setJustifyContentMode(FlexComponent.JustifyContentMode.END);
+        toolbar.expand(policySearchBox); // Push the add button to the right
 
         policyGrid.removeAllColumns();
         policyGrid.addThemeVariants(GridVariant.LUMO_NO_BORDER);
@@ -277,7 +287,8 @@ public class AdminConfigurationView extends VerticalLayout {
         }).setHeader("Actions").setAutoWidth(true).setFlexGrow(0);
 
         policyGrid.getStyle().set("--vaadin-grid-row-height", "70px");
-        VerticalLayout gridContainer = new VerticalLayout(toolbar, policyGrid);
+        // Add the empty message to the layout
+        VerticalLayout gridContainer = new VerticalLayout(toolbar, policyGrid, policyEmptyMsg);
         gridContainer.addClassName("standard-surface");
         gridContainer.setPadding(true);
         gridContainer.setSizeFull();
@@ -519,9 +530,44 @@ public class AdminConfigurationView extends VerticalLayout {
 
         return newRules;
     }
+    private void refreshHolidays() {
+        List<Holiday> allHolidays = holidayService.getAllHolidays();
+
+        if (currentHolidaySearch != null && !currentHolidaySearch.isBlank()) {
+            allHolidays = allHolidays.stream()
+                    .filter(h -> h.getName().toLowerCase().contains(currentHolidaySearch))
+                    .toList();
+        }
+
+        holidayGrid.setItems(allHolidays);
+
+        boolean isEmpty = allHolidays.isEmpty();
+        holidayGrid.setVisible(!isEmpty);
+        holidayEmptyMsg.setVisible(isEmpty);
+
+        if (holidaySearchBox != null) {
+            holidaySearchBox.hideSpinner();
+        }
+    }
 
     private void refreshPolicies() {
-        policyGrid.setItems(ruleService.getAllPolicies());
+        List<LeaveApprovalPolicy> allPolicies = ruleService.getAllPolicies();
+
+        if (currentPolicySearch != null && !currentPolicySearch.isBlank()) {
+            allPolicies = allPolicies.stream()
+                    .filter(p -> p.getName().toLowerCase().contains(currentPolicySearch))
+                    .toList();
+        }
+
+        policyGrid.setItems(allPolicies);
+
+        boolean isEmpty = allPolicies.isEmpty();
+        policyGrid.setVisible(!isEmpty);
+        policyEmptyMsg.setVisible(isEmpty);
+
+        if (policySearchBox != null) {
+            policySearchBox.hideSpinner();
+        }
     }
 
     private Component createPolicyCard(LeaveApprovalPolicy policy) {

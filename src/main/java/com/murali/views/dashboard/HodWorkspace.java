@@ -8,6 +8,7 @@ import com.murali.dto.DailyExpectedShift;
 import com.murali.repository.AttendanceRepository;
 import com.murali.repository.EmployeeRepository;
 import com.murali.util.SecurityService;
+import com.murali.views.components.GlobalSearchComponent;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.button.Button;
@@ -240,11 +241,41 @@ public class HodWorkspace extends VerticalLayout {
 
         List<Employee> directReportsToHod = managerToDirectReportsMap.getOrDefault(hodId, Collections.emptyList());
 
-        treeGrid.setItems(directReportsToHod, emp -> managerToDirectReportsMap.getOrDefault(emp.getId(), Collections.emptyList()));
+        Span emptyMsg = new Span("No employees found in hierarchy.");
+        emptyMsg.addClassName("empty-grid-message");
 
+        GlobalSearchComponent[] searchBoxRef = new GlobalSearchComponent[1];
+        searchBoxRef[0] = new GlobalSearchComponent(searchTerm -> {
+            String term = searchTerm.toLowerCase();
+
+            // Filter the root level (direct reports)
+            List<Employee> filteredRoots = directReportsToHod.stream()
+                    .filter(emp -> emp.getFirstName().toLowerCase().contains(term) ||
+                            emp.getEmployeeCode().toLowerCase().contains(term))
+                    .toList();
+
+            treeGrid.setItems(filteredRoots, emp -> managerToDirectReportsMap.getOrDefault(emp.getId(), Collections.emptyList()));
+            treeGrid.expand(filteredRoots);
+
+            boolean isDataEmpty = filteredRoots.isEmpty();
+            treeGrid.setVisible(!isDataEmpty);
+            emptyMsg.setVisible(isDataEmpty);
+
+            if (searchBoxRef[0] != null) {
+                searchBoxRef[0].hideSpinner();
+            }
+        });
+
+        searchBoxRef[0].getStyle().set("margin-bottom", "var(--app-padding)");
+
+        boolean isInitialEmpty = directReportsToHod.isEmpty();
+        treeGrid.setVisible(!isInitialEmpty);
+        emptyMsg.setVisible(isInitialEmpty);
+
+        treeGrid.setItems(directReportsToHod, emp -> managerToDirectReportsMap.getOrDefault(emp.getId(), Collections.emptyList()));
         treeGrid.expand(directReportsToHod);
 
-        section.add(title, treeGrid);
+        section.add(title, searchBoxRef[0], treeGrid, emptyMsg);
         return section;
     }
 
@@ -342,9 +373,17 @@ public class HodWorkspace extends VerticalLayout {
 
         LocalDate today = LocalDate.now();
         Map<Long, List<DailyExpectedShift>> bulkShifts = scheduleCalculationService.calculateBatchShifts(List.of(employee), today, today.plusDays(6));
-        grid.setItems(bulkShifts.getOrDefault(employee.getId(), Collections.emptyList()));
 
-        section.add(title, grid);
+        List<DailyExpectedShift> items = bulkShifts.getOrDefault(employee.getId(), Collections.emptyList());
+
+        Span emptyMsg = new Span("No schedule available.");
+        emptyMsg.addClassName("empty-grid-message");
+        emptyMsg.setVisible(items.isEmpty());
+        grid.setVisible(!items.isEmpty());
+
+        grid.setItems(items);
+
+        section.add(title, grid, emptyMsg);
         return section;
     }
     private Button createViewLeavesBtn(Employee emp) {

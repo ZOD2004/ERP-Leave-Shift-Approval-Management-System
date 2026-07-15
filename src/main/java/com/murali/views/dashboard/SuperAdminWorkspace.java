@@ -4,6 +4,7 @@ import com.murali.entity.AuditLog;
 import com.murali.repository.DepartmentRepository;
 import com.murali.repository.UserRepository;
 import com.murali.service.*;
+import com.murali.views.components.GlobalSearchComponent;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
@@ -27,6 +28,7 @@ import com.vaadin.flow.theme.lumo.LumoUtility;
 
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.util.List;
 
 @SpringComponent
 @UIScope
@@ -229,9 +231,36 @@ public class SuperAdminWorkspace extends VerticalLayout {
             return viewBtn;
         }).setHeader("Payload").setAutoWidth(true).setFlexGrow(1);
 
-        grid.setItems(auditLogService.getRecentLogs(40));
+        List<AuditLog> allLogs = auditLogService.getRecentLogs(40);
 
-        layout.add(title, grid);
+        Span emptyMsg = new Span("No recent audit logs found.");
+        emptyMsg.addClassName("empty-grid-message");
+
+        GlobalSearchComponent[] searchBoxRef = new GlobalSearchComponent[1];
+        searchBoxRef[0] = new GlobalSearchComponent(searchTerm -> {
+            String term = searchTerm.toLowerCase();
+            List<AuditLog> filtered = allLogs.stream()
+                    .filter(log -> (log.getPerformedBy() != null && log.getPerformedBy().toLowerCase().contains(term)) ||
+                            (log.getEntityName() != null && log.getEntityName().toLowerCase().contains(term)) ||
+                            (log.getAction() != null && log.getAction().toLowerCase().contains(term)))
+                    .toList();
+
+            grid.setItems(filtered);
+            grid.setVisible(!filtered.isEmpty());
+            emptyMsg.setVisible(filtered.isEmpty());
+
+            if (searchBoxRef[0] != null) {
+                searchBoxRef[0].hideSpinner();
+            }
+        });
+        searchBoxRef[0].getStyle().set("margin-bottom", "var(--app-padding)");
+
+        boolean isEmpty = allLogs.isEmpty();
+        grid.setItems(allLogs);
+        grid.setVisible(!isEmpty);
+        emptyMsg.setVisible(isEmpty);
+
+        layout.add(title, searchBoxRef[0], grid, emptyMsg);
         return layout;
     }
 

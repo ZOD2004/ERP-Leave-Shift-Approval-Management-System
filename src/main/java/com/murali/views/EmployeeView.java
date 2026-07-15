@@ -4,6 +4,7 @@ import com.murali.entity.*;
 import com.murali.exception.*;
 import com.murali.repository.LeaveTypeRepository;
 import com.murali.service.*;
+import com.murali.views.components.GlobalSearchComponent;
 import com.vaadin.flow.component.AbstractField;
 import com.vaadin.flow.component.HasValue;
 import com.vaadin.flow.component.button.Button;
@@ -17,6 +18,7 @@ import com.vaadin.flow.component.grid.Grid;
 import com.vaadin.flow.component.html.H2;
 import com.vaadin.flow.component.html.H3;
 import com.vaadin.flow.component.html.Paragraph;
+import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.icon.Icon;
 import com.vaadin.flow.component.icon.VaadinIcon;
 import com.vaadin.flow.component.notification.Notification;
@@ -51,9 +53,12 @@ public class EmployeeView extends VerticalLayout {
     private final LeaveBalanceService leaveBalanceService;
 
     private final Grid<Employee> grid = new Grid<>(Employee.class, false);
-    private final TextField searchField = new TextField();
     private final Button addBtn = new Button("Onboard New Employee", new Icon(VaadinIcon.PLUS));
     private final Dialog formDialog = new Dialog();
+
+    private final Span emptyMsg = new Span("No employees found.");
+    private GlobalSearchComponent searchBox;
+    private String currentSearch = "";
 
     private final TextField username = new TextField("Username");
     private final PasswordField password = new PasswordField("Password");
@@ -91,20 +96,21 @@ public class EmployeeView extends VerticalLayout {
         configureGrid();
         configureForm();
 
-        searchField.setPlaceholder("Search by code");
-        searchField.setClearButtonVisible(true);
-        searchField.setValueChangeMode(ValueChangeMode.LAZY);
-        searchField.addValueChangeListener(e -> updateList());
-        searchField.focus(); // Automatically focus search bar on view load
+        emptyMsg.addClassName("empty-grid-message");
+
+        searchBox = new GlobalSearchComponent(term -> {
+            currentSearch = term;
+            updateList();
+        });
 
         addBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
         addBtn.addClickListener(e -> openForm(new Employee(), new User()));
 
-        HorizontalLayout toolbar = new HorizontalLayout(searchField, addBtn);
+        HorizontalLayout toolbar = new HorizontalLayout(searchBox, addBtn);
         toolbar.setWidthFull();
-        toolbar.setFlexGrow(1, searchField);
+        toolbar.expand(searchBox);
 
-        add(new H2("Employee Directory"), toolbar, grid);
+        add(new H2("Employee Directory"), toolbar, grid, emptyMsg);
         updateList();
     }
 
@@ -517,11 +523,22 @@ public class EmployeeView extends VerticalLayout {
     }
 
     private void updateList() {
-        String searchTerm = searchField.getValue();
-        if (searchTerm == null || searchTerm.isEmpty()) {
-            grid.setItems(employeeService.findAllActive());
+        List<Employee> items;
+        if (currentSearch == null || currentSearch.isBlank()) {
+            items = employeeService.findAllActive();
         } else {
-            grid.setItems(employeeService.searchActive(searchTerm));
+            // Your service handles the DB-level filtering based on this term
+            items = employeeService.searchActive(currentSearch);
+        }
+
+        grid.setItems(items);
+
+        boolean isEmpty = items.isEmpty();
+        grid.setVisible(!isEmpty);
+        emptyMsg.setVisible(isEmpty);
+
+        if (searchBox != null) {
+            searchBox.hideSpinner();
         }
     }
 

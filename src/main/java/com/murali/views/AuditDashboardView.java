@@ -8,6 +8,7 @@ import com.murali.service.AuditLogService;
 import com.murali.service.DashboardService;
 import com.murali.service.LeaveBalanceService;
 import com.murali.service.LeaveRequestService;
+import com.murali.views.components.GlobalSearchComponent;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.combobox.ComboBox;
@@ -42,6 +43,13 @@ public class AuditDashboardView extends VerticalLayout {
     private final LeaveBalanceService leaveBalanceService;
     private final AuditLogService auditLogService;
     private final LeaveRequestService leaveRequestService;
+
+    private final Span ledgerEmptyMsg = new Span("No leave transactions found.");
+    private final Span auditEmptyMsg = new Span("No audit logs found.");
+    private GlobalSearchComponent ledgerSearchBox;
+    private GlobalSearchComponent auditSearchBox;
+    private String currentLedgerSearch = "";
+    private String currentAuditSearch = "";
 
     public AuditDashboardView(DashboardService dashboardService,
                               LeaveBalanceService leaveBalanceService,
@@ -118,17 +126,13 @@ public class AuditDashboardView extends VerticalLayout {
         H3 title = new H3("Leave Ledger");
         title.addClassNames(LumoUtility.Margin.Bottom.NONE);
 
-        // Filters
-        TextField empFilter = new TextField("Employee Name/ID");
-        empFilter.focus(); // Automatically focus search bar on view load
+        ledgerEmptyMsg.addClassName("empty-grid-message");
+
         DatePicker dateFilter = new DatePicker("Date");
         ComboBox<String> typeFilter = new ComboBox<>("Transaction Type");
         typeFilter.setItems(LeaveBalanceService.ALLOCATION, LeaveBalanceService.PENDING_HOLD,
                 LeaveBalanceService.HOLD_RELEASE, LeaveBalanceService.LEAVE_DEDUCT,
                 LeaveBalanceService.LEAVE_REFUND);
-
-        HorizontalLayout filters = new HorizontalLayout(empFilter, dateFilter, typeFilter);
-        filters.setDefaultVerticalComponentAlignment(FlexComponent.Alignment.BASELINE);
 
         Grid<LeaveBalanceTransaction> grid = new Grid<>(LeaveBalanceTransaction.class, false);
         grid.setSelectionMode(Grid.SelectionMode.NONE); // Strictly Read-Only
@@ -164,34 +168,49 @@ public class AuditDashboardView extends VerticalLayout {
             return refBtn;
         })).setHeader("Ref ID");
 
-        // Assumed data fetch & filtering setup
+// Assumed data fetch & filtering setup
         List<LeaveBalanceTransaction> transactions = leaveBalanceService.findAllWithDetails();
         ListDataProvider<LeaveBalanceTransaction> dataProvider = new ListDataProvider<>(transactions);
         grid.setDataProvider(dataProvider);
 
-        empFilter.addValueChangeListener(e -> applyFilters(dataProvider, empFilter, typeFilter));
-        typeFilter.addValueChangeListener(e -> applyFilters(dataProvider, empFilter, typeFilter));
+        Runnable refreshLedger = () -> {
+            applyFilters(dataProvider, typeFilter, grid);
+            if (ledgerSearchBox != null) {
+                ledgerSearchBox.hideSpinner();
+            }
+        };
 
-        ledgerLayout.add(title, filters, grid);
+        ledgerSearchBox = new GlobalSearchComponent(term -> {
+            currentLedgerSearch = term.toLowerCase();
+            refreshLedger.run();
+        });
+
+        HorizontalLayout filters = new HorizontalLayout(ledgerSearchBox, dateFilter, typeFilter);
+        filters.setDefaultVerticalComponentAlignment(FlexComponent.Alignment.BASELINE);
+        filters.getStyle().set("margin-bottom", "var(--app-padding)");
+
+        typeFilter.addValueChangeListener(e -> refreshLedger.run());
+        dateFilter.addValueChangeListener(e -> refreshLedger.run()); // Hooked up date filter for future use
+
+        // Initial Data Load
+        refreshLedger.run();
+
+        ledgerLayout.add(title, filters, grid, ledgerEmptyMsg);
         return ledgerLayout;
     }
 
     private void applyFilters(
             ListDataProvider<LeaveBalanceTransaction> dataProvider,
-            TextField empFilter,
-            ComboBox<String> typeFilter) {
+            ComboBox<String> typeFilter,
+            Grid<LeaveBalanceTransaction> grid) {
 
-        String empValue = empFilter.getValue();
         String typeValue = typeFilter.getValue();
 
         dataProvider.setFilter(tx -> {
-
             boolean employeeMatches =
-                    empValue == null || empValue.isBlank() ||
-                            String.valueOf(tx.getEmployee().getId()).contains(empValue) ||
-                            tx.getEmployee().getFirstName()
-                                    .toLowerCase()
-                                    .contains(empValue.toLowerCase());
+                    currentLedgerSearch == null || currentLedgerSearch.isBlank() ||
+                            String.valueOf(tx.getEmployee().getId()).contains(currentLedgerSearch) ||
+                            tx.getEmployee().getFirstName().toLowerCase().contains(currentLedgerSearch);
 
             boolean typeMatches =
                     typeValue == null ||
@@ -199,6 +218,12 @@ public class AuditDashboardView extends VerticalLayout {
 
             return employeeMatches && typeMatches;
         });
+
+        // Determine if the filter resulted in 0 items
+        boolean isEmpty = dataProvider.size(new com.vaadin.flow.data.provider.Query<>(dataProvider.getFilter())) == 0;
+
+        grid.setVisible(!isEmpty);
+        ledgerEmptyMsg.setVisible(isEmpty);
     }
 
     private void openLeaveRequestDialog(Long requestId) {
@@ -288,9 +313,40 @@ public class AuditDashboardView extends VerticalLayout {
             return diffLayout;
         }));
 
-        grid.setItems(auditLogService.getRecentLogs(50)); // Assuming you added the limit method
+        auditEmptyMsg.addClassName("empty-grid-message");
 
-        auditLayout.add(title, grid);
+        List<AuditLog> allLogs = auditLogService.getRecentLogs(50);
+
+        auditSearchBox = new GlobalSearchComponent(term -> {
+            currentAuditSearch = term.toLowerCase();
+            List<AuditLog> filtered = allLogs.stream()
+                    .filter(log -> (log.getPerformedBy() != null && log.getPerformedBy().toLowerCase().contains(currentAuditSearch)) ||
+                            (log.getEntityName() != null && log.getEntityName().toLowerCase().contains(currentAuditSearch)) ||
+                            (log.getAction() != null && log.getAction().toLowerCase().contains(currentAuditSearch)))
+                    .toList();
+
+            grid.setItems(filtered);
+
+            boolean isEmpty = filtered.isEmpty();
+            grid.setVisible(!isEmpty);
+            auditEmptyMsg.setVisible(isEmpty);
+
+            if (auditSearchBox != null) {
+                auditSearchBox.hideSpinner();
+            }
+        });
+
+        auditSearchBox.getStyle().set("margin-bottom", "var(--app-padding)");
+
+        boolean isInitialEmpty = allLogs.isEmpty();
+        grid.setItems(allLogs);
+        grid.setVisible(!isInitialEmpty);
+        auditEmptyMsg.setVisible(isInitialEmpty);
+
+        HorizontalLayout toolbar = new HorizontalLayout(auditSearchBox);
+        toolbar.setWidthFull();
+
+        auditLayout.add(title, toolbar, grid, auditEmptyMsg);
         return auditLayout;
     }
 

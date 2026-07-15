@@ -7,6 +7,7 @@ import com.murali.entity.enums.LeaveSession;
 import com.murali.service.EmployeeService;
 import com.murali.service.ShiftAssignmentService;
 import com.murali.service.ShiftService;
+import com.murali.views.components.GlobalSearchComponent;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.Text;
 import com.vaadin.flow.component.button.Button;
@@ -61,7 +62,13 @@ public class ShiftAssignmentView extends VerticalLayout {
 
     private final Grid<ShiftAssignmentDTO> listGrid = new Grid<>(ShiftAssignmentDTO.class, false);
     private final DatePicker filterDate = new DatePicker("Filter by Date");
-    private final TextField searchEmployee = new TextField("Search Employee");
+
+    // Track empty states and search globally for the view's tabs
+    private final Span listEmptyMsg = new Span("No shift assignments found.");
+    private final Span pivotEmptyMsg = new Span("No schedule data found for this week.");
+    private final Span monthlyEmptyMsg = new Span("No schedule data found for this month.");
+    private GlobalSearchComponent searchBox;
+    private String currentSearch = "";
 
     private final Grid<RowDTO> pivotGrid = new Grid<>(RowDTO.class, false);
     private final DatePicker weekSelector = new DatePicker("Select Week");
@@ -190,13 +197,16 @@ public class ShiftAssignmentView extends VerticalLayout {
         filterDate.setClearButtonVisible(true);
         filterDate.addValueChangeListener(e -> refreshListGrid());
 
-        searchEmployee.setPlaceholder("Employee Name...");
-        searchEmployee.setClearButtonVisible(true);
-        searchEmployee.setValueChangeMode(ValueChangeMode.LAZY);
-        searchEmployee.addValueChangeListener(e -> refreshListGrid());
-        searchEmployee.focus();
-        HorizontalLayout toolbar = new HorizontalLayout(filterDate, searchEmployee);
+        listEmptyMsg.addClassName("empty-grid-message");
+
+        searchBox = new GlobalSearchComponent(term -> {
+            currentSearch = term;
+            refreshListGrid();
+        });
+
+        HorizontalLayout toolbar = new HorizontalLayout(filterDate, searchBox);
         toolbar.setWidthFull();
+        toolbar.expand(searchBox);
 
         listGrid.setSizeFull();
         listGrid.addClassName("standard-surface");
@@ -251,10 +261,13 @@ public class ShiftAssignmentView extends VerticalLayout {
             return new HorizontalLayout(editBtn, deleteBtn);
         }).setHeader("Actions");
 
-        DataProvider<ShiftAssignmentDTO, Void> dataProvider = DataProvider.fromCallbacks(query -> assignmentService.fetchAssignmentsForGrid(query.getOffset(), query.getLimit(), filterDate.getValue(), searchEmployee.getValue()).stream(), query -> (int) assignmentService.fetchAssignmentsForGrid(0, Integer.MAX_VALUE, filterDate.getValue(), searchEmployee.getValue()).getTotalElements());
+        DataProvider<ShiftAssignmentDTO, Void> dataProvider = DataProvider.fromCallbacks(
+                query -> assignmentService.fetchAssignmentsForGrid(query.getOffset(), query.getLimit(), filterDate.getValue(), currentSearch).stream(),
+                query -> (int) assignmentService.fetchAssignmentsForGrid(0, Integer.MAX_VALUE, filterDate.getValue(), currentSearch).getTotalElements()
+        );
         listGrid.setDataProvider(dataProvider);
 
-        VerticalLayout layout = new VerticalLayout(toolbar, listGrid);
+        VerticalLayout layout = new VerticalLayout(toolbar, listGrid, listEmptyMsg);
         layout.setSizeFull();
         layout.setPadding(false);
         return layout;
@@ -262,6 +275,15 @@ public class ShiftAssignmentView extends VerticalLayout {
 
     private void refreshListGrid() {
         listGrid.getDataProvider().refreshAll();
+        long totalElements = assignmentService.fetchAssignmentsForGrid(0, 1, filterDate.getValue(), currentSearch).getTotalElements();
+        boolean isEmpty = (totalElements == 0);
+
+        listGrid.setVisible(!isEmpty);
+        listEmptyMsg.setVisible(isEmpty);
+
+        if (searchBox != null) {
+            searchBox.hideSpinner();
+        }
     }
 
     private Component buildPivotLayout() {
@@ -275,7 +297,8 @@ public class ShiftAssignmentView extends VerticalLayout {
         pivotGrid.addClassName("standard-surface");
         setupPivotColumns(LocalDate.now());
 
-        VerticalLayout layout = new VerticalLayout(weekSelector, pivotGrid);
+        pivotEmptyMsg.addClassName("empty-grid-message");
+        VerticalLayout layout = new VerticalLayout(weekSelector, pivotGrid, pivotEmptyMsg);
         layout.setSizeFull();
         layout.setPadding(false);
         return layout;
@@ -392,6 +415,10 @@ public class ShiftAssignmentView extends VerticalLayout {
         }
 
         pivotGrid.setItems(pivotData.values());
+
+        boolean isEmpty = pivotData.isEmpty();
+        pivotGrid.setVisible(!isEmpty);
+        pivotEmptyMsg.setVisible(isEmpty);
     }
 
     private void buildAssignmentDialog() {
@@ -520,7 +547,8 @@ public class ShiftAssignmentView extends VerticalLayout {
         monthlyGrid.addClassName("monthly-calendar-grid");
         monthlyGrid.addThemeVariants(GridVariant.LUMO_COMPACT, GridVariant.LUMO_COLUMN_BORDERS);
 
-        VerticalLayout layout = new VerticalLayout(controls, monthlyGrid);
+        monthlyEmptyMsg.addClassName("empty-grid-message");
+        VerticalLayout layout = new VerticalLayout(controls, monthlyGrid, monthlyEmptyMsg);
         layout.setSizeFull();
         layout.setPadding(false);
         layout.setFlexGrow(1, monthlyGrid);
@@ -672,6 +700,10 @@ public class ShiftAssignmentView extends VerticalLayout {
             }
         }
         monthlyGrid.setItems(pivotData.values());
+
+        boolean isEmpty = pivotData.isEmpty();
+        monthlyGrid.setVisible(!isEmpty);
+        monthlyEmptyMsg.setVisible(isEmpty);
     }
 
     private void buildBatchSetupDialog() {

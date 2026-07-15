@@ -2,6 +2,7 @@ package com.murali.views;
 
 import com.murali.entity.Role;
 import com.murali.service.RoleService;
+import com.murali.views.components.GlobalSearchComponent;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.combobox.ComboBox;
@@ -11,6 +12,7 @@ import com.vaadin.flow.component.formlayout.FormLayout;
 import com.vaadin.flow.component.grid.ColumnTextAlign;
 import com.vaadin.flow.component.grid.Grid;
 import com.vaadin.flow.component.html.H2;
+import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.icon.Icon;
 import com.vaadin.flow.component.icon.VaadinIcon;
 import com.vaadin.flow.component.notification.Notification;
@@ -44,8 +46,11 @@ public class RoleView extends VerticalLayout {
     );
 
     private final Grid<Role> grid = new Grid<>(Role.class, false);
-    private final TextField searchField = new TextField();
     private final Button addBtn = new Button("Add New Role", new Icon(VaadinIcon.PLUS));
+
+    private final Span emptyMsg = new Span("No roles found.");
+    private GlobalSearchComponent searchBox;
+    private String currentSearch = "";
 
     private final Dialog formDialog = new Dialog();
     private final TextField nameField = new TextField("Role Name");
@@ -65,12 +70,12 @@ public class RoleView extends VerticalLayout {
         configureForm();
         configureGrid();
 
-        searchField.setPlaceholder("Search roles...");
-        searchField.setPrefixComponent(new Icon(VaadinIcon.SEARCH));
-        searchField.setClearButtonVisible(true);
-        searchField.setValueChangeMode(ValueChangeMode.LAZY);
-        searchField.addValueChangeListener(e -> updateList());
-        searchField.focus();
+        emptyMsg.addClassName("empty-grid-message");
+
+        searchBox = new GlobalSearchComponent(term -> {
+            currentSearch = term;
+            updateList();
+        });
 
         addBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
         addBtn.addClickListener(e -> openForm(new Role()));
@@ -78,12 +83,12 @@ public class RoleView extends VerticalLayout {
         H2 title = new H2("Role Configuration");
         title.addClassName(LumoUtility.Margin.Top.NONE);
 
-        HorizontalLayout toolbar = new HorizontalLayout(searchField, addBtn);
+        HorizontalLayout toolbar = new HorizontalLayout(searchBox, addBtn);
         toolbar.setWidthFull();
         toolbar.setAlignItems(Alignment.CENTER);
-        toolbar.setFlexGrow(1, searchField);
+        toolbar.expand(searchBox); // Expand search box to push the Add button to the right
 
-        add(title, toolbar, grid);
+        add(title, toolbar, grid, emptyMsg);
         updateList();
     }
 
@@ -243,15 +248,25 @@ public class RoleView extends VerticalLayout {
 
     private void updateList() {
         List<Role> allRoles = roleService.findAll();
-        String searchTerm = searchField.getValue();
+        List<Role> itemsToDisplay;
 
-        if (searchTerm == null || searchTerm.isEmpty()) {
-            grid.setItems(allRoles);
+        if (currentSearch == null || currentSearch.isBlank()) {
+            itemsToDisplay = allRoles;
         } else {
-            List<Role> filteredRoles = allRoles.stream()
-                    .filter(r -> r.getName() != null && r.getName().toLowerCase().contains(searchTerm.toLowerCase()))
+            String term = currentSearch.toLowerCase();
+            itemsToDisplay = allRoles.stream()
+                    .filter(r -> r.getName() != null && r.getName().toLowerCase().contains(term))
                     .collect(Collectors.toList());
-            grid.setItems(filteredRoles);
+        }
+
+        grid.setItems(itemsToDisplay);
+
+        boolean isEmpty = itemsToDisplay.isEmpty();
+        grid.setVisible(!isEmpty);
+        emptyMsg.setVisible(isEmpty);
+
+        if (searchBox != null) {
+            searchBox.hideSpinner();
         }
     }
 

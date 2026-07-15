@@ -6,6 +6,7 @@ import com.murali.entity.enums.RotationSegmentType;
 import com.murali.entity.enums.Shifts;
 import com.murali.entity.enums.WorkingDay;
 import com.murali.service.ShiftService;
+import com.murali.views.components.GlobalSearchComponent;
 import com.vaadin.flow.component.AbstractField;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.HasValue;
@@ -56,8 +57,11 @@ public class ShiftView extends VerticalLayout {
     private final ShiftService shiftService;
 
     private final Grid<Shift> grid = new Grid<>(Shift.class, false);
-    private final TextField searchField = new TextField();
     private final Button addBtn = new Button("Add New Shift", new Icon(VaadinIcon.PLUS));
+
+    private final Span emptyMsg = new Span("No shifts found.");
+    private GlobalSearchComponent searchBox;
+    private String currentSearch = "";
 
     private final Dialog formDialog = new Dialog();
     private final TextField nameField = new TextField("Shift Name");
@@ -89,20 +93,21 @@ public class ShiftView extends VerticalLayout {
         configureGrid();
         configureForm();
 
-        searchField.setPlaceholder("Search shifts");
-        searchField.setTooltipText("Search Using Shift Name");
-        searchField.setClearButtonVisible(true);
-        searchField.setValueChangeMode(ValueChangeMode.LAZY);
-        searchField.addValueChangeListener(e -> updateList());
-        searchField.focus(); // Automatically focus search bar on view load
+        emptyMsg.addClassName("empty-grid-message");
+
+        searchBox = new GlobalSearchComponent(term -> {
+            currentSearch = term;
+            updateList();
+        });
+
         addBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
         addBtn.addClickListener(e -> openForm(new Shift()));
 
-        HorizontalLayout toolbar = new HorizontalLayout(searchField, addBtn);
+        HorizontalLayout toolbar = new HorizontalLayout(searchBox, addBtn);
         toolbar.setWidthFull();
-        toolbar.setFlexGrow(1, searchField);
+        toolbar.expand(searchBox); // Expand search box to push the Add button to the right
 
-        add(new H2("Shift Configuration"), toolbar, grid);
+        add(new H2("Shift Configuration"), toolbar, grid, emptyMsg);
 
         updateList();
     }
@@ -414,11 +419,22 @@ public class ShiftView extends VerticalLayout {
     }
 
     private void updateList() {
-        String searchTerm = searchField.getValue();
-        if (searchTerm == null || searchTerm.isEmpty()) {
-            grid.setItems(shiftService.getShifts());
+        List<Shift> items;
+
+        if (currentSearch == null || currentSearch.isBlank()) {
+            items = shiftService.getShifts();
         } else {
-            grid.setItems(shiftService.search(searchTerm));
+            items = shiftService.search(currentSearch);
+        }
+
+        grid.setItems(items);
+
+        boolean isEmpty = items.isEmpty();
+        grid.setVisible(!isEmpty);
+        emptyMsg.setVisible(isEmpty);
+
+        if (searchBox != null) {
+            searchBox.hideSpinner();
         }
     }
 

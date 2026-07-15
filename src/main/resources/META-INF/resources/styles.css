@@ -559,3 +559,26 @@ vaadin-app-layout.app-layout-mini .user-card-container {
     display: inline-block;
     max-width: 100%;
 }
+/* ==========================================================================
+   14. UTILITIES & EMPTY STATES
+   ========================================================================== */
+.empty-grid-message {
+    color: var(--app-text-secondary);
+    font-style: italic;
+    padding-top: var(--app-padding);
+    text-align: center;
+    display: block;
+    width: 100%;
+}
+/* ==========================================================================
+   15. ANIMATIONS & SPINNERS
+   ========================================================================== */
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.rotating-spinner {
+    animation: spin 1s linear infinite;
+    color: var(--app-primary-color);
+}

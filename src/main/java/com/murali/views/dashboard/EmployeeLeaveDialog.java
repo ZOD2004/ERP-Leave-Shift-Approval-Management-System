@@ -72,9 +72,17 @@ public class EmployeeLeaveDialog extends Dialog {
             return badge;
         }).setHeader("Status").setAutoWidth(true);
 
-        grid.setItems(leaveRequestService.getLeaveHistoryForEmployee(employee.getId()));
+        List<LeaveRequest> history = leaveRequestService.getLeaveHistoryForEmployee(employee.getId());
 
-        content.add(balanceTitle, cardsLayout, historyTitle, grid);
+        if (history == null || history.isEmpty()) {
+            Span emptyMessage = new Span("No leave history available.");
+            emptyMessage.addClassName("empty-grid-message");
+
+            content.add(balanceTitle, cardsLayout, historyTitle, emptyMessage);
+        } else {
+            grid.setItems(history);
+            content.add(balanceTitle, cardsLayout, historyTitle, grid);
+        }
         add(content);
 
         Button closeBtn = new Button("Close", e -> close());

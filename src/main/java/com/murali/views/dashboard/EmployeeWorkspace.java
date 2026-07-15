@@ -12,6 +12,7 @@ import com.murali.util.SecurityService;
 import com.murali.service.AttendanceProcessService;
 import com.murali.service.LeaveBalanceService;
 import com.murali.service.ScheduleCalculationService;
+import com.murali.views.components.GlobalSearchComponent;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.button.Button;
@@ -322,9 +323,16 @@ public class EmployeeWorkspace extends VerticalLayout {
         LocalDate today = LocalDate.now();
         Map<Long, List<DailyExpectedShift>> bulkShifts = scheduleCalculationService.calculateBatchShifts(List.of(employee), today, today.plusDays(6));
 
-        grid.setItems(bulkShifts.getOrDefault(employee.getId(), List.of()));
+        List<DailyExpectedShift> items = bulkShifts.getOrDefault(employee.getId(), List.of());
 
-        section.add(title, grid);
+        Span emptyMsg = new Span("No schedule available.");
+        emptyMsg.addClassName("empty-grid-message");
+        emptyMsg.setVisible(items.isEmpty());
+        grid.setVisible(!items.isEmpty());
+
+        grid.setItems(items);
+
+        section.add(title, grid, emptyMsg);
         return section;
     }
 
@@ -345,13 +353,18 @@ public class EmployeeWorkspace extends VerticalLayout {
 
         // Fetch top 5 upcoming holidays
         List<Holiday> upcoming = holidayRepository.findUpcomingHolidays(LocalDate.now());
-        if(upcoming.size() > 5) {
-            grid.setItems(upcoming.subList(0, 5));
-        } else {
-            grid.setItems(upcoming);
+
+        Span emptyMsg = new Span("No upcoming holidays.");
+        emptyMsg.addClassName("empty-grid-message");
+        boolean isEmpty = upcoming.isEmpty();
+        emptyMsg.setVisible(isEmpty);
+        grid.setVisible(!isEmpty);
+
+        if (!isEmpty) {
+            grid.setItems(upcoming.size() > 5 ? upcoming.subList(0, 5) : upcoming);
         }
 
-        section.add(title, grid);
+        section.add(title, grid, emptyMsg);
         return section;
     }
 
@@ -411,8 +424,33 @@ public class EmployeeWorkspace extends VerticalLayout {
             return badge;
         }).setHeader("Status").setAutoWidth(true);
 
-        grid.setItems(leaveRequestService.getLeaveHistoryForEmployee(employeeId));
-        layout.add(grid);
+        List<LeaveRequest> allRequests = leaveRequestService.getLeaveHistoryForEmployee(employeeId);
+        Span emptyMsg = new Span("No leave requests found.");
+        emptyMsg.addClassName("empty-grid-message");
+
+        GlobalSearchComponent[] searchBoxRef = new GlobalSearchComponent[1];
+        searchBoxRef[0] = new GlobalSearchComponent(searchTerm -> {
+            String term = searchTerm.toLowerCase();
+            List<LeaveRequest> filtered = allRequests.stream()
+                    .filter(r -> r.getLeaveType().getName().toLowerCase().contains(term) ||
+                            r.getStatus().toLowerCase().contains(term))
+                    .toList();
+
+            grid.setItems(filtered);
+            grid.setVisible(!filtered.isEmpty());
+            emptyMsg.setVisible(filtered.isEmpty());
+
+            if (searchBoxRef[0] != null) {
+                searchBoxRef[0].hideSpinner();
+            }
+        });
+        searchBoxRef[0].getStyle().set("margin-bottom", "var(--app-padding)");
+
+        grid.setItems(allRequests);
+        grid.setVisible(!allRequests.isEmpty());
+        emptyMsg.setVisible(allRequests.isEmpty());
+
+        layout.add(searchBoxRef[0], grid, emptyMsg);
         return layout;
     }
 
@@ -421,13 +459,18 @@ public class EmployeeWorkspace extends VerticalLayout {
         layout.setPadding(false);
         layout.setMargin(false);
 
-        // Toolbar with Date Filters
         HorizontalLayout toolbar = new HorizontalLayout();
         toolbar.setAlignItems(FlexComponent.Alignment.BASELINE);
+        toolbar.getStyle().set("gap", "var(--app-padding)");
 
         DatePicker startDate = new DatePicker("Start Date", LocalDate.now().minusDays(30));
         DatePicker endDate = new DatePicker("End Date", LocalDate.now());
-        toolbar.add(startDate, endDate);
+
+        Span emptyMsg = new Span("No attendance records found.");
+        emptyMsg.addClassName("empty-grid-message");
+
+        String[] currentSearch = new String[]{""};
+        GlobalSearchComponent[] searchBoxRef = new GlobalSearchComponent[1];
 
         // Grid
         Grid<Attendance> grid = new Grid<>(Attendance.class, false);
@@ -448,21 +491,44 @@ public class EmployeeWorkspace extends VerticalLayout {
             return badge;
         }).setHeader("Status").setAutoWidth(true);
 
-        // Refresh logic
+        // Centralized Refresh logic connecting date filters and text search
         Runnable refreshData = () -> {
             if (startDate.getValue() != null && endDate.getValue() != null) {
-                grid.setItems(attendanceProcessService.getEmployeeAttendanceHistory(
-                        employeeId, startDate.getValue(), endDate.getValue()));
+                List<Attendance> data = attendanceProcessService.getEmployeeAttendanceHistory(
+                        employeeId, startDate.getValue(), endDate.getValue());
+
+                String term = currentSearch[0];
+                if (term != null && !term.isBlank()) {
+                    data = data.stream()
+                            .filter(a -> (a.getStatus() != null && a.getStatus().name().toLowerCase().contains(term)))
+                            .toList();
+                }
+
+                grid.setItems(data);
+                grid.setVisible(!data.isEmpty());
+                emptyMsg.setVisible(data.isEmpty());
+
+                if (searchBoxRef[0] != null) {
+                    searchBoxRef[0].hideSpinner();
+                }
             }
         };
+
+        searchBoxRef[0] = new GlobalSearchComponent(term -> {
+            currentSearch[0] = term.toLowerCase();
+            refreshData.run();
+        });
+
+        searchBoxRef[0].getStyle().set("margin-left", "auto");
+        toolbar.add(startDate, endDate, searchBoxRef[0]);
+        toolbar.setWidthFull();
 
         startDate.addValueChangeListener(e -> refreshData.run());
         endDate.addValueChangeListener(e -> refreshData.run());
 
-        // Initial load
         refreshData.run();
 
-        layout.add(toolbar, grid);
+        layout.add(toolbar, grid, emptyMsg);
         return layout;
     }
 }

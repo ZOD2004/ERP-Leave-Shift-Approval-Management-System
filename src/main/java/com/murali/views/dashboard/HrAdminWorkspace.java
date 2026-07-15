@@ -8,6 +8,7 @@ import com.murali.entity.Employee;
 import com.murali.repository.EmployeeRepository;
 import com.murali.service.*;
 import com.murali.util.SecurityService;
+import com.murali.views.components.GlobalSearchComponent;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.button.Button;
@@ -272,10 +273,35 @@ public class HrAdminWorkspace extends VerticalLayout {
             return badge;
         }).setHeader("Status").setAutoWidth(true);
 
-        // Populate Grid
-        grid.setItems(attendanceCorrectionService.getAllPendingCorrectionsGlobally());
+        List<AttendanceCorrection> allCorrections = attendanceCorrectionService.getAllPendingCorrectionsGlobally();
 
-        section.add(title, grid);
+        Span emptyMsg = new Span("No pending anomalies found.");
+        emptyMsg.addClassName("empty-grid-message");
+
+        GlobalSearchComponent[] searchBoxRef = new GlobalSearchComponent[1];
+        searchBoxRef[0] = new GlobalSearchComponent(searchTerm -> {
+            String term = searchTerm.toLowerCase();
+            List<AttendanceCorrection> filtered = allCorrections.stream()
+                    .filter(ac -> ac.getAttendance().getEmployee().getFirstName().toLowerCase().contains(term) ||
+                            ac.getStatus().toLowerCase().contains(term) ||
+                            (ac.getApprover() != null && ac.getApprover().getUsername().toLowerCase().contains(term)))
+                    .toList();
+
+            grid.setItems(filtered);
+            grid.setVisible(!filtered.isEmpty());
+            emptyMsg.setVisible(filtered.isEmpty());
+
+            if (searchBoxRef[0] != null) {
+                searchBoxRef[0].hideSpinner();
+            }
+        });
+        searchBoxRef[0].getStyle().set("margin-bottom", "var(--app-padding)");
+
+        grid.setItems(allCorrections);
+        grid.setVisible(!allCorrections.isEmpty());
+        emptyMsg.setVisible(allCorrections.isEmpty());
+
+        section.add(title, searchBoxRef[0], grid, emptyMsg);
         return section;
     }
 
@@ -372,9 +398,17 @@ public class HrAdminWorkspace extends VerticalLayout {
 
         LocalDate today = LocalDate.now();
         Map<Long, List<DailyExpectedShift>> bulkShifts = scheduleCalculationService.calculateBatchShifts(List.of(employee), today, today.plusDays(6));
-        grid.setItems(bulkShifts.getOrDefault(employee.getId(), Collections.emptyList()));
 
-        section.add(title, grid);
+        List<DailyExpectedShift> items = bulkShifts.getOrDefault(employee.getId(), Collections.emptyList());
+
+        Span emptyMsg = new Span("No schedule available.");
+        emptyMsg.addClassName("empty-grid-message");
+        emptyMsg.setVisible(items.isEmpty());
+        grid.setVisible(!items.isEmpty());
+
+        grid.setItems(items);
+
+        section.add(title, grid, emptyMsg);
         return section;
     }
 
@@ -464,20 +498,64 @@ public class HrAdminWorkspace extends VerticalLayout {
             return new Span(); // Leave blank for Department rows
         }).setHeader("Actions").setAutoWidth(true);
 
-        // Populate the Grid
         List<Object> rootItems = new java.util.ArrayList<>(allDepartments);
 
+        Span emptyMsg = new Span("No departments or employees found.");
+        emptyMsg.addClassName("empty-grid-message");
+
+        GlobalSearchComponent[] searchBoxRef = new GlobalSearchComponent[1];
+        searchBoxRef[0] = new GlobalSearchComponent(searchTerm -> {
+            String term = searchTerm.toLowerCase();
+
+            // Filter departments: Keep if department name matches, OR if any employee inside matches
+            List<Object> filteredRoots = allDepartments.stream()
+                    .filter(dept -> dept.getName().toLowerCase().contains(term) ||
+                            allActiveEmployees.stream().anyMatch(e -> e.getDepartment() != null &&
+                                    e.getDepartment().getId().equals(dept.getId()) &&
+                                    (e.getFirstName().toLowerCase().contains(term) || e.getEmployeeCode().toLowerCase().contains(term))))
+                    .map(d -> (Object) d)
+                    .toList();
+
+            grid.setItems(filteredRoots, item -> {
+                if (item instanceof Department dept) {
+                    boolean isDeptMatch = dept.getName().toLowerCase().contains(term);
+                    return allActiveEmployees.stream()
+                            .filter(e -> e.getDepartment() != null && e.getDepartment().getId().equals(dept.getId()))
+                            // If department matches, show all employees. If not, only show matching employees.
+                            .filter(e -> isDeptMatch || e.getFirstName().toLowerCase().contains(term) || e.getEmployeeCode().toLowerCase().contains(term))
+                            .map(e -> (Object) e)
+                            .toList();
+                }
+                return java.util.Collections.emptyList();
+            });
+
+            grid.expand(filteredRoots);
+
+            boolean isDataEmpty = filteredRoots.isEmpty();
+            grid.setVisible(!isDataEmpty);
+            emptyMsg.setVisible(isDataEmpty);
+
+            if (searchBoxRef[0] != null) {
+                searchBoxRef[0].hideSpinner();
+            }
+        });
+        searchBoxRef[0].getStyle().set("margin-bottom", "var(--app-padding)");
+
+        // Initial Data Load
         grid.setItems(rootItems, item -> {
-            // When expanding a department, return all employees belonging to it
             if (item instanceof Department dept) {
-                return allActiveEmployees.stream().filter(e -> e.getDepartment() != null && e.getDepartment().getId().equals(dept.getId())).map(e -> (Object) e) // Cast Employee to Object to satisfy TreeGrid<Object>
-                        .toList();
+                return allActiveEmployees.stream()
+                        .filter(e -> e.getDepartment() != null && e.getDepartment().getId().equals(dept.getId()))
+                        .map(e -> (Object) e).toList();
             }
             return java.util.Collections.emptyList();
         });
 
+        boolean isInitialEmpty = rootItems.isEmpty();
+        grid.setVisible(!isInitialEmpty);
+        emptyMsg.setVisible(isInitialEmpty);
 
-        section.add(title, grid);
+        section.add(title, searchBoxRef[0], grid, emptyMsg);
         return section;
     }
     private Button createViewLeavesBtn(Employee emp) {

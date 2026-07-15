@@ -6,6 +6,7 @@ import com.murali.entity.enums.ApprovalType;
 import com.murali.entity.enums.LeaveSession;
 import com.murali.util.SecurityService;
 import com.murali.service.*;
+import com.murali.views.components.GlobalSearchComponent;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
@@ -72,8 +73,12 @@ public class LeaveApplicationView extends VerticalLayout {
     private final VerticalLayout draftSection = new VerticalLayout();
     private LeaveRequest currentDraft = null;
 
-    public LeaveApplicationView(LeaveRequestService leaveRequestService, LeaveTypeService leaveTypeService, DurationEngineService durationEngineService, SecurityService securityService, LeaveBalanceService leaveBalanceService, ApprovalRoutingService approvalRoutingService) {
+    private final Span historyEmptyMsg = new Span("No recent leave requests found.");
+    private final Span draftEmptyMsg = new Span("No drafts found.");
+    private GlobalSearchComponent historySearchBox;
+    private String currentHistorySearch = "";
 
+    public LeaveApplicationView(LeaveRequestService leaveRequestService, LeaveTypeService leaveTypeService, DurationEngineService durationEngineService, SecurityService securityService, LeaveBalanceService leaveBalanceService, ApprovalRoutingService approvalRoutingService) {
         this.leaveRequestService = leaveRequestService;
         this.leaveTypeService = leaveTypeService;
         this.durationEngineService = durationEngineService;
@@ -162,7 +167,19 @@ public class LeaveApplicationView extends VerticalLayout {
         historyGrid.setSizeFull();
         historyGrid.addClassName("standard-surface"); // Applies standardized grid container styles
 
-        VerticalLayout wrapper = new VerticalLayout(title, historyGrid);
+        historyEmptyMsg.addClassName("empty-grid-message");
+
+        historySearchBox = new GlobalSearchComponent(term -> {
+            currentHistorySearch = term.toLowerCase();
+            refreshBalanceAndHistory();
+        });
+
+        HorizontalLayout headerRow = new HorizontalLayout(title, historySearchBox);
+        headerRow.setWidthFull();
+        headerRow.setAlignItems(FlexComponent.Alignment.CENTER);
+        headerRow.setJustifyContentMode(FlexComponent.JustifyContentMode.BETWEEN);
+
+        VerticalLayout wrapper = new VerticalLayout(headerRow, historyGrid, historyEmptyMsg);
         wrapper.setPadding(false);
         wrapper.setSizeFull();
 
@@ -569,13 +586,35 @@ public class LeaveApplicationView extends VerticalLayout {
             balanceLayout.add(createBalanceCard(balance.getLeaveType().getName(), remaining, used, total, themeColor, iconType));
         }
 
-        historyGrid.setItems(leaveRequestService.getLeaveHistoryForEmployee(currentEmployee.getId()).stream().filter(req -> !"DRAFT".equals(req.getStatus())).toList());
+        List<LeaveRequest> allHistory = leaveRequestService.getLeaveHistoryForEmployee(currentEmployee.getId()).stream()
+                .filter(req -> !"DRAFT".equals(req.getStatus()))
+                .toList();
+
+        if (currentHistorySearch != null && !currentHistorySearch.isBlank()) {
+            allHistory = allHistory.stream()
+                    .filter(req -> (req.getLeaveType() != null && req.getLeaveType().getName().toLowerCase().contains(currentHistorySearch)) ||
+                            (req.getStatus() != null && req.getStatus().toLowerCase().contains(currentHistorySearch)))
+                    .toList();
+        }
+
+        historyGrid.setItems(allHistory);
+
+        boolean isHistoryEmpty = allHistory.isEmpty();
+        historyGrid.setVisible(!isHistoryEmpty);
+        historyEmptyMsg.setVisible(isHistoryEmpty);
+
+        if (historySearchBox != null) {
+            historySearchBox.hideSpinner();
+        }
 
         List<LeaveRequest> drafts = leaveRequestService.getDraftsForEmployee(currentEmployee.getId());
         if (drafts.isEmpty()) {
+            // If there are no drafts at all, hide the entire section (title included)
             draftSection.setVisible(false);
         } else {
             draftGrid.setItems(drafts);
+            draftGrid.setVisible(true);
+            draftEmptyMsg.setVisible(false);
             draftSection.setVisible(true);
         }
     }
@@ -601,7 +640,9 @@ public class LeaveApplicationView extends VerticalLayout {
         draftGrid.setAllRowsVisible(true);
         draftGrid.addItemDoubleClickListener(e -> openApplyLeaveDialog(e.getItem())); // Invoke existing edit handler
 
-        draftSection.add(title, draftGrid);
+        draftEmptyMsg.addClassName("empty-grid-message");
+
+        draftSection.add(title, draftGrid, draftEmptyMsg);
         draftSection.setPadding(false);
         draftSection.setVisible(false); // Hidden by default
         return draftSection;

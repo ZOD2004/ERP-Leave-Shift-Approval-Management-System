@@ -3,6 +3,7 @@ package com.murali.views;
 import com.murali.entity.Department;
 import com.murali.entity.Employee;
 import com.murali.service.DepartmentService;
+import com.murali.views.components.GlobalSearchComponent;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.confirmdialog.ConfirmDialog;
@@ -11,6 +12,7 @@ import com.vaadin.flow.component.formlayout.FormLayout;
 import com.vaadin.flow.component.grid.Grid;
 import com.vaadin.flow.component.html.H1;
 import com.vaadin.flow.component.html.H2;
+import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.icon.Icon;
 import com.vaadin.flow.component.icon.VaadinIcon;
 import com.vaadin.flow.component.notification.Notification;
@@ -23,6 +25,7 @@ import com.vaadin.flow.data.binder.Binder;
 import com.vaadin.flow.data.binder.ValidationException;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
+import com.vaadin.flow.theme.lumo.LumoUtility;
 import jakarta.annotation.security.RolesAllowed;
 import org.springframework.dao.DataIntegrityViolationException;
 
@@ -49,6 +52,10 @@ public class DepartmentView extends VerticalLayout {
     private final Binder<Department> binder = new BeanValidationBinder<>(Department.class);
     private Department currentDepartment;
 
+    private final Span emptyMsg = new Span("No departments found.");
+    private GlobalSearchComponent searchBox;
+    private String currentSearch = "";
+
     public DepartmentView(DepartmentService departmentService) {
         this.departmentService = departmentService;
 
@@ -60,12 +67,22 @@ public class DepartmentView extends VerticalLayout {
         addBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
         addBtn.addClickListener(e -> openForm(new Department()));
 
-        HorizontalLayout toolbar = new HorizontalLayout(new H2("Department Configuration"), addBtn);
-        toolbar.setWidthFull();
-        toolbar.setAlignItems(Alignment.CENTER); // Prevents vertical stretching
-        toolbar.setJustifyContentMode(JustifyContentMode.BETWEEN);
+        emptyMsg.addClassName("empty-grid-message");
 
-        add(toolbar, grid);
+        searchBox = new GlobalSearchComponent(term -> {
+            currentSearch = term.toLowerCase();
+            updateList();
+        });
+
+        H2 title = new H2("Department Configuration");
+        title.addClassNames(LumoUtility.Margin.Top.NONE, LumoUtility.Margin.Bottom.NONE);
+
+        HorizontalLayout toolbar = new HorizontalLayout(title, searchBox, addBtn);
+        toolbar.setWidthFull();
+        toolbar.setAlignItems(Alignment.CENTER);
+        toolbar.expand(searchBox);
+        searchBox.getStyle().set("padding-left", "var(--app-layout-margin)");
+        add(toolbar, grid, emptyMsg);
 
         updateList();
     }
@@ -179,7 +196,24 @@ public class DepartmentView extends VerticalLayout {
     }
 
     private void updateList() {
-        grid.setItems(departmentService.findAll());
+        List<Department> allDepts = departmentService.findAll();
+
+        if (currentSearch != null && !currentSearch.isBlank()) {
+            allDepts = allDepts.stream()
+                    .filter(d -> d.getName().toLowerCase().contains(currentSearch) ||
+                            (d.getHod() != null && d.getHod().getFirstName().toLowerCase().contains(currentSearch)))
+                    .toList();
+        }
+
+        grid.setItems(allDepts);
+
+        boolean isEmpty = allDepts.isEmpty();
+        grid.setVisible(!isEmpty);
+        emptyMsg.setVisible(isEmpty);
+
+        if (searchBox != null) {
+            searchBox.hideSpinner();
+        }
     }
 
     private void showNotification(String message, NotificationVariant variant) {

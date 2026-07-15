@@ -160,7 +160,7 @@ public class ProfileView extends VerticalLayout {
         buttonLayout.setPadding(false);
         buttonLayout.setMargin(false);
 
-        card.add(sectionTitle, passwordLayout, buttonLayout); // Removed unnecessary spacer Hr tag
+        card.add(sectionTitle, passwordLayout, buttonLayout);
         return card;
     }
 }
