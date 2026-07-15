@@ -428,3 +428,7 @@ vaadin-grid vaadin-button[theme~="tertiary"][theme~="error"][disabled]:hover {
     background-color: transparent !important;
     /* Removed the forced gray text color so it maintains its native hue */
 }
+
+vaadin-app-layout::part(drawer) {
+    overflow-y: hidden;
+}

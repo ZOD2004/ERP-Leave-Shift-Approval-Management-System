@@ -45,15 +45,26 @@ public class MainLayout extends AppLayout {
         drawerWrapper.setSizeFull();
         drawerWrapper.setPadding(false);
         drawerWrapper.setSpacing(false);
+        drawerWrapper.setSizeFull();
+        drawerWrapper.getStyle().set("overflow", "hidden");
+        drawerWrapper.getStyle().set("height", "100%");
 
+        SideNav staticNav = new SideNav();
+        staticNav.addItem(new SideNavItem("My Dashboard", "/", VaadinIcon.DASHBOARD.create()));
 
-        SideNav nav = createNavigation();
-        Scroller scroller = new Scroller(nav);
-        scroller.addClassNames(LumoUtility.Padding.SMALL);
+        staticNav.addClassNames(LumoUtility.Padding.Horizontal.SMALL, LumoUtility.Padding.Top.SMALL);
+
+        SideNav dynamicNav = createNavigation();
+        dynamicNav.addClassNames(LumoUtility.Padding.Horizontal.SMALL, LumoUtility.Padding.Bottom.SMALL);
+
+        Scroller scroller = new Scroller(dynamicNav);
+        scroller.setSizeFull();
+        scroller.setScrollDirection(Scroller.ScrollDirection.VERTICAL);
+        scroller.setWidthFull();
+        scroller.getStyle().set("min-height", "0");
 
         Component userCard = createUserCard();
-
-        drawerWrapper.add(scroller, userCard);
+        drawerWrapper.add(staticNav, scroller, userCard);
         drawerWrapper.expand(scroller);
 
         addToDrawer(drawerWrapper);
@@ -63,8 +74,6 @@ public class MainLayout extends AppLayout {
         SideNav nav = new SideNav();
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         List<NavMenuItem> menuItems = navService.getMenuItemsForUser(auth);
-
-        nav.addItem(new SideNavItem("My Dashboard", "/", VaadinIcon.DASHBOARD.create()));
 
         for (NavMenuItem item : menuItems) {
             try {
@@ -76,7 +85,6 @@ public class MainLayout extends AppLayout {
         }
         return nav;
     }
-
     private Component createUserCard() {
         String currentUsername = "USER@gmail.com";
         String currentRole = "ROLE";
