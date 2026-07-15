@@ -313,6 +313,14 @@ vaadin-grid.monthly-calendar-grid::part(cell) {
     justify-content: center; /* Centers horizontally */
     align-items: center;     /* Centers vertically */
 }
+/* THE FIX: Stop global 48px grid button styles from hijacking the 32px compact buttons */
+vaadin-grid.monthly-calendar-grid vaadin-button[theme~="tertiary"] {
+    width: 32px !important;
+    min-width: 32px !important;
+    height: 32px !important;
+    min-height: 32px !important;
+    margin: 0 auto !important; /* Guarantees the element sits perfectly in the middle */
+}
 
 /* ==========================================================================
    8. NOTIFICATION POLISH (Fixes the "Double Box" effect)

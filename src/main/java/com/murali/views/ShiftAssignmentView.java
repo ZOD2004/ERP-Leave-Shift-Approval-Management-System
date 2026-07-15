@@ -16,6 +16,7 @@ import com.vaadin.flow.component.combobox.ComboBox;
 import com.vaadin.flow.component.datepicker.DatePicker;
 import com.vaadin.flow.component.dialog.Dialog;
 import com.vaadin.flow.component.formlayout.FormLayout;
+import com.vaadin.flow.component.grid.ColumnTextAlign;
 import com.vaadin.flow.component.grid.Grid;
 import com.vaadin.flow.component.grid.GridVariant;
 import com.vaadin.flow.component.html.*;
@@ -547,7 +548,7 @@ public class ShiftAssignmentView extends VerticalLayout {
             nameSpan.getStyle().set("white-space", "nowrap").set("overflow", "hidden").set("text-overflow", "ellipsis").set("display", "block").set("width", "100%");
             nameSpan.getElement().setProperty("title", row.getEmployeeName());
             return nameSpan;
-        })).setHeader("Employee").setFrozen(true).setWidth("120px").setFlexGrow(0);
+        })).setHeader("Employee").setFrozen(true).setWidth("120px").setFlexGrow(1);
 
         int daysInMonth = currentMonth.lengthOfMonth();
         for (int i = 1; i <= daysInMonth; i++) {
@@ -652,7 +653,7 @@ public class ShiftAssignmentView extends VerticalLayout {
                     cellBtn.addClickListener(e -> handleEmptyCellClick(cell));
                 }
                 return cellBtn;
-            })).setHeader(String.valueOf(day)).setWidth("46px").setFlexGrow(0).setResizable(false);
+            })).setHeader(String.valueOf(day)).setWidth("46px").setFlexGrow(1).setResizable(false).setTextAlign(ColumnTextAlign.CENTER);
         }
     }
 
