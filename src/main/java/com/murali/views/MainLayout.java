@@ -5,8 +5,12 @@ import com.murali.service.NavigationService;
 import com.murali.util.SecurityService;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.applayout.AppLayout;
+import com.vaadin.flow.component.applayout.DrawerToggle;
 import com.vaadin.flow.component.avatar.Avatar;
+import com.vaadin.flow.component.button.Button;
+import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.contextmenu.ContextMenu;
+import com.vaadin.flow.component.html.H1;
 import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.icon.VaadinIcon;
 import com.vaadin.flow.component.orderedlayout.FlexComponent;
@@ -28,15 +32,21 @@ public class MainLayout extends AppLayout {
     private final NavigationService navService;
     private final SecurityService securityService;
 
+    private Button drawerToggleBtn;
+    private HorizontalLayout toggleContainer;
+    private VerticalLayout userTextLayout;
+
     public MainLayout(NavigationService navService, SecurityService securityService) {
         this.navService = navService;
         this.securityService = securityService;
-        this.getStyle().set("padding-top","0");
-        this.getStyle().set("padding-right","0");
-        this.getStyle().set("padding-bottom","0");
+        this.getStyle().set("padding-top", "0");
+        this.getStyle().set("padding-right", "0");
+        this.getStyle().set("padding-bottom", "0");
 
+        this.addClassName("app-layout-expanded");
 
         setPrimarySection(Section.DRAWER);
+        setDrawerOpened(true);
         addDrawerContent();
     }
 
@@ -45,13 +55,12 @@ public class MainLayout extends AppLayout {
         drawerWrapper.setSizeFull();
         drawerWrapper.setPadding(false);
         drawerWrapper.setSpacing(false);
-        drawerWrapper.setSizeFull();
         drawerWrapper.getStyle().set("overflow", "hidden");
         drawerWrapper.getStyle().set("height", "100%");
 
         SideNav staticNav = new SideNav();
         staticNav.addItem(new SideNavItem("My Dashboard", "/", VaadinIcon.DASHBOARD.create()));
-
+        staticNav.setWidthFull();
         staticNav.addClassNames(LumoUtility.Padding.Horizontal.SMALL, LumoUtility.Padding.Top.SMALL);
 
         SideNav dynamicNav = createNavigation();
@@ -64,10 +73,20 @@ public class MainLayout extends AppLayout {
         scroller.getStyle().set("min-height", "0");
 
         Component userCard = createUserCard();
+
+        drawerToggleBtn = new Button(VaadinIcon.CHEVRON_LEFT.create());
+        drawerToggleBtn.addClassName("drawer-toggle-btn");
+        drawerToggleBtn.addClickListener(e -> toggleDrawerSize());
+
+        toggleContainer = new HorizontalLayout(drawerToggleBtn);
+        toggleContainer.addClassName("drawer-toggle-container");
+
+
         drawerWrapper.add(staticNav, scroller, userCard);
         drawerWrapper.expand(scroller);
 
         addToDrawer(drawerWrapper);
+        addToNavbar(toggleContainer);
     }
 
     private SideNav createNavigation() {
@@ -78,13 +97,16 @@ public class MainLayout extends AppLayout {
         for (NavMenuItem item : menuItems) {
             try {
                 VaadinIcon icon = VaadinIcon.valueOf(item.getIconName().toUpperCase());
-                nav.addItem(new SideNavItem(item.getLabel(), item.getPath(), icon.create()));
+                SideNavItem i = new SideNavItem(item.getLabel(), item.getPath(), icon.create());
+                i.getElement().setProperty("title", item.getLabel());
+                nav.addItem(i);
             } catch (Exception ex) {
                 nav.addItem(new SideNavItem(item.getLabel(), item.getPath(), VaadinIcon.FILE.create()));
             }
         }
         return nav;
     }
+
     private Component createUserCard() {
         String currentUsername = "USER@gmail.com";
         String currentRole = "ROLE";
@@ -97,21 +119,22 @@ public class MainLayout extends AppLayout {
         Avatar avatar = new Avatar(currentUsername);
 
         Span nameSpan = new Span(currentUsername);
-        nameSpan.addClassNames(LumoUtility.FontWeight.MEDIUM, LumoUtility.FontSize.SMALL);
+        nameSpan.addClassNames(LumoUtility.FontWeight.MEDIUM, LumoUtility.FontSize.SMALL,"text-ellipsis");
 
         Span roleSpan = new Span(currentRole);
-        roleSpan.addClassNames(LumoUtility.FontSize.XSMALL, LumoUtility.TextColor.SECONDARY);
+        roleSpan.addClassNames(LumoUtility.FontSize.XSMALL, LumoUtility.TextColor.SECONDARY,"text-ellipsis");
 
-        VerticalLayout textLayout = new VerticalLayout(nameSpan, roleSpan);
-        textLayout.setPadding(false);
-        textLayout.setSpacing(false);
+        userTextLayout = new VerticalLayout(nameSpan, roleSpan);
+        userTextLayout.getStyle().set("min-width", "0");
+        userTextLayout.setPadding(false);
+        userTextLayout.setSpacing(false);
+        userTextLayout.addClassName("user-text-layout");
 
-        HorizontalLayout userCard = new HorizontalLayout(avatar, textLayout);
+        HorizontalLayout userCard = new HorizontalLayout(avatar, userTextLayout);
         userCard.setWidthFull();
         userCard.setAlignItems(FlexComponent.Alignment.CENTER);
-
-        // Replaced inline styles and Lumo border utility with centralized theme classes
         userCard.addClassName("user-card-container");
+
 
         ContextMenu contextMenu = new ContextMenu();
         contextMenu.setTarget(userCard);
@@ -170,5 +193,9 @@ public class MainLayout extends AppLayout {
                 }
                 return formatted.toString().trim();
         }
+    }
+
+    private void toggleDrawerSize() {
+        setDrawerOpened(!isDrawerOpened());
     }
 }

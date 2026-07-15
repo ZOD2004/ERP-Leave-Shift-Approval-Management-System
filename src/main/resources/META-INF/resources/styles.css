@@ -432,3 +432,122 @@ vaadin-grid vaadin-button[theme~="tertiary"][theme~="error"][disabled]:hover {
 vaadin-app-layout::part(drawer) {
     overflow-y: hidden;
 }
+vaadin-app-layout::part(navbar) {
+    background: transparent;
+    box-shadow: none;
+    border: none;
+    padding: 0;
+    min-height: 0;
+}
+
+
+.drawer-toggle-container {
+    position: fixed;
+    left: 0;
+    top: calc(100vh - 100px);
+    z-index: 5000;
+    padding: 0;
+    margin: 0;
+    background: transparent;
+    box-shadow: none;
+    transition: left 0.3s ease-in-out;
+}
+
+.drawer-toggle-btn {
+    --lumo-button-background-color: #ffffff;
+    width: 34px;
+    height: 72px;
+    min-width: 34px;
+    min-height: 72px;
+    padding: 0;
+    border: 1px solid var(--app-border-color);
+    border-left: none;
+    border-radius: 0 16px 16px 0 !important;
+    box-shadow: 0 2px 8px rgba(0,0,0,.08);
+    cursor: pointer;
+}
+
+.drawer-toggle-btn:hover {
+    border-radius: 0 16px 16px 0 !important;
+    transform: none !important;
+    box-shadow: 0 2px 8px rgba(0,0,0,.08) !important;
+    background-color: var(--app-hover-color);
+}
+.drawer-toggle-btn svg {
+    width: 20px;
+    height: 20px;
+}
+.drawer-toggle-btn vaadin-icon {
+    transition: transform 0.3s ease-in-out;
+    transform: rotate(180deg);
+}
+
+vaadin-app-layout[drawer-opened] .drawer-toggle-btn vaadin-icon {
+    transform: rotate(0deg);
+}
+
+
+/* ==========================================================================
+   12. MINI DRAWER (COLLAPSED STATE) & ZOOM FIX
+   ========================================================================== */
+
+/* 1. Base Width Transitions */
+vaadin-app-layout.app-layout-expanded {
+    --vaadin-app-layout-drawer-width: 260px;
+    transition: --vaadin-app-layout-drawer-width 0.3s ease-in-out;
+}
+
+vaadin-app-layout.app-layout-mini {
+    --vaadin-app-layout-drawer-width: 80px;
+    transition: --vaadin-app-layout-drawer-width 0.3s ease-in-out;
+}
+
+/* 2. Hide Navigation Text & Center Icons in Mini Mode */
+vaadin-app-layout.app-layout-mini vaadin-side-nav-item::part(label),
+vaadin-app-layout.app-layout-mini vaadin-side-nav-item::part(toggle-button) {
+    display: none !important;
+    opacity: 0;
+}
+
+vaadin-app-layout.app-layout-mini vaadin-side-nav-item::part(item) {
+    justify-content: center;
+}
+
+/* 3. User Card Mini State (Hide Text, Center Avatar) */
+vaadin-app-layout.app-layout-mini .user-text-layout {
+    display: none !important;
+}
+
+vaadin-app-layout.app-layout-mini .user-card-container {
+    justify-content: center;
+    padding-left: 0;
+    padding-right: 0;
+}
+
+/* 4. Fix Zooming/Mobile Issue: Prevent AppLayout from completely hiding the drawer! */
+/* When zoomed in (small screen), force it into a permanent "mini" state instead of an invisible overlay */
+@media (max-width: 800px) {
+    .drawer-toggle-container {
+        display: none !important;
+    }
+}
+
+/* ==========================================================================
+   13. TEXT TRUNCATION & ELLIPSIS UTILITY
+   ========================================================================== */
+.text-ellipsis {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: block;      /* Required for truncation to work */
+    max-width: 100%;     /* Ensures it doesn't push past its container */
+}
+
+/* Flexbox specific override in case you apply it inside a horizontal layout */
+.text-ellipsis-inline {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: inline-block;
+    max-width: 100%;
+}
