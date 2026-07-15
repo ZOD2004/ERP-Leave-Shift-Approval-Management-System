@@ -76,6 +76,7 @@ public class LeaveTypeView extends VerticalLayout {
 
         bulkDeleteBtn.addThemeVariants(ButtonVariant.LUMO_ERROR, ButtonVariant.LUMO_PRIMARY);
         bulkDeleteBtn.setEnabled(false);
+        bulkDeleteBtn.setTooltipText("Select one or more leave types from the grid to enable bulk deletion.");
         bulkDeleteBtn.addClickListener(e -> confirmAndBulkDelete(grid.getSelectedItems()));
 
         addBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
@@ -94,8 +95,15 @@ public class LeaveTypeView extends VerticalLayout {
         grid.addClassName("standard-surface");
 
         grid.setSelectionMode(Grid.SelectionMode.MULTI);
-        grid.addSelectionListener(e -> bulkDeleteBtn.setEnabled(!e.getAllSelectedItems().isEmpty()));
-
+        grid.addSelectionListener(e -> {
+            boolean hasSelection = !e.getAllSelectedItems().isEmpty();
+            bulkDeleteBtn.setEnabled(hasSelection);
+            if (hasSelection) {
+                bulkDeleteBtn.setTooltipText("Click to delete selected leave types.");
+            } else {
+                bulkDeleteBtn.setTooltipText("Select one or more leave types from the grid to enable bulk deletion.");
+            }
+        });
         grid.addItemDoubleClickListener(e -> openForm(e.getItem()));
 
         grid.addItemDoubleClickListener(e -> openForm(e.getItem()));

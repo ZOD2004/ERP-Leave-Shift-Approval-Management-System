@@ -176,6 +176,7 @@ public class LeaveApplicationView extends VerticalLayout {
         if ("REJECTED".equals(status) || "CANCELLED".equals(status)) {
             Button disabledBtn = new Button("Cancel");
             disabledBtn.setEnabled(false);
+            disabledBtn.setTooltipText("Cannot cancel a request that is already " + status.toLowerCase() + ".");
             disabledBtn.addThemeVariants(ButtonVariant.LUMO_SMALL, ButtonVariant.LUMO_TERTIARY);
             return disabledBtn;
         }

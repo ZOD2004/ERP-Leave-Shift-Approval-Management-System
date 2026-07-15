@@ -374,8 +374,16 @@ public class EmployeeView extends VerticalLayout {
         });
         confirmBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY, ButtonVariant.LUMO_ERROR);
         confirmBtn.setEnabled(false);
-        replacementCombo.addValueChangeListener(e -> confirmBtn.setEnabled(e.getValue() != null));
-
+        confirmBtn.setTooltipText("Select a new HOD from the dropdown to enable demotion.");
+        replacementCombo.addValueChangeListener(e -> {
+            boolean isSelected = e.getValue() != null;
+            confirmBtn.setEnabled(isSelected);
+            if (isSelected) {
+                confirmBtn.setTooltipText("Click to confirm HOD replacement and demotion.");
+            } else {
+                confirmBtn.setTooltipText("Select a new HOD from the dropdown to enable demotion.");
+            }
+        });
         dialog.add(replacementCombo);
         dialog.getFooter().add(new Button("Cancel", e -> dialog.close()), confirmBtn);
         dialog.open();
@@ -405,8 +413,16 @@ public class EmployeeView extends VerticalLayout {
         });
         confirmBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY, ButtonVariant.LUMO_ERROR);
         confirmBtn.setEnabled(false);
-        replacementCombo.addValueChangeListener(e -> confirmBtn.setEnabled(e.getValue() != null));
-
+        confirmBtn.setTooltipText("Select a replacement manager to enable demotion.");
+        replacementCombo.addValueChangeListener(e -> {
+            boolean isSelected = e.getValue() != null;
+            confirmBtn.setEnabled(isSelected);
+            if (isSelected) {
+                confirmBtn.setTooltipText("Click to reassign subordinates and demote.");
+            } else {
+                confirmBtn.setTooltipText("Select a replacement manager to enable demotion.");
+            }
+        });
         dialog.add(replacementCombo);
         dialog.getFooter().add(new Button("Cancel", e -> dialog.close()), confirmBtn);
         dialog.open();
@@ -448,8 +464,16 @@ public class EmployeeView extends VerticalLayout {
         });
         confirmBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY, ButtonVariant.LUMO_ERROR);
         confirmBtn.setEnabled(false);
-        replacementCombo.addValueChangeListener(e -> confirmBtn.setEnabled(e.getValue() != null));
-
+        confirmBtn.setTooltipText("Select a new HOD to enable deactivation.");
+        replacementCombo.addValueChangeListener(e -> {
+            boolean isSelected = e.getValue() != null;
+            confirmBtn.setEnabled(isSelected);
+            if (isSelected) {
+                confirmBtn.setTooltipText("Click to replace HOD and deactivate the employee.");
+            } else {
+                confirmBtn.setTooltipText("Select a new HOD to enable deactivation.");
+            }
+        });
         dialog.add(replacementCombo);
         dialog.getFooter().add(new Button("Cancel", e -> dialog.close()), confirmBtn);
         dialog.open();
@@ -477,8 +501,16 @@ public class EmployeeView extends VerticalLayout {
         });
         confirmBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY, ButtonVariant.LUMO_ERROR);
         confirmBtn.setEnabled(false);
-        replacementCombo.addValueChangeListener(e -> confirmBtn.setEnabled(e.getValue() != null));
-
+        confirmBtn.setTooltipText("Select a replacement manager to enable deactivation.");
+        replacementCombo.addValueChangeListener(e -> {
+            boolean isSelected = e.getValue() != null;
+            confirmBtn.setEnabled(isSelected);
+            if (isSelected) {
+                confirmBtn.setTooltipText("Click to reassign subordinates and deactivate.");
+            } else {
+                confirmBtn.setTooltipText("Select a replacement manager to enable deactivation.");
+            }
+        });
         dialog.add(replacementCombo);
         dialog.getFooter().add(new Button("Cancel", e -> dialog.close()), confirmBtn);
         dialog.open();

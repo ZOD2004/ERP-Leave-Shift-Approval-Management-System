@@ -253,6 +253,7 @@ public class ManagerApprovalView extends VerticalLayout {
 
         if (remainingAfterApproval.compareTo(BigDecimal.ZERO) < 0) {
             approveBtn.setEnabled(false);
+            approveBtn.setTooltipText("Insufficient leave balance. Approval is disabled.");
         }
         approveBtn.addClickListener(e -> {
             try {

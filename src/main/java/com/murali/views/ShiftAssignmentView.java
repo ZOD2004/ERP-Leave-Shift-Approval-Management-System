@@ -242,7 +242,7 @@ public class ShiftAssignmentView extends VerticalLayout {
 
             if (!assignment.getStartDate().isAfter(LocalDate.now())) {
                 deleteBtn.setEnabled(false);
-                deleteBtn.getElement().setProperty("title", "Locked: Past or active shifts cannot be deleted");
+                deleteBtn.setTooltipText("Locked: Past or active shifts cannot be deleted.");
             } else {
                 deleteBtn.addClickListener(e -> openPartialDeleteDialog(assignment, assignment.getStartDate(), assignment.getEndDate()));
             }
@@ -365,7 +365,9 @@ public class ShiftAssignmentView extends VerticalLayout {
                 cellBtn.getStyle().set("color", "var(--app-primary-color)");
                 if (!cell.getDate().isAfter(LocalDate.now())) {
                     cellBtn.setEnabled(false);
+                    cellBtn.setTooltipText("Locked: Cannot assign shifts to past or current dates.");
                 } else {
+                    cellBtn.setTooltipText("Assign Shift");
                     cellBtn.addClickListener(e -> handleEmptyCellClick(cell));
                 }
 
@@ -640,15 +642,15 @@ public class ShiftAssignmentView extends VerticalLayout {
 
                 // 7. DEFAULT UNASSIGNED (Future assignable)
                 cellBtn.setText("+");
-                cellBtn.setTooltipText("Assign Shift");
                 cellBtn.getStyle().set("color", "var(--lumo-primary-color)");
 
                 if (!cell.getDate().isAfter(LocalDate.now())) {
                     cellBtn.setEnabled(false);
+                    cellBtn.setTooltipText("Locked: Cannot assign shifts to past or current dates.");
                 } else {
+                    cellBtn.setTooltipText("Assign Shift");
                     cellBtn.addClickListener(e -> handleEmptyCellClick(cell));
                 }
-
                 return cellBtn;
             })).setHeader(String.valueOf(day)).setWidth("46px").setFlexGrow(0).setResizable(false);
         }
@@ -838,6 +840,7 @@ public class ShiftAssignmentView extends VerticalLayout {
 
         if (!originalDate.isAfter(LocalDate.now())) {
             deleteBtn.setEnabled(false);
+            deleteBtn.setTooltipText("Locked: Past or active shifts cannot be deleted.");
         } else {
             deleteBtn.addClickListener(e -> {
                 openPartialDeleteDialog(assignment, originalDate, originalDate);

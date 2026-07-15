@@ -75,14 +75,12 @@ public class DepartmentView extends VerticalLayout {
         grid.addClassName("standard-surface");
         grid.addItemDoubleClickListener(e -> openForm(e.getItem())); // Invoke existing edit handler
 
-        grid.addColumn(Department::getName).setHeader("Department Name").setSortable(true)
-                .setTooltipGenerator(Department::getName);
+        grid.addColumn(Department::getName).setHeader("Department Name").setSortable(true).setTooltipGenerator(Department::getName);
 
         grid.addColumn(department -> {
             Employee deptHod = department.getHod();
             return deptHod != null ? deptHod.getFirstName() : "Not Assigned";
-        }).setHeader("Head of Department")
-                .setTooltipGenerator(dt-> dt.getHod() != null ? dt.getHod().getFirstName() : "Not Assigned");
+        }).setHeader("Head of Department").setTooltipGenerator(dt -> dt.getHod() != null ? dt.getHod().getFirstName() : "Not Assigned");
 
         grid.addComponentColumn(department -> {
             Button editBtn = new Button(new Icon(VaadinIcon.EDIT));
@@ -105,14 +103,10 @@ public class DepartmentView extends VerticalLayout {
 
         FormLayout formLayout = new FormLayout();
         formLayout.add(nameField, hodField);
-        formLayout.setResponsiveSteps(
-                new FormLayout.ResponsiveStep("0", 1),
-                new FormLayout.ResponsiveStep("500px", 2) // Makes it beautifully horizontal on standard screens
+        formLayout.setResponsiveSteps(new FormLayout.ResponsiveStep("0", 1), new FormLayout.ResponsiveStep("500px", 2) // Makes it beautifully horizontal on standard screens
         );
 
-        binder.forField(nameField)
-                .asRequired("Department Name is required")
-                .bind(Department::getName, Department::setName);
+        binder.forField(nameField).asRequired("Department Name is required").bind(Department::getName, Department::setName);
 
         saveBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
         saveBtn.addClickListener(e -> saveDepartment());
@@ -173,6 +167,7 @@ public class DepartmentView extends VerticalLayout {
             dialog.open();
         }
     }
+
     private void deleteDepartment(Department department) {
         try {
             departmentService.delete(department);
@@ -191,21 +186,17 @@ public class DepartmentView extends VerticalLayout {
         Notification notification = Notification.show(message, 3000, Notification.Position.TOP_CENTER);
         notification.addThemeVariants(variant);
     }
+
     private void openReassignDialog(Department oldDept) {
         Dialog dialog = new Dialog();
         dialog.setHeaderTitle("Reassign Employees & Delete");
 
-        com.vaadin.flow.component.html.Paragraph warning = new com.vaadin.flow.component.html.Paragraph(
-                "This department has active employees. Select a new department to transfer them to. " +
-                        "The current Head of Department will be demoted to a standard employee."
-        );
+        com.vaadin.flow.component.html.Paragraph warning = new com.vaadin.flow.component.html.Paragraph("This department has active employees. Select a new department to transfer them to. " + "The current Head of Department will be demoted to a standard employee.");
         warning.getStyle().set("color", "#da1e28");
 
         com.vaadin.flow.component.combobox.ComboBox<Department> newDeptCombo = new com.vaadin.flow.component.combobox.ComboBox<>("Select New Department");
 
-        List<Department> availableDepts = departmentService.findAll().stream()
-                .filter(d -> !d.getId().equals(oldDept.getId()))
-                .collect(java.util.stream.Collectors.toList());
+        List<Department> availableDepts = departmentService.findAll().stream().filter(d -> !d.getId().equals(oldDept.getId())).collect(java.util.stream.Collectors.toList());
 
         newDeptCombo.setItems(availableDepts);
         newDeptCombo.setItemLabelGenerator(Department::getName);
@@ -214,8 +205,17 @@ public class DepartmentView extends VerticalLayout {
         Button confirmBtn = new Button("Reassign & Delete");
         confirmBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY, ButtonVariant.LUMO_ERROR);
         confirmBtn.setEnabled(false);
+        confirmBtn.setTooltipText("Select a new department from the dropdown to reassign employees and enable deletion.");
 
-        newDeptCombo.addValueChangeListener(e -> confirmBtn.setEnabled(e.getValue() != null));
+        newDeptCombo.addValueChangeListener(e -> {
+            boolean isSelected = e.getValue() != null;
+            confirmBtn.setEnabled(isSelected);
+            if (isSelected) {
+                confirmBtn.setTooltipText("Click to confirm reassignment and deletion.");
+            } else {
+                confirmBtn.setTooltipText("Select a new department from the dropdown to reassign employees and enable deletion.");
+            }
+        });
 
         confirmBtn.addClickListener(e -> {
             try {

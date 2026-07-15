@@ -8,6 +8,7 @@ import com.vaadin.flow.component.combobox.ComboBox;
 import com.vaadin.flow.component.confirmdialog.ConfirmDialog;
 import com.vaadin.flow.component.dialog.Dialog;
 import com.vaadin.flow.component.formlayout.FormLayout;
+import com.vaadin.flow.component.grid.ColumnTextAlign;
 import com.vaadin.flow.component.grid.Grid;
 import com.vaadin.flow.component.html.H2;
 import com.vaadin.flow.component.icon.Icon;
@@ -89,32 +90,54 @@ public class RoleView extends VerticalLayout {
     private void configureGrid() {
         grid.setSizeFull();
         grid.addClassName("standard-surface");
-        grid.addItemDoubleClickListener(e -> openForm(e.getItem())); // Invoke existing edit handler
+        grid.addItemDoubleClickListener(e -> openForm(e.getItem()));
 
+        // Role Name column
         grid.addColumn(Role::getName)
                 .setHeader("Role Name")
                 .setSortable(true)
+                .setAutoWidth(true)
                 .setFlexGrow(1)
-                .setTooltipGenerator(Role::getName);
+                .setResizable(true);
 
+        // Actions column
         grid.addComponentColumn(role -> {
-            Button editBtn = new Button(new Icon(VaadinIcon.EDIT));
-            editBtn.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
-            editBtn.addClickListener(e -> openForm(role));
+                    Button editBtn = new Button(new Icon(VaadinIcon.EDIT));
+                    editBtn.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
 
-            Button deleteBtn = new Button(new Icon(VaadinIcon.TRASH));
-            deleteBtn.addThemeVariants(ButtonVariant.LUMO_TERTIARY, ButtonVariant.LUMO_ERROR);
-            deleteBtn.addClickListener(e -> confirmAndDelete(role));
+                    Button deleteBtn = new Button(new Icon(VaadinIcon.TRASH));
+                    deleteBtn.addThemeVariants(ButtonVariant.LUMO_TERTIARY, ButtonVariant.LUMO_ERROR);
 
-            boolean isSystemRole = role.getName() != null && SYSTEM_ROLES.contains(role.getName().toUpperCase());
+                    editBtn.addClickListener(e -> openForm(role));
+                    deleteBtn.addClickListener(e -> confirmAndDelete(role));
 
-            if (isSystemRole) {
-                deleteBtn.setEnabled(false);
-                deleteBtn.setTooltipText("System reserved roles cannot be deleted.");
-            }
+                    boolean isSystemRole = role.getName() != null &&
+                            SYSTEM_ROLES.contains(role.getName().toUpperCase());
 
-            return new HorizontalLayout(editBtn, deleteBtn);
-        }).setHeader("Actions").setFlexGrow(0);
+                    // 1. Create your wrapper Span
+                    com.vaadin.flow.component.html.Span deleteWrapper = new com.vaadin.flow.component.html.Span(deleteBtn);
+
+                    if (isSystemRole) {
+                        deleteBtn.setEnabled(false);
+
+                        // 2. Use the Tooltip factory for components that don't have .setTooltipText()
+                        com.vaadin.flow.component.shared.Tooltip.forComponent(deleteWrapper)
+                                .setText("System reserved roles cannot be deleted.");
+                    }
+
+                    // 3. Add the wrapper (instead of direct button) to the actions layout
+                    HorizontalLayout actions = new HorizontalLayout(editBtn, deleteWrapper);
+                    actions.setSpacing(false);
+                    actions.setPadding(false);
+                    actions.setMargin(false);
+
+                    return actions;
+                })
+                .setHeader("Actions")
+                .setAutoWidth(true)
+                .setFlexGrow(0)
+                .setWidth("120px")
+                .setTextAlign(ColumnTextAlign.CENTER);
     }
 
     private void configureForm() {
@@ -259,7 +282,6 @@ public class RoleView extends VerticalLayout {
 
         dialog.open();
     }
-
     private void executeSave(boolean isSwapApproved) {
         try {
             roleService.save(currentRole, isSwapApproved);
