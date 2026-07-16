@@ -4,6 +4,7 @@ import com.murali.entity.LeaveApprovalPolicy;
 import com.murali.entity.LeaveType;
 import com.murali.service.LeaveApprovalRuleService;
 import com.murali.service.LeaveTypeService;
+import com.murali.views.components.EmptyStateComponent;
 import com.murali.views.components.GlobalSearchComponent;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
@@ -51,7 +52,7 @@ public class LeaveTypeView extends VerticalLayout {
 
     private final Dialog formDialog = new Dialog();
 
-    private final Span emptyMsg = new Span("No leave types found.");
+    private final EmptyStateComponent emptyState = new EmptyStateComponent(VaadinIcon.CALENDAR_CLOCK);
     private GlobalSearchComponent searchBox;
     private String currentSearch = "";
     private final TextField nameField = new TextField("Name");
@@ -75,8 +76,6 @@ public class LeaveTypeView extends VerticalLayout {
         configureGrid();
         configureForm();
 
-        emptyMsg.addClassName("empty-grid-message");
-
         searchBox = new GlobalSearchComponent(term -> {
             currentSearch = term;
             updateList();
@@ -92,9 +91,15 @@ public class LeaveTypeView extends VerticalLayout {
 
         HorizontalLayout toolbar = new HorizontalLayout(searchBox, addBtn, bulkDeleteBtn);
         toolbar.setWidthFull();
-        toolbar.expand(searchBox); // Expand search box to push buttons to the right
+        toolbar.expand(searchBox);
 
-        add(new H2("Leave Types Configuration"), toolbar, grid, emptyMsg);
+        // Dedicated content area to preserve spatial integrity
+        VerticalLayout gridContentArea = new VerticalLayout(grid, emptyState);
+        gridContentArea.setSizeFull();
+        gridContentArea.setPadding(false);
+        gridContentArea.setSpacing(false);
+
+        add(new H2("Leave Types Configuration"), toolbar, gridContentArea);
         updateList();
     }
 
@@ -269,17 +274,28 @@ public class LeaveTypeView extends VerticalLayout {
 
     private void updateList() {
         List<LeaveType> items;
-        if (currentSearch == null || currentSearch.isBlank()) {
+        boolean isSearchActive = currentSearch != null && !currentSearch.isBlank();
+
+        if (!isSearchActive) {
             items = leaveTypeService.getAllLeaveTypes();
         } else {
             items = leaveTypeService.search(currentSearch);
         }
 
         grid.setItems(items);
-
         boolean isEmpty = items.isEmpty();
+
+        // Smart Messaging Logic
+        if (isEmpty) {
+            if (isSearchActive) {
+                emptyState.setMessage("No results found", "No leave types match the search term: \"" + currentSearch + "\"");
+            } else {
+                emptyState.setMessage("No Leave Types Defined", "There are currently no leave types configured in the system.");
+            }
+        }
+
         grid.setVisible(!isEmpty);
-        emptyMsg.setVisible(isEmpty);
+        emptyState.setVisible(isEmpty);
 
         if (searchBox != null) {
             searchBox.hideSpinner();

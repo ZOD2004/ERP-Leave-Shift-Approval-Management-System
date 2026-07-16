@@ -6,6 +6,7 @@ import com.murali.service.ApprovalRoutingService;
 import com.murali.service.AttendanceCorrectionService;
 import com.murali.service.LeaveBalanceService;
 import com.murali.util.SecurityService;
+import com.murali.views.components.EmptyStateComponent;
 import com.murali.views.components.GlobalSearchComponent;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.avatar.Avatar;
@@ -14,10 +15,7 @@ import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.dialog.Dialog;
 import com.vaadin.flow.component.grid.Grid;
 import com.vaadin.flow.component.grid.GridVariant;
-import com.vaadin.flow.component.html.Div;
-import com.vaadin.flow.component.html.H2;
-import com.vaadin.flow.component.html.H5;
-import com.vaadin.flow.component.html.Span;
+import com.vaadin.flow.component.html.*;
 import com.vaadin.flow.component.icon.Icon;
 import com.vaadin.flow.component.icon.VaadinIcon;
 import com.vaadin.flow.component.notification.Notification;
@@ -55,8 +53,9 @@ public class ManagerApprovalView extends VerticalLayout {
     private final VerticalLayout leaveWrapper = new VerticalLayout();
     private final VerticalLayout correctionWrapper = new VerticalLayout();
 
-    private final Span leaveEmptyMsg = new Span("No pending leave requests.");
-    private final Span correctionEmptyMsg = new Span("No pending attendance corrections.");
+    private final EmptyStateComponent leaveEmptyState = new EmptyStateComponent(VaadinIcon.CLIPBOARD_CHECK);
+    private final EmptyStateComponent correctionEmptyState = new EmptyStateComponent(VaadinIcon.CLOCK);
+
     private GlobalSearchComponent leaveSearchBox;
     private GlobalSearchComponent correctionSearchBox;
     private String currentLeaveSearch = "";
@@ -96,12 +95,26 @@ public class ManagerApprovalView extends VerticalLayout {
 
         leaveWrapper.setSizeFull();
         leaveWrapper.setPadding(false);
-        leaveWrapper.add(createLeaveToolbar(), leaveGrid, leaveEmptyMsg);
+
+        // Dedicated content area to preserve spatial integrity
+        VerticalLayout leaveContentArea = new VerticalLayout(leaveGrid, leaveEmptyState);
+        leaveContentArea.setSizeFull();
+        leaveContentArea.setPadding(false);
+        leaveContentArea.setSpacing(false);
+
+        leaveWrapper.add(createLeaveToolbar(), leaveContentArea);
 
         correctionWrapper.setSizeFull();
         correctionWrapper.setPadding(false);
         correctionWrapper.setVisible(false);
-        correctionWrapper.add(createCorrectionToolbar(), correctionGrid, correctionEmptyMsg);
+
+        // Dedicated content area to preserve spatial integrity
+        VerticalLayout correctionContentArea = new VerticalLayout(correctionGrid, correctionEmptyState);
+        correctionContentArea.setSizeFull();
+        correctionContentArea.setPadding(false);
+        correctionContentArea.setSpacing(false);
+
+        correctionWrapper.add(createCorrectionToolbar(), correctionContentArea);
 
         add(title, tabs, leaveWrapper, correctionWrapper);
     }
@@ -291,8 +304,6 @@ public class ManagerApprovalView extends VerticalLayout {
         dialog.open();
     }
     private HorizontalLayout createLeaveToolbar() {
-        leaveEmptyMsg.addClassName("empty-grid-message");
-
         leaveSearchBox = new GlobalSearchComponent(term -> {
             currentLeaveSearch = term;
             refreshLeaveGrid();
@@ -306,8 +317,9 @@ public class ManagerApprovalView extends VerticalLayout {
 
     private void refreshLeaveGrid() {
         List<LeaveApproval> pending = approvalRoutingService.getPendingApprovalsForUser(currentUser.getId());
+        boolean isSearchActive = currentLeaveSearch != null && !currentLeaveSearch.isBlank();
 
-        if (currentLeaveSearch != null && !currentLeaveSearch.isBlank()) {
+        if (isSearchActive) {
             String term = currentLeaveSearch.toLowerCase();
             pending = pending.stream()
                     .filter(a -> a.getLeaveRequest().getEmployee().getFirstName().toLowerCase().contains(term))
@@ -315,16 +327,55 @@ public class ManagerApprovalView extends VerticalLayout {
         }
 
         leaveGrid.setItems(pending);
-
         boolean isEmpty = pending.isEmpty();
+
+        // Smart Messaging Logic
+        if (isEmpty) {
+            if (isSearchActive) {
+                leaveEmptyState.setMessage("No results found", "No pending leave requests match the search term: \"" + currentLeaveSearch + "\"");
+            } else {
+                leaveEmptyState.setMessage("No pending leave requests", "All leave requests assigned to you have been processed.");
+            }
+        }
+
         leaveGrid.setVisible(!isEmpty);
-        leaveEmptyMsg.setVisible(isEmpty);
+        leaveEmptyState.setVisible(isEmpty);
 
         if (leaveSearchBox != null) {
             leaveSearchBox.hideSpinner();
         }
     }
 
+    private void refreshCorrectionGrid() {
+        List<AttendanceCorrection> pending = attendanceCorrectionService.getPendingCorrectionsForApprover(currentUser.getId());
+        boolean isSearchActive = currentCorrectionSearch != null && !currentCorrectionSearch.isBlank();
+
+        if (isSearchActive) {
+            String term = currentCorrectionSearch.toLowerCase();
+            pending = pending.stream()
+                    .filter(c -> c.getAttendance().getEmployee().getFirstName().toLowerCase().contains(term))
+                    .toList();
+        }
+
+        correctionGrid.setItems(pending);
+        boolean isEmpty = pending.isEmpty();
+
+        // Smart Messaging Logic
+        if (isEmpty) {
+            if (isSearchActive) {
+                correctionEmptyState.setMessage("No results found", "No pending corrections match the search term: \"" + currentCorrectionSearch + "\"");
+            } else {
+                correctionEmptyState.setMessage("No attendance corrections", "There are currently no corrections awaiting your approval.");
+            }
+        }
+
+        correctionGrid.setVisible(!isEmpty);
+        correctionEmptyState.setVisible(isEmpty);
+
+        if (correctionSearchBox != null) {
+            correctionSearchBox.hideSpinner();
+        }
+    }
 
     private void configureCorrectionGrid() {
         correctionGrid.addThemeVariants(GridVariant.LUMO_ROW_STRIPES, GridVariant.LUMO_NO_BORDER);
@@ -459,7 +510,7 @@ public class ManagerApprovalView extends VerticalLayout {
         dialog.open();
     }
     private HorizontalLayout createCorrectionToolbar() {
-        correctionEmptyMsg.addClassName("empty-grid-message");
+//        correctionEmptyMsg.addClassName("empty-grid-message");
 
         correctionSearchBox = new GlobalSearchComponent(term -> {
             currentCorrectionSearch = term;
@@ -470,27 +521,6 @@ public class ManagerApprovalView extends VerticalLayout {
         toolbar.setWidthFull();
         toolbar.setJustifyContentMode(FlexComponent.JustifyContentMode.END);
         return toolbar;
-    }
-
-    private void refreshCorrectionGrid() {
-        List<AttendanceCorrection> pending = attendanceCorrectionService.getPendingCorrectionsForApprover(currentUser.getId());
-
-        if (currentCorrectionSearch != null && !currentCorrectionSearch.isBlank()) {
-            String term = currentCorrectionSearch.toLowerCase();
-            pending = pending.stream()
-                    .filter(c -> c.getAttendance().getEmployee().getFirstName().toLowerCase().contains(term))
-                    .toList();
-        }
-
-        correctionGrid.setItems(pending);
-
-        boolean isEmpty = pending.isEmpty();
-        correctionGrid.setVisible(!isEmpty);
-        correctionEmptyMsg.setVisible(isEmpty);
-
-        if (correctionSearchBox != null) {
-            correctionSearchBox.hideSpinner();
-        }
     }
 
     private Component createEmployeeBadge(Employee emp) {

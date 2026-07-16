@@ -6,6 +6,7 @@ import com.murali.entity.enums.RotationSegmentType;
 import com.murali.entity.enums.Shifts;
 import com.murali.entity.enums.WorkingDay;
 import com.murali.service.ShiftService;
+import com.murali.views.components.EmptyStateComponent;
 import com.murali.views.components.GlobalSearchComponent;
 import com.vaadin.flow.component.AbstractField;
 import com.vaadin.flow.component.Component;
@@ -59,7 +60,7 @@ public class ShiftView extends VerticalLayout {
     private final Grid<Shift> grid = new Grid<>(Shift.class, false);
     private final Button addBtn = new Button("Add New Shift", new Icon(VaadinIcon.PLUS));
 
-    private final Span emptyMsg = new Span("No shifts found.");
+    private final EmptyStateComponent emptyState = new EmptyStateComponent(VaadinIcon.CLOCK);
     private GlobalSearchComponent searchBox;
     private String currentSearch = "";
 
@@ -93,7 +94,6 @@ public class ShiftView extends VerticalLayout {
         configureGrid();
         configureForm();
 
-        emptyMsg.addClassName("empty-grid-message");
 
         searchBox = new GlobalSearchComponent(term -> {
             currentSearch = term;
@@ -106,8 +106,7 @@ public class ShiftView extends VerticalLayout {
         HorizontalLayout toolbar = new HorizontalLayout(searchBox, addBtn);
         toolbar.setWidthFull();
         toolbar.expand(searchBox); // Expand search box to push the Add button to the right
-
-        add(new H2("Shift Configuration"), toolbar, grid, emptyMsg);
+        add(new H2("Shift Configuration"), toolbar, grid, emptyState);
 
         updateList();
     }
@@ -430,8 +429,18 @@ public class ShiftView extends VerticalLayout {
         grid.setItems(items);
 
         boolean isEmpty = items.isEmpty();
+        boolean isSearchActive = currentSearch != null && !currentSearch.isBlank();
+
+        if (isEmpty) {
+            if (isSearchActive) {
+                emptyState.setMessage("No results found", "No shifts match the search term: \"" + currentSearch + "\"");
+            } else {
+                emptyState.setMessage("No Shifts Configured", "There are currently no shifts registered in the system.");
+            }
+        }
+
         grid.setVisible(!isEmpty);
-        emptyMsg.setVisible(isEmpty);
+        emptyState.setVisible(isEmpty);
 
         if (searchBox != null) {
             searchBox.hideSpinner();

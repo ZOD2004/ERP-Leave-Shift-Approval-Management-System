@@ -8,6 +8,7 @@ import com.murali.entity.Employee;
 import com.murali.repository.EmployeeRepository;
 import com.murali.service.*;
 import com.murali.util.SecurityService;
+import com.murali.views.components.EmptyStateComponent;
 import com.murali.views.components.GlobalSearchComponent;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.UI;
@@ -275,8 +276,7 @@ public class HrAdminWorkspace extends VerticalLayout {
 
         List<AttendanceCorrection> allCorrections = attendanceCorrectionService.getAllPendingCorrectionsGlobally();
 
-        Span emptyMsg = new Span("No pending anomalies found.");
-        emptyMsg.addClassName("empty-grid-message");
+        EmptyStateComponent emptyState = new EmptyStateComponent(VaadinIcon.WARNING);
 
         GlobalSearchComponent[] searchBoxRef = new GlobalSearchComponent[1];
         searchBoxRef[0] = new GlobalSearchComponent(searchTerm -> {
@@ -288,8 +288,18 @@ public class HrAdminWorkspace extends VerticalLayout {
                     .toList();
 
             grid.setItems(filtered);
-            grid.setVisible(!filtered.isEmpty());
-            emptyMsg.setVisible(filtered.isEmpty());
+            boolean isEmpty = filtered.isEmpty();
+
+            if (isEmpty) {
+                if (term.isBlank()) {
+                    emptyState.setMessage("No Pending Anomalies", "There are no attendance corrections requiring your attention.");
+                } else {
+                    emptyState.setMessage("No results found", "No anomalies match the search term: \"" + term + "\"");
+                }
+            }
+
+            grid.setVisible(!isEmpty);
+            emptyState.setVisible(isEmpty);
 
             if (searchBoxRef[0] != null) {
                 searchBoxRef[0].hideSpinner();
@@ -298,10 +308,14 @@ public class HrAdminWorkspace extends VerticalLayout {
         searchBoxRef[0].getStyle().set("margin-bottom", "var(--app-padding)");
 
         grid.setItems(allCorrections);
-        grid.setVisible(!allCorrections.isEmpty());
-        emptyMsg.setVisible(allCorrections.isEmpty());
+        boolean isInitialEmpty = allCorrections.isEmpty();
+        if (isInitialEmpty) {
+            emptyState.setMessage("No Pending Anomalies", "There are no attendance corrections requiring your attention.");
+        }
+        grid.setVisible(!isInitialEmpty);
+        emptyState.setVisible(isInitialEmpty);
 
-        section.add(title, searchBoxRef[0], grid, emptyMsg);
+        section.add(title, searchBoxRef[0], grid, emptyState);
         return section;
     }
 
@@ -401,14 +415,14 @@ public class HrAdminWorkspace extends VerticalLayout {
 
         List<DailyExpectedShift> items = bulkShifts.getOrDefault(employee.getId(), Collections.emptyList());
 
-        Span emptyMsg = new Span("No schedule available.");
-        emptyMsg.addClassName("empty-grid-message");
-        emptyMsg.setVisible(items.isEmpty());
+        EmptyStateComponent emptyState = new EmptyStateComponent(VaadinIcon.CALENDAR);
+        emptyState.setMessage("No Schedule", "You have no scheduled shifts for the upcoming week.");
+        emptyState.setVisible(items.isEmpty());
         grid.setVisible(!items.isEmpty());
 
         grid.setItems(items);
 
-        section.add(title, grid, emptyMsg);
+        section.add(title, grid, emptyState);
         return section;
     }
 
@@ -500,8 +514,7 @@ public class HrAdminWorkspace extends VerticalLayout {
 
         List<Object> rootItems = new java.util.ArrayList<>(allDepartments);
 
-        Span emptyMsg = new Span("No departments or employees found.");
-        emptyMsg.addClassName("empty-grid-message");
+        EmptyStateComponent emptyState = new EmptyStateComponent(VaadinIcon.SITEMAP);
 
         GlobalSearchComponent[] searchBoxRef = new GlobalSearchComponent[1];
         searchBoxRef[0] = new GlobalSearchComponent(searchTerm -> {
@@ -532,8 +545,17 @@ public class HrAdminWorkspace extends VerticalLayout {
             grid.expand(filteredRoots);
 
             boolean isDataEmpty = filteredRoots.isEmpty();
+
+            if (isDataEmpty) {
+                if (term.isBlank()) {
+                    emptyState.setMessage("Directory Empty", "No departments or employees found in the system.");
+                } else {
+                    emptyState.setMessage("No results found", "No departments or employees match the search term: \"" + term + "\"");
+                }
+            }
+
             grid.setVisible(!isDataEmpty);
-            emptyMsg.setVisible(isDataEmpty);
+            emptyState.setVisible(isDataEmpty);
 
             if (searchBoxRef[0] != null) {
                 searchBoxRef[0].hideSpinner();
@@ -552,10 +574,13 @@ public class HrAdminWorkspace extends VerticalLayout {
         });
 
         boolean isInitialEmpty = rootItems.isEmpty();
+        if (isInitialEmpty) {
+            emptyState.setMessage("Directory Empty", "No departments or employees found in the system.");
+        }
         grid.setVisible(!isInitialEmpty);
-        emptyMsg.setVisible(isInitialEmpty);
+        emptyState.setVisible(isInitialEmpty);
 
-        section.add(title, searchBoxRef[0], grid, emptyMsg);
+        section.add(title, searchBoxRef[0], grid, emptyState);
         return section;
     }
     private Button createViewLeavesBtn(Employee emp) {

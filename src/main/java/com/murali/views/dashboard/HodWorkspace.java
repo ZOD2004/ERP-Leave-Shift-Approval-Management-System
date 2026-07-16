@@ -8,6 +8,7 @@ import com.murali.dto.DailyExpectedShift;
 import com.murali.repository.AttendanceRepository;
 import com.murali.repository.EmployeeRepository;
 import com.murali.util.SecurityService;
+import com.murali.views.components.EmptyStateComponent;
 import com.murali.views.components.GlobalSearchComponent;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.UI;
@@ -241,8 +242,7 @@ public class HodWorkspace extends VerticalLayout {
 
         List<Employee> directReportsToHod = managerToDirectReportsMap.getOrDefault(hodId, Collections.emptyList());
 
-        Span emptyMsg = new Span("No employees found in hierarchy.");
-        emptyMsg.addClassName("empty-grid-message");
+        EmptyStateComponent emptyState = new EmptyStateComponent(VaadinIcon.SITEMAP);
 
         GlobalSearchComponent[] searchBoxRef = new GlobalSearchComponent[1];
         searchBoxRef[0] = new GlobalSearchComponent(searchTerm -> {
@@ -258,8 +258,17 @@ public class HodWorkspace extends VerticalLayout {
             treeGrid.expand(filteredRoots);
 
             boolean isDataEmpty = filteredRoots.isEmpty();
+
+            if (isDataEmpty) {
+                if (term.isBlank()) {
+                    emptyState.setMessage("No Team Members", "There are no direct reports assigned to you.");
+                } else {
+                    emptyState.setMessage("No results found", "No team members match the search term: \"" + term + "\"");
+                }
+            }
+
             treeGrid.setVisible(!isDataEmpty);
-            emptyMsg.setVisible(isDataEmpty);
+            emptyState.setVisible(isDataEmpty);
 
             if (searchBoxRef[0] != null) {
                 searchBoxRef[0].hideSpinner();
@@ -269,13 +278,16 @@ public class HodWorkspace extends VerticalLayout {
         searchBoxRef[0].getStyle().set("margin-bottom", "var(--app-padding)");
 
         boolean isInitialEmpty = directReportsToHod.isEmpty();
+        if (isInitialEmpty) {
+            emptyState.setMessage("No Team Members", "There are no direct reports assigned to you.");
+        }
         treeGrid.setVisible(!isInitialEmpty);
-        emptyMsg.setVisible(isInitialEmpty);
+        emptyState.setVisible(isInitialEmpty);
 
         treeGrid.setItems(directReportsToHod, emp -> managerToDirectReportsMap.getOrDefault(emp.getId(), Collections.emptyList()));
         treeGrid.expand(directReportsToHod);
 
-        section.add(title, searchBoxRef[0], treeGrid, emptyMsg);
+        section.add(title, searchBoxRef[0], treeGrid, emptyState);
         return section;
     }
 
@@ -376,14 +388,14 @@ public class HodWorkspace extends VerticalLayout {
 
         List<DailyExpectedShift> items = bulkShifts.getOrDefault(employee.getId(), Collections.emptyList());
 
-        Span emptyMsg = new Span("No schedule available.");
-        emptyMsg.addClassName("empty-grid-message");
-        emptyMsg.setVisible(items.isEmpty());
+        EmptyStateComponent emptyState = new EmptyStateComponent(VaadinIcon.CALENDAR);
+        emptyState.setMessage("No Schedule", "You have no scheduled shifts for the upcoming week.");
+        emptyState.setVisible(items.isEmpty());
         grid.setVisible(!items.isEmpty());
 
         grid.setItems(items);
 
-        section.add(title, grid, emptyMsg);
+        section.add(title, grid, emptyState);
         return section;
     }
     private Button createViewLeavesBtn(Employee emp) {

@@ -12,6 +12,7 @@ import com.murali.util.SecurityService;
 import com.murali.service.AttendanceProcessService;
 import com.murali.service.LeaveBalanceService;
 import com.murali.service.ScheduleCalculationService;
+import com.murali.views.components.EmptyStateComponent;
 import com.murali.views.components.GlobalSearchComponent;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.UI;
@@ -325,14 +326,14 @@ public class EmployeeWorkspace extends VerticalLayout {
 
         List<DailyExpectedShift> items = bulkShifts.getOrDefault(employee.getId(), List.of());
 
-        Span emptyMsg = new Span("No schedule available.");
-        emptyMsg.addClassName("empty-grid-message");
-        emptyMsg.setVisible(items.isEmpty());
+        EmptyStateComponent emptyState = new EmptyStateComponent(VaadinIcon.CALENDAR);
+        emptyState.setMessage("No Schedule", "You have no scheduled shifts for the upcoming week.");
+        emptyState.setVisible(items.isEmpty());
         grid.setVisible(!items.isEmpty());
 
         grid.setItems(items);
 
-        section.add(title, grid, emptyMsg);
+        section.add(title, grid, emptyState);
         return section;
     }
 
@@ -354,17 +355,17 @@ public class EmployeeWorkspace extends VerticalLayout {
         // Fetch top 5 upcoming holidays
         List<Holiday> upcoming = holidayRepository.findUpcomingHolidays(LocalDate.now());
 
-        Span emptyMsg = new Span("No upcoming holidays.");
-        emptyMsg.addClassName("empty-grid-message");
+        EmptyStateComponent emptyState = new EmptyStateComponent(VaadinIcon.AIRPLANE);
+        emptyState.setMessage("No Upcoming Holidays", "There are no public holidays scheduled in the near future.");
         boolean isEmpty = upcoming.isEmpty();
-        emptyMsg.setVisible(isEmpty);
+        emptyState.setVisible(isEmpty);
         grid.setVisible(!isEmpty);
 
         if (!isEmpty) {
             grid.setItems(upcoming.size() > 5 ? upcoming.subList(0, 5) : upcoming);
         }
 
-        section.add(title, grid, emptyMsg);
+        section.add(title, grid, emptyState);
         return section;
     }
 
@@ -425,8 +426,7 @@ public class EmployeeWorkspace extends VerticalLayout {
         }).setHeader("Status").setAutoWidth(true);
 
         List<LeaveRequest> allRequests = leaveRequestService.getLeaveHistoryForEmployee(employeeId);
-        Span emptyMsg = new Span("No leave requests found.");
-        emptyMsg.addClassName("empty-grid-message");
+        EmptyStateComponent emptyState = new EmptyStateComponent(VaadinIcon.FLIGHT_TAKEOFF);
 
         GlobalSearchComponent[] searchBoxRef = new GlobalSearchComponent[1];
         searchBoxRef[0] = new GlobalSearchComponent(searchTerm -> {
@@ -437,8 +437,18 @@ public class EmployeeWorkspace extends VerticalLayout {
                     .toList();
 
             grid.setItems(filtered);
-            grid.setVisible(!filtered.isEmpty());
-            emptyMsg.setVisible(filtered.isEmpty());
+            boolean isEmpty = filtered.isEmpty();
+
+            if (isEmpty) {
+                if (term.isBlank()) {
+                    emptyState.setMessage("No Leave History", "You have not submitted any leave requests.");
+                } else {
+                    emptyState.setMessage("No results found", "No leave requests match the search term: \"" + term + "\"");
+                }
+            }
+
+            grid.setVisible(!isEmpty);
+            emptyState.setVisible(isEmpty);
 
             if (searchBoxRef[0] != null) {
                 searchBoxRef[0].hideSpinner();
@@ -447,10 +457,14 @@ public class EmployeeWorkspace extends VerticalLayout {
         searchBoxRef[0].getStyle().set("margin-bottom", "var(--app-padding)");
 
         grid.setItems(allRequests);
-        grid.setVisible(!allRequests.isEmpty());
-        emptyMsg.setVisible(allRequests.isEmpty());
+        boolean initialEmpty = allRequests.isEmpty();
+        if (initialEmpty) {
+            emptyState.setMessage("No Leave History", "You have not submitted any leave requests.");
+        }
+        grid.setVisible(!initialEmpty);
+        emptyState.setVisible(initialEmpty);
 
-        layout.add(searchBoxRef[0], grid, emptyMsg);
+        layout.add(searchBoxRef[0], grid, emptyState);
         return layout;
     }
 
@@ -466,8 +480,7 @@ public class EmployeeWorkspace extends VerticalLayout {
         DatePicker startDate = new DatePicker("Start Date", LocalDate.now().minusDays(30));
         DatePicker endDate = new DatePicker("End Date", LocalDate.now());
 
-        Span emptyMsg = new Span("No attendance records found.");
-        emptyMsg.addClassName("empty-grid-message");
+        EmptyStateComponent emptyState = new EmptyStateComponent(VaadinIcon.CLOCK);
 
         String[] currentSearch = new String[]{""};
         GlobalSearchComponent[] searchBoxRef = new GlobalSearchComponent[1];
@@ -505,8 +518,18 @@ public class EmployeeWorkspace extends VerticalLayout {
                 }
 
                 grid.setItems(data);
-                grid.setVisible(!data.isEmpty());
-                emptyMsg.setVisible(data.isEmpty());
+                boolean isEmpty = data.isEmpty();
+
+                if (isEmpty) {
+                    if (term != null && !term.isBlank()) {
+                        emptyState.setMessage("No results found", "No attendance records match the search term: \"" + term + "\"");
+                    } else {
+                        emptyState.setMessage("No Attendance Records", "No punches found for the selected date range.");
+                    }
+                }
+
+                grid.setVisible(!isEmpty);
+                emptyState.setVisible(isEmpty);
 
                 if (searchBoxRef[0] != null) {
                     searchBoxRef[0].hideSpinner();
@@ -528,7 +551,7 @@ public class EmployeeWorkspace extends VerticalLayout {
 
         refreshData.run();
 
-        layout.add(toolbar, grid, emptyMsg);
+        layout.add(toolbar, grid, emptyState);
         return layout;
     }
 }

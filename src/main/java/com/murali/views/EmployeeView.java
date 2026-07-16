@@ -4,6 +4,7 @@ import com.murali.entity.*;
 import com.murali.exception.*;
 import com.murali.repository.LeaveTypeRepository;
 import com.murali.service.*;
+import com.murali.views.components.EmptyStateComponent;
 import com.murali.views.components.GlobalSearchComponent;
 import com.vaadin.flow.component.AbstractField;
 import com.vaadin.flow.component.HasValue;
@@ -56,7 +57,8 @@ public class EmployeeView extends VerticalLayout {
     private final Button addBtn = new Button("Onboard New Employee", new Icon(VaadinIcon.PLUS));
     private final Dialog formDialog = new Dialog();
 
-    private final Span emptyMsg = new Span("No employees found.");
+    // Upgraded Empty State Component
+    private final EmptyStateComponent emptyState = new EmptyStateComponent(VaadinIcon.USERS);
     private GlobalSearchComponent searchBox;
     private String currentSearch = "";
 
@@ -96,8 +98,6 @@ public class EmployeeView extends VerticalLayout {
         configureGrid();
         configureForm();
 
-        emptyMsg.addClassName("empty-grid-message");
-
         searchBox = new GlobalSearchComponent(term -> {
             currentSearch = term;
             updateList();
@@ -110,7 +110,13 @@ public class EmployeeView extends VerticalLayout {
         toolbar.setWidthFull();
         toolbar.expand(searchBox);
 
-        add(new H2("Employee Directory"), toolbar, grid, emptyMsg);
+        // Dedicated content area to preserve spatial integrity
+        VerticalLayout gridContentArea = new VerticalLayout(grid, emptyState);
+        gridContentArea.setSizeFull();
+        gridContentArea.setPadding(false);
+        gridContentArea.setSpacing(false);
+
+        add(new H2("Employee Directory"), toolbar, gridContentArea);
         updateList();
     }
 
@@ -524,7 +530,9 @@ public class EmployeeView extends VerticalLayout {
 
     private void updateList() {
         List<Employee> items;
-        if (currentSearch == null || currentSearch.isBlank()) {
+        boolean isSearchActive = currentSearch != null && !currentSearch.isBlank();
+
+        if (!isSearchActive) {
             items = employeeService.findAllActive();
         } else {
             // Your service handles the DB-level filtering based on this term
@@ -532,10 +540,18 @@ public class EmployeeView extends VerticalLayout {
         }
 
         grid.setItems(items);
-
         boolean isEmpty = items.isEmpty();
+
+        if (isEmpty) {
+            if (isSearchActive) {
+                emptyState.setMessage("No results found", "No employees match the search term: \"" + currentSearch + "\"");
+            } else {
+                emptyState.setMessage("Directory Empty", "There are currently no active employees in the system.");
+            }
+        }
+
         grid.setVisible(!isEmpty);
-        emptyMsg.setVisible(isEmpty);
+        emptyState.setVisible(isEmpty);
 
         if (searchBox != null) {
             searchBox.hideSpinner();
@@ -575,7 +591,6 @@ public class EmployeeView extends VerticalLayout {
                     }
                 }
                 return formatted.toString().trim();
-
         }
     }
 }

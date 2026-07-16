@@ -4,6 +4,7 @@ import com.murali.entity.AuditLog;
 import com.murali.repository.DepartmentRepository;
 import com.murali.repository.UserRepository;
 import com.murali.service.*;
+import com.murali.views.components.EmptyStateComponent;
 import com.murali.views.components.GlobalSearchComponent;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.button.Button;
@@ -233,8 +234,7 @@ public class SuperAdminWorkspace extends VerticalLayout {
 
         List<AuditLog> allLogs = auditLogService.getRecentLogs(40);
 
-        Span emptyMsg = new Span("No recent audit logs found.");
-        emptyMsg.addClassName("empty-grid-message");
+        EmptyStateComponent emptyState = new EmptyStateComponent(VaadinIcon.RECORDS);
 
         GlobalSearchComponent[] searchBoxRef = new GlobalSearchComponent[1];
         searchBoxRef[0] = new GlobalSearchComponent(searchTerm -> {
@@ -246,8 +246,18 @@ public class SuperAdminWorkspace extends VerticalLayout {
                     .toList();
 
             grid.setItems(filtered);
-            grid.setVisible(!filtered.isEmpty());
-            emptyMsg.setVisible(filtered.isEmpty());
+            boolean isEmpty = filtered.isEmpty();
+
+            if (isEmpty) {
+                if (term.isBlank()) {
+                    emptyState.setMessage("No Audit Logs", "There are no recent audit logs in the system.");
+                } else {
+                    emptyState.setMessage("No results found", "No logs match the search term: \"" + term + "\"");
+                }
+            }
+
+            grid.setVisible(!isEmpty);
+            emptyState.setVisible(isEmpty);
 
             if (searchBoxRef[0] != null) {
                 searchBoxRef[0].hideSpinner();
@@ -257,10 +267,13 @@ public class SuperAdminWorkspace extends VerticalLayout {
 
         boolean isEmpty = allLogs.isEmpty();
         grid.setItems(allLogs);
+        if (isEmpty) {
+            emptyState.setMessage("No Audit Logs", "There are no recent audit logs in the system.");
+        }
         grid.setVisible(!isEmpty);
-        emptyMsg.setVisible(isEmpty);
+        emptyState.setVisible(isEmpty);
 
-        layout.add(title, searchBoxRef[0], grid, emptyMsg);
+        layout.add(title, searchBoxRef[0], grid, emptyState);
         return layout;
     }
 

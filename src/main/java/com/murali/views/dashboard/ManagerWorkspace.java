@@ -10,6 +10,7 @@ import com.murali.repository.AttendanceRepository;
 import com.murali.repository.EmployeeRepository;
 import com.murali.service.*;
 import com.murali.util.SecurityService;
+import com.murali.views.components.EmptyStateComponent;
 import com.murali.views.components.GlobalSearchComponent;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.UI;
@@ -287,8 +288,7 @@ public class ManagerWorkspace extends VerticalLayout {
 
         grid.addComponentColumn(emp -> createViewLeavesBtn(emp)).setHeader("Actions").setAutoWidth(true);
 
-        Span emptyMsg = new Span("No team members found.");
-        emptyMsg.addClassName("empty-grid-message");
+        EmptyStateComponent emptyState = new EmptyStateComponent(VaadinIcon.USERS);
 
         GlobalSearchComponent[] searchBoxRef = new GlobalSearchComponent[1];
         searchBoxRef[0] = new GlobalSearchComponent(searchTerm -> {
@@ -299,8 +299,18 @@ public class ManagerWorkspace extends VerticalLayout {
                     .toList();
 
             grid.setItems(filtered);
-            grid.setVisible(!filtered.isEmpty());
-            emptyMsg.setVisible(filtered.isEmpty());
+            boolean isEmpty = filtered.isEmpty();
+
+            if (isEmpty) {
+                if (term.isBlank()) {
+                    emptyState.setMessage("No Team Members", "There are no employees currently reporting to you.");
+                } else {
+                    emptyState.setMessage("No results found", "No team members match the search term: \"" + term + "\"");
+                }
+            }
+
+            grid.setVisible(!isEmpty);
+            emptyState.setVisible(isEmpty);
 
             if (searchBoxRef[0] != null) {
                 searchBoxRef[0].hideSpinner();
@@ -310,10 +320,13 @@ public class ManagerWorkspace extends VerticalLayout {
 
         boolean isEmpty = directReports.isEmpty();
         grid.setItems(directReports);
+        if (isEmpty) {
+            emptyState.setMessage("No Team Members", "There are no employees currently reporting to you.");
+        }
         grid.setVisible(!isEmpty);
-        emptyMsg.setVisible(isEmpty);
+        emptyState.setVisible(isEmpty);
 
-        section.add(title, searchBoxRef[0], grid, emptyMsg);
+        section.add(title, searchBoxRef[0], grid, emptyState);
         return section;
     }
 
@@ -349,8 +362,7 @@ public class ManagerWorkspace extends VerticalLayout {
 
         List<LeaveApproval> pendingItems = approvalRoutingService.getPendingApprovalsForUser(userId);
 
-        Span emptyMsg = new Span("No pending actions required.");
-        emptyMsg.addClassName("empty-grid-message");
+        EmptyStateComponent emptyState = new EmptyStateComponent(VaadinIcon.INBOX);
 
         GlobalSearchComponent[] searchBoxRef = new GlobalSearchComponent[1];
         searchBoxRef[0] = new GlobalSearchComponent(searchTerm -> {
@@ -362,8 +374,18 @@ public class ManagerWorkspace extends VerticalLayout {
                     .toList();
 
             grid.setItems(filtered);
-            grid.setVisible(!filtered.isEmpty());
-            emptyMsg.setVisible(filtered.isEmpty());
+            boolean isEmpty = filtered.isEmpty();
+
+            if (isEmpty) {
+                if (term.isBlank()) {
+                    emptyState.setMessage("All Caught Up", "You have no pending approvals at the moment.");
+                } else {
+                    emptyState.setMessage("No results found", "No pending actions match the search term: \"" + term + "\"");
+                }
+            }
+
+            grid.setVisible(!isEmpty);
+            emptyState.setVisible(isEmpty);
 
             if (searchBoxRef[0] != null) {
                 searchBoxRef[0].hideSpinner();
@@ -376,10 +398,13 @@ public class ManagerWorkspace extends VerticalLayout {
             // Default view keeps it clean with a max of 5 items
             grid.setItems(pendingItems.size() > 5 ? pendingItems.subList(0, 5) : pendingItems);
         }
+        if (isEmpty) {
+            emptyState.setMessage("All Caught Up", "You have no pending approvals at the moment.");
+        }
         grid.setVisible(!isEmpty);
-        emptyMsg.setVisible(isEmpty);
+        emptyState.setVisible(isEmpty);
 
-        section.add(titleRow, searchBoxRef[0], grid, emptyMsg);
+        section.add(titleRow, searchBoxRef[0], grid, emptyState);
         return section;
     }
     private Component createWeeklyScheduleWidget(Employee employee) {
@@ -422,14 +447,14 @@ public class ManagerWorkspace extends VerticalLayout {
 
         List<DailyExpectedShift> items = bulkShifts.getOrDefault(employee.getId(), Collections.emptyList());
 
-        Span emptyMsg = new Span("No schedule available.");
-        emptyMsg.addClassName("empty-grid-message");
-        emptyMsg.setVisible(items.isEmpty());
+        EmptyStateComponent emptyState = new EmptyStateComponent(VaadinIcon.CALENDAR);
+        emptyState.setMessage("No Schedule", "You have no scheduled shifts for the upcoming week.");
+        emptyState.setVisible(items.isEmpty());
         grid.setVisible(!items.isEmpty());
 
         grid.setItems(items);
 
-        section.add(title, grid, emptyMsg);
+        section.add(title, grid, emptyState);
         return section;
     }
     private Button createViewLeavesBtn(Employee emp) {

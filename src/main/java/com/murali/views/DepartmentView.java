@@ -3,6 +3,7 @@ package com.murali.views;
 import com.murali.entity.Department;
 import com.murali.entity.Employee;
 import com.murali.service.DepartmentService;
+import com.murali.views.components.EmptyStateComponent;
 import com.murali.views.components.GlobalSearchComponent;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
@@ -52,7 +53,7 @@ public class DepartmentView extends VerticalLayout {
     private final Binder<Department> binder = new BeanValidationBinder<>(Department.class);
     private Department currentDepartment;
 
-    private final Span emptyMsg = new Span("No departments found.");
+    private final EmptyStateComponent emptyState = new EmptyStateComponent(VaadinIcon.BUILDING);
     private GlobalSearchComponent searchBox;
     private String currentSearch = "";
 
@@ -67,8 +68,6 @@ public class DepartmentView extends VerticalLayout {
         addBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
         addBtn.addClickListener(e -> openForm(new Department()));
 
-        emptyMsg.addClassName("empty-grid-message");
-
         searchBox = new GlobalSearchComponent(term -> {
             currentSearch = term.toLowerCase();
             updateList();
@@ -77,12 +76,20 @@ public class DepartmentView extends VerticalLayout {
         H2 title = new H2("Department Configuration");
         title.addClassNames(LumoUtility.Margin.Top.NONE, LumoUtility.Margin.Bottom.NONE);
 
-        HorizontalLayout toolbar = new HorizontalLayout(title, searchBox, addBtn);
+        HorizontalLayout toolbar = new HorizontalLayout(title, addBtn);
         toolbar.setWidthFull();
         toolbar.setAlignItems(Alignment.CENTER);
+        toolbar.setJustifyContentMode(JustifyContentMode.BETWEEN);
         toolbar.expand(searchBox);
         searchBox.getStyle().set("padding-left", "var(--app-layout-margin)");
-        add(toolbar, grid, emptyMsg);
+
+        // Dedicated content area to preserve spatial integrity
+        VerticalLayout gridContentArea = new VerticalLayout(grid, emptyState);
+        gridContentArea.setSizeFull();
+        gridContentArea.setPadding(false);
+        gridContentArea.setSpacing(false);
+
+        add(toolbar,searchBox, gridContentArea);
 
         updateList();
     }
@@ -197,8 +204,9 @@ public class DepartmentView extends VerticalLayout {
 
     private void updateList() {
         List<Department> allDepts = departmentService.findAll();
+        boolean isSearchActive = currentSearch != null && !currentSearch.isBlank();
 
-        if (currentSearch != null && !currentSearch.isBlank()) {
+        if (isSearchActive) {
             allDepts = allDepts.stream()
                     .filter(d -> d.getName().toLowerCase().contains(currentSearch) ||
                             (d.getHod() != null && d.getHod().getFirstName().toLowerCase().contains(currentSearch)))
@@ -206,10 +214,19 @@ public class DepartmentView extends VerticalLayout {
         }
 
         grid.setItems(allDepts);
-
         boolean isEmpty = allDepts.isEmpty();
+
+        // Smart Messaging Logic
+        if (isEmpty) {
+            if (isSearchActive) {
+                emptyState.setMessage("No results found", "No departments match the search term: \"" + currentSearch + "\"");
+            } else {
+                emptyState.setMessage("No Departments Configured", "There are currently no departments set up in the system.");
+            }
+        }
+
         grid.setVisible(!isEmpty);
-        emptyMsg.setVisible(isEmpty);
+        emptyState.setVisible(isEmpty);
 
         if (searchBox != null) {
             searchBox.hideSpinner();

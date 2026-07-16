@@ -5,6 +5,8 @@ import com.murali.entity.User;
 import com.murali.exception.UserAlreadyExistException;
 import com.murali.service.RoleService;
 import com.murali.service.UserService;
+import com.murali.views.components.EmptyStateComponent;
+import com.murali.views.components.GlobalSearchComponent;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
@@ -31,6 +33,8 @@ import com.vaadin.flow.theme.lumo.LumoUtility;
 import jakarta.annotation.security.PermitAll;
 import jakarta.annotation.security.RolesAllowed;
 
+import java.util.List;
+
 @Route(value = "add-user", layout = MainLayout.class)
 @PageTitle("Manage Users")
 @RolesAllowed({"ROLE_SUPER_ADMIN"})
@@ -41,6 +45,10 @@ public class UserView extends VerticalLayout {
 
     private final Grid<User> grid = new Grid<>(User.class, false);
     private final Button addBtn = new Button("Add New User", new Icon(VaadinIcon.PLUS));
+
+    private final EmptyStateComponent emptyState = new EmptyStateComponent(VaadinIcon.USERS);
+    private GlobalSearchComponent searchBox;
+    private String currentSearch = "";
 
     private final Dialog formDialog = new Dialog();
     private final TextField username = new TextField("Username");
@@ -70,13 +78,17 @@ public class UserView extends VerticalLayout {
         H1 title = new H1("User Management");
         title.addClassName(LumoUtility.Margin.NONE);
 
-        HorizontalLayout toolbar = new HorizontalLayout(title, addBtn);
+        searchBox = new GlobalSearchComponent(term -> {
+            currentSearch = term != null ? term.toLowerCase() : "";
+            updateList();
+        });
 
+        HorizontalLayout toolbar = new HorizontalLayout(title, searchBox, addBtn);
         toolbar.setWidthFull();
         toolbar.setAlignItems(Alignment.CENTER);
-        toolbar.setJustifyContentMode(JustifyContentMode.BETWEEN);
+        toolbar.expand(searchBox);
 
-        add(toolbar, grid);
+        add(toolbar, grid, emptyState);
         updateList();
     }
 
@@ -182,7 +194,33 @@ public class UserView extends VerticalLayout {
     }
 
     private void updateList() {
-        grid.setItems(userService.findAll());
+        List<User> allUsers = userService.findAll();
+        boolean isSearchActive = currentSearch != null && !currentSearch.isBlank();
+
+        if (isSearchActive) {
+            allUsers = allUsers.stream()
+                    .filter(u -> (u.getUsername() != null && u.getUsername().toLowerCase().contains(currentSearch)) ||
+                            (u.getEmail() != null && u.getEmail().toLowerCase().contains(currentSearch)))
+                    .toList();
+        }
+
+        grid.setItems(allUsers);
+        boolean isEmpty = allUsers.isEmpty();
+
+        if (isEmpty) {
+            if (isSearchActive) {
+                emptyState.setMessage("No results found", "No users match the search term: \"" + currentSearch + "\"");
+            } else {
+                emptyState.setMessage("No Users Found", "There are currently no users registered in the system.");
+            }
+        }
+
+        grid.setVisible(!isEmpty);
+        emptyState.setVisible(isEmpty);
+
+        if (searchBox != null) {
+            searchBox.hideSpinner();
+        }
     }
 
     private void showNotification(String text, NotificationVariant variant) {

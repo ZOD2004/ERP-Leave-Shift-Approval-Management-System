@@ -8,6 +8,7 @@ import com.murali.service.AuditLogService;
 import com.murali.service.DashboardService;
 import com.murali.service.LeaveBalanceService;
 import com.murali.service.LeaveRequestService;
+import com.murali.views.components.EmptyStateComponent;
 import com.murali.views.components.GlobalSearchComponent;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.button.Button;
@@ -19,6 +20,8 @@ import com.vaadin.flow.component.grid.GridVariant;
 import com.vaadin.flow.component.html.H2;
 import com.vaadin.flow.component.html.H3;
 import com.vaadin.flow.component.html.Span;
+import com.vaadin.flow.component.icon.Icon;
+import com.vaadin.flow.component.icon.VaadinIcon;
 import com.vaadin.flow.component.orderedlayout.FlexComponent;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
@@ -44,8 +47,9 @@ public class AuditDashboardView extends VerticalLayout {
     private final AuditLogService auditLogService;
     private final LeaveRequestService leaveRequestService;
 
-    private final Span ledgerEmptyMsg = new Span("No leave transactions found.");
-    private final Span auditEmptyMsg = new Span("No audit logs found.");
+    private final EmptyStateComponent ledgerEmptyState = new EmptyStateComponent(VaadinIcon.FILE_TEXT_O);
+    private final EmptyStateComponent auditEmptyState = new EmptyStateComponent(VaadinIcon.RECORDS);
+
     private GlobalSearchComponent ledgerSearchBox;
     private GlobalSearchComponent auditSearchBox;
     private String currentLedgerSearch = "";
@@ -117,7 +121,6 @@ public class AuditDashboardView extends VerticalLayout {
         return card;
     }
 
-    // --- SECTION B: LEAVE LEDGER ---
     private Component createLeaveLedgerSection() {
         VerticalLayout ledgerLayout = new VerticalLayout();
         ledgerLayout.setWidthFull();
@@ -125,9 +128,6 @@ public class AuditDashboardView extends VerticalLayout {
 
         H3 title = new H3("Leave Ledger");
         title.addClassNames(LumoUtility.Margin.Bottom.NONE);
-
-        ledgerEmptyMsg.addClassName("empty-grid-message");
-
         DatePicker dateFilter = new DatePicker("Date");
         ComboBox<String> typeFilter = new ComboBox<>("Transaction Type");
         typeFilter.setItems(LeaveBalanceService.ALLOCATION, LeaveBalanceService.PENDING_HOLD,
@@ -152,14 +152,13 @@ public class AuditDashboardView extends VerticalLayout {
                 .setTooltipGenerator(tx -> tx.getEmployee().getId() + " - " + tx.getEmployee().getFirstName());
         grid.addColumn(tx -> tx.getLeaveType().getCode())
                 .setHeader("Leave Type").setAutoWidth(true)
-                .setTooltipGenerator(tx -> tx.getLeaveType().getCode());;
+                .setTooltipGenerator(tx -> tx.getLeaveType().getCode());
         grid.addColumn(LeaveBalanceTransaction::getTransactionType)
                 .setHeader("Transaction Type").setAutoWidth(true)
-                .setTooltipGenerator(LeaveBalanceTransaction::getTransactionType);;
+                .setTooltipGenerator(LeaveBalanceTransaction::getTransactionType);
         grid.addColumn(LeaveBalanceTransaction::getDays)
                 .setHeader("Days (+/-)");
 
-        // Reference ID Column with Dialog trigger
         grid.addColumn(new ComponentRenderer<>(tx -> {
             if (tx.getReferenceId() == null) return new Span("-");
             Button refBtn = new Button(String.valueOf(tx.getReferenceId()));
@@ -168,7 +167,6 @@ public class AuditDashboardView extends VerticalLayout {
             return refBtn;
         })).setHeader("Ref ID");
 
-// Assumed data fetch & filtering setup
         List<LeaveBalanceTransaction> transactions = leaveBalanceService.findAllWithDetails();
         ListDataProvider<LeaveBalanceTransaction> dataProvider = new ListDataProvider<>(transactions);
         grid.setDataProvider(dataProvider);
@@ -190,12 +188,18 @@ public class AuditDashboardView extends VerticalLayout {
         filters.getStyle().set("margin-bottom", "var(--app-padding)");
 
         typeFilter.addValueChangeListener(e -> refreshLedger.run());
-        dateFilter.addValueChangeListener(e -> refreshLedger.run()); // Hooked up date filter for future use
+        dateFilter.addValueChangeListener(e -> refreshLedger.run());
+
+        // Dedicated Content Area for Ledger
+        VerticalLayout gridContentArea = new VerticalLayout(grid, ledgerEmptyState);
+        gridContentArea.setSizeFull();
+        gridContentArea.setPadding(false);
+        gridContentArea.setSpacing(false);
 
         // Initial Data Load
         refreshLedger.run();
 
-        ledgerLayout.add(title, filters, grid, ledgerEmptyMsg);
+        ledgerLayout.add(title, filters, gridContentArea);
         return ledgerLayout;
     }
 
@@ -221,9 +225,18 @@ public class AuditDashboardView extends VerticalLayout {
 
         // Determine if the filter resulted in 0 items
         boolean isEmpty = dataProvider.size(new com.vaadin.flow.data.provider.Query<>(dataProvider.getFilter())) == 0;
+        boolean isSearchActive = (currentLedgerSearch != null && !currentLedgerSearch.isBlank()) || typeValue != null;
+
+        if (isEmpty) {
+            if (isSearchActive) {
+                ledgerEmptyState.setMessage("No results found", "No transactions match your current search and filter criteria.");
+            } else {
+                ledgerEmptyState.setMessage("No Transactions", "The leave ledger is currently empty.");
+            }
+        }
 
         grid.setVisible(!isEmpty);
-        ledgerEmptyMsg.setVisible(isEmpty);
+        ledgerEmptyState.setVisible(isEmpty);
     }
 
     private void openLeaveRequestDialog(Long requestId) {
@@ -312,24 +325,36 @@ public class AuditDashboardView extends VerticalLayout {
 
             return diffLayout;
         }));
-
-        auditEmptyMsg.addClassName("empty-grid-message");
-
         List<AuditLog> allLogs = auditLogService.getRecentLogs(50);
 
         auditSearchBox = new GlobalSearchComponent(term -> {
             currentAuditSearch = term.toLowerCase();
-            List<AuditLog> filtered = allLogs.stream()
-                    .filter(log -> (log.getPerformedBy() != null && log.getPerformedBy().toLowerCase().contains(currentAuditSearch)) ||
-                            (log.getEntityName() != null && log.getEntityName().toLowerCase().contains(currentAuditSearch)) ||
-                            (log.getAction() != null && log.getAction().toLowerCase().contains(currentAuditSearch)))
-                    .toList();
+            boolean isSearchActive = currentAuditSearch != null && !currentAuditSearch.isBlank();
+
+            List<AuditLog> filtered = allLogs;
+
+            if (isSearchActive) {
+                filtered = allLogs.stream()
+                        .filter(log -> (log.getPerformedBy() != null && log.getPerformedBy().toLowerCase().contains(currentAuditSearch)) ||
+                                (log.getEntityName() != null && log.getEntityName().toLowerCase().contains(currentAuditSearch)) ||
+                                (log.getAction() != null && log.getAction().toLowerCase().contains(currentAuditSearch)))
+                        .toList();
+            }
 
             grid.setItems(filtered);
 
             boolean isEmpty = filtered.isEmpty();
+
+            if (isEmpty) {
+                if (isSearchActive) {
+                    auditEmptyState.setMessage("No results found", "No audit logs match the search term: \"" + currentAuditSearch + "\"");
+                } else {
+                    auditEmptyState.setMessage("Audit Stream Empty", "No recent activity has been logged in the system.");
+                }
+            }
+
             grid.setVisible(!isEmpty);
-            auditEmptyMsg.setVisible(isEmpty);
+            auditEmptyState.setVisible(isEmpty);
 
             if (auditSearchBox != null) {
                 auditSearchBox.hideSpinner();
@@ -339,14 +364,23 @@ public class AuditDashboardView extends VerticalLayout {
         auditSearchBox.getStyle().set("margin-bottom", "var(--app-padding)");
 
         boolean isInitialEmpty = allLogs.isEmpty();
+        if (isInitialEmpty) {
+            auditEmptyState.setMessage("Audit Stream Empty", "No recent activity has been logged in the system.");
+        }
         grid.setItems(allLogs);
         grid.setVisible(!isInitialEmpty);
-        auditEmptyMsg.setVisible(isInitialEmpty);
+        auditEmptyState.setVisible(isInitialEmpty);
 
         HorizontalLayout toolbar = new HorizontalLayout(auditSearchBox);
         toolbar.setWidthFull();
 
-        auditLayout.add(title, toolbar, grid, auditEmptyMsg);
+        // Dedicated Content Area for Audit Grid
+        VerticalLayout gridContentArea = new VerticalLayout(grid, auditEmptyState);
+        gridContentArea.setSizeFull();
+        gridContentArea.setPadding(false);
+        gridContentArea.setSpacing(false);
+
+        auditLayout.add(title, toolbar, gridContentArea);
         return auditLayout;
     }
 

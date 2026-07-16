@@ -5,6 +5,7 @@ import com.murali.entity.LeaveBalance;
 import com.murali.entity.LeaveRequest;
 import com.murali.service.LeaveBalanceService;
 import com.murali.service.LeaveRequestService;
+import com.murali.views.components.EmptyStateComponent;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.dialog.Dialog;
@@ -75,10 +76,10 @@ public class EmployeeLeaveDialog extends Dialog {
         List<LeaveRequest> history = leaveRequestService.getLeaveHistoryForEmployee(employee.getId());
 
         if (history == null || history.isEmpty()) {
-            Span emptyMessage = new Span("No leave history available.");
-            emptyMessage.addClassName("empty-grid-message");
+            EmptyStateComponent emptyState = new EmptyStateComponent(VaadinIcon.CALENDAR_CLOCK);
+            emptyState.setMessage("No Leave History", "This employee has no recorded leave requests.");
 
-            content.add(balanceTitle, cardsLayout, historyTitle, emptyMessage);
+            content.add(balanceTitle, cardsLayout, historyTitle, emptyState);
         } else {
             grid.setItems(history);
             content.add(balanceTitle, cardsLayout, historyTitle, grid);

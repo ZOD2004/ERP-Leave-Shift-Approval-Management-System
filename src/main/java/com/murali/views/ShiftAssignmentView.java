@@ -7,6 +7,7 @@ import com.murali.entity.enums.LeaveSession;
 import com.murali.service.EmployeeService;
 import com.murali.service.ShiftAssignmentService;
 import com.murali.service.ShiftService;
+import com.murali.views.components.EmptyStateComponent;
 import com.murali.views.components.GlobalSearchComponent;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.Text;
@@ -63,10 +64,9 @@ public class ShiftAssignmentView extends VerticalLayout {
     private final Grid<ShiftAssignmentDTO> listGrid = new Grid<>(ShiftAssignmentDTO.class, false);
     private final DatePicker filterDate = new DatePicker("Filter by Date");
 
-    // Track empty states and search globally for the view's tabs
-    private final Span listEmptyMsg = new Span("No shift assignments found.");
-    private final Span pivotEmptyMsg = new Span("No schedule data found for this week.");
-    private final Span monthlyEmptyMsg = new Span("No schedule data found for this month.");
+    private final EmptyStateComponent listEmptyState = new EmptyStateComponent(VaadinIcon.LIST);
+    private final EmptyStateComponent pivotEmptyState = new EmptyStateComponent(VaadinIcon.CALENDAR);
+    private final EmptyStateComponent monthlyEmptyState = new EmptyStateComponent(VaadinIcon.CALENDAR_CLOCK);
     private GlobalSearchComponent searchBox;
     private String currentSearch = "";
 
@@ -197,8 +197,6 @@ public class ShiftAssignmentView extends VerticalLayout {
         filterDate.setClearButtonVisible(true);
         filterDate.addValueChangeListener(e -> refreshListGrid());
 
-        listEmptyMsg.addClassName("empty-grid-message");
-
         searchBox = new GlobalSearchComponent(term -> {
             currentSearch = term;
             refreshListGrid();
@@ -266,8 +264,7 @@ public class ShiftAssignmentView extends VerticalLayout {
                 query -> (int) assignmentService.fetchAssignmentsForGrid(0, Integer.MAX_VALUE, filterDate.getValue(), currentSearch).getTotalElements()
         );
         listGrid.setDataProvider(dataProvider);
-
-        VerticalLayout layout = new VerticalLayout(toolbar, listGrid, listEmptyMsg);
+        VerticalLayout layout = new VerticalLayout(toolbar, listGrid, listEmptyState);
         layout.setSizeFull();
         layout.setPadding(false);
         return layout;
@@ -278,8 +275,18 @@ public class ShiftAssignmentView extends VerticalLayout {
         long totalElements = assignmentService.fetchAssignmentsForGrid(0, 1, filterDate.getValue(), currentSearch).getTotalElements();
         boolean isEmpty = (totalElements == 0);
 
+        boolean isSearchActive = currentSearch != null && !currentSearch.isBlank();
+
+        if (isEmpty) {
+            if (isSearchActive) {
+                listEmptyState.setMessage("No results found", "No assignments match the search term: \"" + currentSearch + "\"");
+            } else {
+                listEmptyState.setMessage("No Assignments Found", "There are currently no shift assignments matching the selected criteria.");
+            }
+        }
+
         listGrid.setVisible(!isEmpty);
-        listEmptyMsg.setVisible(isEmpty);
+        listEmptyState.setVisible(isEmpty);
 
         if (searchBox != null) {
             searchBox.hideSpinner();
@@ -296,9 +303,7 @@ public class ShiftAssignmentView extends VerticalLayout {
         pivotGrid.setSizeFull();
         pivotGrid.addClassName("standard-surface");
         setupPivotColumns(LocalDate.now());
-
-        pivotEmptyMsg.addClassName("empty-grid-message");
-        VerticalLayout layout = new VerticalLayout(weekSelector, pivotGrid, pivotEmptyMsg);
+        VerticalLayout layout = new VerticalLayout(weekSelector, pivotGrid, pivotEmptyState);
         layout.setSizeFull();
         layout.setPadding(false);
         return layout;
@@ -417,8 +422,12 @@ public class ShiftAssignmentView extends VerticalLayout {
         pivotGrid.setItems(pivotData.values());
 
         boolean isEmpty = pivotData.isEmpty();
+        if (isEmpty) {
+            pivotEmptyState.setMessage("No Weekly Data", "No schedule data found for this week.");
+        }
+
         pivotGrid.setVisible(!isEmpty);
-        pivotEmptyMsg.setVisible(isEmpty);
+        pivotEmptyState.setVisible(isEmpty);
     }
 
     private void buildAssignmentDialog() {
@@ -546,9 +555,7 @@ public class ShiftAssignmentView extends VerticalLayout {
         monthlyGrid.addClassName("standard-surface");
         monthlyGrid.addClassName("monthly-calendar-grid");
         monthlyGrid.addThemeVariants(GridVariant.LUMO_COMPACT, GridVariant.LUMO_COLUMN_BORDERS);
-
-        monthlyEmptyMsg.addClassName("empty-grid-message");
-        VerticalLayout layout = new VerticalLayout(controls, monthlyGrid, monthlyEmptyMsg);
+        VerticalLayout layout = new VerticalLayout(controls, monthlyGrid, monthlyEmptyState);
         layout.setSizeFull();
         layout.setPadding(false);
         layout.setFlexGrow(1, monthlyGrid);
@@ -702,8 +709,12 @@ public class ShiftAssignmentView extends VerticalLayout {
         monthlyGrid.setItems(pivotData.values());
 
         boolean isEmpty = pivotData.isEmpty();
+        if (isEmpty) {
+            monthlyEmptyState.setMessage("No Monthly Data", "No schedule data found for this month.");
+        }
+
         monthlyGrid.setVisible(!isEmpty);
-        monthlyEmptyMsg.setVisible(isEmpty);
+        monthlyEmptyState.setVisible(isEmpty);
     }
 
     private void buildBatchSetupDialog() {

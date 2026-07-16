@@ -3,6 +3,7 @@ package com.murali.views;
 import com.murali.entity.*;
 import com.murali.entity.enums.RotationSegmentType;
 import com.murali.service.*;
+import com.murali.views.components.EmptyStateComponent;
 import com.murali.views.components.GlobalSearchComponent;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.Text;
@@ -61,8 +62,9 @@ public class AdminConfigurationView extends VerticalLayout {
     private final Grid<LeaveApprovalPolicy> policyGrid = new Grid<>(LeaveApprovalPolicy.class, false);
     private final Grid<Holiday> holidayGrid = new Grid<>(Holiday.class, false);
 
-    private final Span holidayEmptyMsg = new Span("No holidays found.");
-    private final Span policyEmptyMsg = new Span("No policies found.");
+    private final EmptyStateComponent holidayEmptyState = new EmptyStateComponent(VaadinIcon.CALENDAR);
+    private final EmptyStateComponent policyEmptyState = new EmptyStateComponent(VaadinIcon.FILE_TEXT);
+
     private GlobalSearchComponent holidaySearchBox;
     private GlobalSearchComponent policySearchBox;
     private String currentHolidaySearch = "";
@@ -116,7 +118,7 @@ public class AdminConfigurationView extends VerticalLayout {
         );
         statsRow.addClassNames(LumoUtility.Margin.Bottom.MEDIUM);
 
-        holidayEmptyMsg.addClassName("empty-grid-message");
+//        holidayEmptyMsg.addClassName("empty-grid-message");
 
         holidaySearchBox = new GlobalSearchComponent(term -> {
             currentHolidaySearch = term.toLowerCase();
@@ -147,15 +149,20 @@ public class AdminConfigurationView extends VerticalLayout {
         })).setHeader("Actions").setAutoWidth(true).setFlexGrow(0);
 
         holidayGrid.getStyle().set("--vaadin-grid-row-height", "60px");
-        // Add the empty message to the layout
-        VerticalLayout gridContainer = new VerticalLayout(toolbar, holidayGrid, holidayEmptyMsg);
-        gridContainer.addClassName("standard-surface");
-        gridContainer.setPadding(true);
-        gridContainer.setSizeFull();
+
+        // The dedicated content area holds both, only one is visible at a time
+        VerticalLayout gridContentArea = new VerticalLayout(holidayGrid, holidayEmptyState);
+        gridContentArea.setSizeFull();
+        gridContentArea.setPadding(false);
+        gridContentArea.setSpacing(false);
+
+        VerticalLayout sectionContainer = new VerticalLayout(toolbar, gridContentArea);
+        sectionContainer.setPadding(false);
+        sectionContainer.setSizeFull();
 
         refreshHolidays();
         contentContainer.setSpacing(true);
-        contentContainer.add(statsRow, gridContainer);
+        contentContainer.add(statsRow, sectionContainer);
     }
 
     private void openHolidayDialog(Holiday holiday) {
@@ -245,7 +252,7 @@ public class AdminConfigurationView extends VerticalLayout {
         HorizontalLayout statsRow = new HorizontalLayout(createStatsCard("Active Policies", String.valueOf(ruleService.getAllPolicies().size()), VaadinIcon.FILE_TEXT, "var(--app-primary-color)"));
         statsRow.addClassNames(LumoUtility.Margin.Bottom.MEDIUM);
 
-        policyEmptyMsg.addClassName("empty-grid-message");
+//        policyEmptyMsg.addClassName("empty-grid-message");
 
         policySearchBox = new GlobalSearchComponent(term -> {
             currentPolicySearch = term.toLowerCase();
@@ -287,15 +294,19 @@ public class AdminConfigurationView extends VerticalLayout {
         }).setHeader("Actions").setAutoWidth(true).setFlexGrow(0);
 
         policyGrid.getStyle().set("--vaadin-grid-row-height", "70px");
-        // Add the empty message to the layout
-        VerticalLayout gridContainer = new VerticalLayout(toolbar, policyGrid, policyEmptyMsg);
-        gridContainer.addClassName("standard-surface");
-        gridContainer.setPadding(true);
-        gridContainer.setSizeFull();
+
+        // The dedicated content area holds both, only one is visible at a time
+        VerticalLayout gridContentArea = new VerticalLayout(policyGrid, policyEmptyState);
+        gridContentArea.setSizeFull();
+        gridContentArea.setPadding(false);
+        gridContentArea.setSpacing(false);
+
+        VerticalLayout sectionContainer = new VerticalLayout(toolbar, gridContentArea);
+        sectionContainer.setPadding(false);
+        sectionContainer.setSizeFull();
 
         refreshPolicies();
-//        contentContainer.setSpacing(true);
-        contentContainer.add(statsRow, gridContainer);
+        contentContainer.add(statsRow, sectionContainer);
     }
 
     private void openPolicyDialog(LeaveApprovalPolicy policy) {
@@ -532,18 +543,28 @@ public class AdminConfigurationView extends VerticalLayout {
     }
     private void refreshHolidays() {
         List<Holiday> allHolidays = holidayService.getAllHolidays();
+        boolean isSearchActive = currentHolidaySearch != null && !currentHolidaySearch.isBlank();
 
-        if (currentHolidaySearch != null && !currentHolidaySearch.isBlank()) {
+        if (isSearchActive) {
             allHolidays = allHolidays.stream()
                     .filter(h -> h.getName().toLowerCase().contains(currentHolidaySearch))
                     .toList();
         }
 
         holidayGrid.setItems(allHolidays);
-
         boolean isEmpty = allHolidays.isEmpty();
+
+        // Smart Messaging Logic
+        if (isEmpty) {
+            if (isSearchActive) {
+                holidayEmptyState.setMessage("No results found", "No holidays match the search term: \"" + currentHolidaySearch + "\"");
+            } else {
+                holidayEmptyState.setMessage("No Holidays Configured", "There are currently no public holidays registered in the system.");
+            }
+        }
+
         holidayGrid.setVisible(!isEmpty);
-        holidayEmptyMsg.setVisible(isEmpty);
+        holidayEmptyState.setVisible(isEmpty);
 
         if (holidaySearchBox != null) {
             holidaySearchBox.hideSpinner();
@@ -552,18 +573,28 @@ public class AdminConfigurationView extends VerticalLayout {
 
     private void refreshPolicies() {
         List<LeaveApprovalPolicy> allPolicies = ruleService.getAllPolicies();
+        boolean isSearchActive = currentPolicySearch != null && !currentPolicySearch.isBlank();
 
-        if (currentPolicySearch != null && !currentPolicySearch.isBlank()) {
+        if (isSearchActive) {
             allPolicies = allPolicies.stream()
                     .filter(p -> p.getName().toLowerCase().contains(currentPolicySearch))
                     .toList();
         }
 
         policyGrid.setItems(allPolicies);
-
         boolean isEmpty = allPolicies.isEmpty();
+
+        // Smart Messaging Logic
+        if (isEmpty) {
+            if (isSearchActive) {
+                policyEmptyState.setMessage("No results found", "No policies match the search term: \"" + currentPolicySearch + "\"");
+            } else {
+                policyEmptyState.setMessage("No Policies Configured", "Create a new approval policy to establish organizational workflows.");
+            }
+        }
+
         policyGrid.setVisible(!isEmpty);
-        policyEmptyMsg.setVisible(isEmpty);
+        policyEmptyState.setVisible(isEmpty);
 
         if (policySearchBox != null) {
             policySearchBox.hideSpinner();

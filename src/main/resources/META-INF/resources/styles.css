@@ -26,7 +26,7 @@
     --app-selected-color: #e5f0ff;     /* Distinct Active/Selected State */
 
     /* Standardized Spacing & Sizing */
-    --app-layout-margin: 24px;         /* Equal margins on all four sides */
+    --app-layout-margin: 16px;         /* Equal margins on all four sides */
     --app-padding: 16px;               /* Consistent internal padding */
     --app-border-radius: 12px;         /* Modern, slightly rounder corners */
     --app-shadow-subtle: 0 2px 6px rgba(0, 0, 0, 0.04);
@@ -247,8 +247,6 @@ vaadin-grid vaadin-button[theme~="tertiary"] {
     transition: all .25s ease;
 }
 
-
-
 /* ==========================================================================
    CLEAN ACTION BUTTON HOVERS (Fixes disappearing icons)
    ========================================================================== */
@@ -281,7 +279,7 @@ vaadin-grid::part(header-cell) {
     font-weight: 800;
 }
 vaadin-grid::part(cell) {
-    padding: 6px 12px;
+    padding: 2px 12px;
 }
 
 /* 4. SIDE NAVBAR HOVER EFFECT */
@@ -505,40 +503,6 @@ vaadin-app-layout.app-layout-expanded {
     transition: --vaadin-app-layout-drawer-width 0.3s ease-in-out;
 }
 
-vaadin-app-layout.app-layout-mini {
-    --vaadin-app-layout-drawer-width: 80px;
-    transition: --vaadin-app-layout-drawer-width 0.3s ease-in-out;
-}
-
-/* 2. Hide Navigation Text & Center Icons in Mini Mode */
-vaadin-app-layout.app-layout-mini vaadin-side-nav-item::part(label),
-vaadin-app-layout.app-layout-mini vaadin-side-nav-item::part(toggle-button) {
-    display: none !important;
-    opacity: 0;
-}
-
-vaadin-app-layout.app-layout-mini vaadin-side-nav-item::part(item) {
-    justify-content: center;
-}
-
-/* 3. User Card Mini State (Hide Text, Center Avatar) */
-vaadin-app-layout.app-layout-mini .user-text-layout {
-    display: none !important;
-}
-
-vaadin-app-layout.app-layout-mini .user-card-container {
-    justify-content: center;
-    padding-left: 0;
-    padding-right: 0;
-}
-
-/* 4. Fix Zooming/Mobile Issue: Prevent AppLayout from completely hiding the drawer! */
-/* When zoomed in (small screen), force it into a permanent "mini" state instead of an invisible overlay */
-@media (max-width: 800px) {
-    .drawer-toggle-container {
-        display: none !important;
-    }
-}
 
 /* ==========================================================================
    13. TEXT TRUNCATION & ELLIPSIS UTILITY
@@ -581,4 +545,42 @@ vaadin-app-layout.app-layout-mini .user-card-container {
 .rotating-spinner {
     animation: spin 1s linear infinite;
     color: var(--app-primary-color);
+}
+/* ==========================================================================
+   GLOBAL TABS STYLING (Compact)
+   ========================================================================== */
+
+vaadin-tabs {
+    background: var(--app-surface-color);
+    border: 1px solid var(--app-border-color);
+    border-radius: var(--app-border-radius);
+    box-shadow: var(--app-shadow-subtle);
+    padding: 2px;
+    min-height: 40px;
+}
+
+vaadin-tab {
+    min-height: 34px;
+    padding: 4px 10px;
+    border-radius: 8px;
+    color: var(--app-text-secondary);
+    font-size: 0.9rem;
+    font-weight: 500;
+    transition: background-color .2s ease,
+                color .2s ease;
+}
+
+vaadin-tab:hover:not([selected]) {
+    background: var(--app-hover-color);
+    color: var(--app-text-primary);
+}
+
+vaadin-tab[selected] {
+    background: var(--app-selected-color);
+    color: var(--app-primary-color);
+    font-weight: 600;
+}
+
+vaadin-tab::part(label) {
+    white-space: nowrap;
 }
