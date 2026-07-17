@@ -49,5 +49,6 @@ public class LoginView extends VerticalLayout implements BeforeEnterObserver {
                 .containsKey("error")) {
             login.setError(true);
         }
+
     }
 }

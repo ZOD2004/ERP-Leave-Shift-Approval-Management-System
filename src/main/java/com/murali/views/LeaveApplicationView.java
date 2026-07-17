@@ -131,6 +131,8 @@ public class LeaveApplicationView extends VerticalLayout {
     private Component createHistorySection() {
         H3 title = new H3("Recent Requests");
         title.addClassNames(LumoUtility.Margin.Top.LARGE, LumoUtility.Margin.Bottom.SMALL);
+        title.getStyle().set("white-space", "nowrap");
+        title.getStyle().set("flex-shrink", "0");
 
         historyGrid.addColumn(LeaveRequest::getStartDate).setHeader("Start").setAutoWidth(true);
         historyGrid.addColumn(LeaveRequest::getEndDate).setHeader("End").setAutoWidth(true);
@@ -173,10 +175,14 @@ public class LeaveApplicationView extends VerticalLayout {
             refreshBalanceAndHistory();
         });
 
+        historySearchBox.setMaxWidth("350px");
+        historySearchBox.setWidthFull();
+
         HorizontalLayout headerRow = new HorizontalLayout(title, historySearchBox);
         headerRow.setWidthFull();
         headerRow.setAlignItems(FlexComponent.Alignment.CENTER);
         headerRow.setJustifyContentMode(FlexComponent.JustifyContentMode.BETWEEN);
+        headerRow.addClassNames(LumoUtility.Gap.MEDIUM);
 
         // Dedicated content area to preserve spatial integrity
         VerticalLayout gridContentArea = new VerticalLayout(historyGrid, historyEmptyState);
@@ -243,57 +249,97 @@ public class LeaveApplicationView extends VerticalLayout {
 
     private Component createBalanceCard(String title, BigDecimal remaining, double used, BigDecimal total, String themeColor, VaadinIcon iconType) {
         VerticalLayout card = new VerticalLayout();
-        card.addClassNames("standard-surface", "hoverable"); // Centralized standard card styling
-        card.setWidth("280px");
+        card.addClassNames("standard-surface", "hoverable");
+        // 1. Reduced card width for a tighter, smaller container
+        card.setWidth("240px");
+        card.setPadding(false);
         card.setSpacing(false);
 
-        Icon icon = iconType.create();
-        icon.addClassNames("text-" + themeColor);
-        icon.getStyle().set("padding", "8px");
-        icon.getStyle().set("background-color", "var(--lumo-contrast-5pct)");
-        icon.getStyle().set("border-radius", "50%");
+        card.addClassNames(LumoUtility.Display.FLEX, LumoUtility.FlexDirection.COLUMN, LumoUtility.Gap.MEDIUM);
 
+        // --- 1. Header: Title & Prominent Icon Badge ---
         Span titleSpan = new Span(title);
+        // 2. Muted the title slightly so it doesn't fight the number for attention
         titleSpan.addClassNames(LumoUtility.FontSize.MEDIUM, LumoUtility.FontWeight.BOLD, LumoUtility.TextColor.SECONDARY);
 
-        HorizontalLayout headerLayout = new HorizontalLayout(titleSpan, icon);
+        Icon icon = iconType.create();
+        icon.setSize("20px"); // Proportionally scaled down
+
+        Div iconContainer = new Div(icon);
+        // 3. Scaled down the icon badge to fit the smaller card
+        iconContainer.setWidth("40px");
+        iconContainer.setHeight("40px");
+        iconContainer.getStyle().set("border-radius", "10px");
+        iconContainer.getStyle().set("display", "flex");
+        iconContainer.getStyle().set("align-items", "center");
+        iconContainer.getStyle().set("justify-content", "center");
+        iconContainer.getStyle().set("flex-shrink", "0");
+
+        switch (themeColor) {
+            case "success":
+                iconContainer.getStyle().set("background-color", "#defbe6");
+                icon.setColor("var(--app-success-color)");
+                break;
+            case "error":
+                iconContainer.getStyle().set("background-color", "#fff1f1");
+                icon.setColor("var(--app-error-color)");
+                break;
+            case "warning":
+                iconContainer.getStyle().set("background-color", "#fcf4d6");
+                icon.setColor("var(--app-warning-color)");
+                break;
+            case "primary":
+            default:
+                iconContainer.getStyle().set("background-color", "#edf5ff");
+                icon.setColor("var(--app-primary-color)");
+                break;
+        }
+
+        HorizontalLayout headerLayout = new HorizontalLayout(titleSpan, iconContainer);
         headerLayout.setWidthFull();
         headerLayout.setJustifyContentMode(FlexComponent.JustifyContentMode.BETWEEN);
         headerLayout.setAlignItems(FlexComponent.Alignment.CENTER);
 
+        // --- 2. Main Number Layout ---
         Span valueSpan = new Span(remaining.stripTrailingZeros().toPlainString());
-        valueSpan.addClassNames(LumoUtility.FontWeight.BLACK, "text-" + themeColor);
+        valueSpan.addClassNames(LumoUtility.FontWeight.BOLD);
+        // 4. Removed the vibrant colors; using standard dark text for a professional look
+        valueSpan.getStyle().set("color", "var(--app-text-primary)");
         valueSpan.getStyle().set("line-height", "1");
-        valueSpan.getStyle().set("font-size", "3rem");
+        // 5. Scaled down the font size to fit the new card width perfectly
+        valueSpan.getStyle().set("font-size", "2.75rem");
 
         Span daysLabel = new Span("Days Left");
-        daysLabel.addClassNames(LumoUtility.FontSize.SMALL, LumoUtility.TextColor.SECONDARY, LumoUtility.Margin.Left.SMALL, LumoUtility.FontWeight.MEDIUM);
+        daysLabel.addClassNames(LumoUtility.FontSize.SMALL, LumoUtility.TextColor.SECONDARY, LumoUtility.FontWeight.MEDIUM);
 
         HorizontalLayout numberLayout = new HorizontalLayout(valueSpan, daysLabel);
         numberLayout.setAlignItems(FlexComponent.Alignment.BASELINE);
-        numberLayout.addClassNames(LumoUtility.Margin.Top.LARGE, LumoUtility.Margin.Bottom.MEDIUM);
+        numberLayout.addClassNames(LumoUtility.Gap.SMALL);
 
+        // --- 3. Progress Bar & Stats ---
         ProgressBar progressBar = new ProgressBar();
         progressBar.setMin(0);
         progressBar.setMax(total.doubleValue() > 0 ? total.doubleValue() : 1);
         progressBar.setValue(used);
-
         progressBar.getElement().getThemeList().add(themeColor);
 
+        // Critical low balance logic: Only show red text when they are almost out of days
         if (remaining.doubleValue() <= 3.0 && remaining.doubleValue() > 0) {
-            progressBar.getElement().getThemeList().add("error");
-            valueSpan.addClassNames(LumoUtility.TextColor.ERROR);
+//            progressBar.getElement().getThemeList().replace(themeColor, "error");
+            valueSpan.getStyle().set("color", "var(--app-error-color)");
         }
 
-        Span statsSpan = new Span(String.format("%s used of %s total", BigDecimal.valueOf(used).stripTrailingZeros().toPlainString(), total.stripTrailingZeros().toPlainString()));
-        statsSpan.addClassNames(LumoUtility.FontSize.XSMALL, LumoUtility.TextColor.TERTIARY, LumoUtility.FontWeight.MEDIUM);
+        Span statsSpan = new Span(String.format("%s used of %s total",
+                BigDecimal.valueOf(used).stripTrailingZeros().toPlainString(),
+                total.stripTrailingZeros().toPlainString()));
+        statsSpan.addClassNames(LumoUtility.FontSize.SMALL, LumoUtility.TextColor.TERTIARY, LumoUtility.FontWeight.MEDIUM);
 
-        HorizontalLayout footerLayout = new HorizontalLayout(statsSpan);
-        footerLayout.setWidthFull();
-        footerLayout.setJustifyContentMode(FlexComponent.JustifyContentMode.END);
-        footerLayout.addClassNames(LumoUtility.Margin.Top.XSMALL);
+        VerticalLayout bottomLayout = new VerticalLayout(progressBar, statsSpan);
+        bottomLayout.setPadding(false);
+        bottomLayout.setSpacing(false);
+        bottomLayout.addClassNames(LumoUtility.Gap.XSMALL);
 
-        card.add(headerLayout, numberLayout, progressBar, footerLayout);
+        card.add(headerLayout, numberLayout, bottomLayout);
         return card;
     }
 
@@ -471,13 +517,14 @@ public class LeaveApplicationView extends VerticalLayout {
                 startSessionBox.setLabel("Day Session");
                 startSessionBox.setItems(LeaveSession.FULL_DAY, LeaveSession.FIRST_HALF, LeaveSession.SECOND_HALF);
             } else {
+                // Multi-day leave: Show both dropdowns and ALLOW FULL_DAY
                 endSessionBox.setVisible(true);
 
                 startSessionBox.setLabel("Start Date Session");
-                startSessionBox.setItems(LeaveSession.FIRST_HALF, LeaveSession.SECOND_HALF);
+                startSessionBox.setItems(LeaveSession.FULL_DAY, LeaveSession.FIRST_HALF, LeaveSession.SECOND_HALF);
 
                 endSessionBox.setLabel("End Date Session");
-                endSessionBox.setItems(LeaveSession.FIRST_HALF, LeaveSession.SECOND_HALF);
+                endSessionBox.setItems(LeaveSession.FULL_DAY, LeaveSession.FIRST_HALF, LeaveSession.SECOND_HALF);
             }
         }
         calculateDuration();
@@ -644,16 +691,28 @@ public class LeaveApplicationView extends VerticalLayout {
         draftGrid.addColumn(LeaveRequest::getDurationDays).setHeader("Days").setAutoWidth(true);
 
         draftGrid.addComponentColumn(draft -> {
-            Button resumeBtn = new Button("Resume / Edit", VaadinIcon.EDIT.create());
-            resumeBtn.addThemeVariants(ButtonVariant.LUMO_SMALL, ButtonVariant.LUMO_PRIMARY);
+            HorizontalLayout actions = new HorizontalLayout();
+            actions.setSpacing(true);
+            actions.setPadding(false);
+
+            // 1. Resume Button: Removed LUMO_SMALL so it doesn't get forced to 36x36px
+            Button resumeBtn = new Button("Resume", VaadinIcon.EDIT.create());
+            resumeBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
             resumeBtn.addClickListener(e -> openApplyLeaveDialog(draft));
-            return resumeBtn;
-        }).setHeader("Action").setAutoWidth(true);
+
+            // 2. Delete Button: Using LUMO_ERROR for visual weight, also avoiding LUMO_SMALL
+            Button deleteBtn = new Button("Delete", VaadinIcon.TRASH.create());
+            deleteBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY, ButtonVariant.LUMO_ERROR);
+            deleteBtn.addClickListener(e -> openDeleteDraftDialog(draft));
+
+            actions.add(resumeBtn, deleteBtn);
+            return actions;
+        }).setHeader("Actions").setAutoWidth(true);
 
         draftGrid.addThemeVariants(GridVariant.LUMO_NO_BORDER, GridVariant.LUMO_ROW_STRIPES);
         draftGrid.addClassName("standard-surface");
         draftGrid.setAllRowsVisible(true);
-        draftGrid.addItemDoubleClickListener(e -> openApplyLeaveDialog(e.getItem())); // Invoke existing edit handler
+        draftGrid.addItemDoubleClickListener(e -> openApplyLeaveDialog(e.getItem()));
 
         // Dedicated content area to preserve spatial integrity
         VerticalLayout gridContentArea = new VerticalLayout(draftGrid, draftEmptyState);
@@ -664,7 +723,39 @@ public class LeaveApplicationView extends VerticalLayout {
         draftSection.add(title, gridContentArea);
         draftSection.setPadding(false);
         draftSection.setVisible(false); // Hidden by default
+
         return draftSection;
+    }
+
+    private void openDeleteDraftDialog(LeaveRequest draft) {
+        Dialog confirmDialog = new Dialog();
+        confirmDialog.setHeaderTitle("Delete Draft");
+
+        Span warningMessage = new Span("Are you sure you want to permanently delete this leave draft?");
+        confirmDialog.add(new VerticalLayout(warningMessage));
+
+        Button confirmBtn = new Button("Delete", e -> {
+            try {
+                leaveRequestService.deleteDraft(draft.getId());
+
+                Notification.show("Draft deleted successfully.", 3000, Notification.Position.TOP_END)
+                        .addThemeVariants(NotificationVariant.LUMO_SUCCESS);
+
+                confirmDialog.close();
+                refreshBalanceAndHistory();
+
+            } catch (Exception ex) {
+                Notification.show("Failed to delete draft: " + ex.getMessage(), 5000, Notification.Position.MIDDLE)
+                        .addThemeVariants(NotificationVariant.LUMO_ERROR);
+            }
+        });
+        confirmBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY, ButtonVariant.LUMO_ERROR);
+
+        Button dismissBtn = new Button("Cancel", e -> confirmDialog.close());
+        dismissBtn.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
+
+        confirmDialog.getFooter().add(dismissBtn, confirmBtn);
+        confirmDialog.open();
     }
 
     private void showApprovalHistoryDialog(LeaveRequest request) {

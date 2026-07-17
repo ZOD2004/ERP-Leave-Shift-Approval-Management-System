@@ -99,16 +99,6 @@ vaadin-grid.standard-surface {
 /* ==========================================================================
    4. VAADIN GRID & TABLE POLISH
    ========================================================================== */
-/* Grid Headers: Subtle, uppercase, modern styling */
-vaadin-grid::part(header-cell) {
-    background-color: var(--app-accent-color);
-    color: var(--app-text-secondary);
-    font-size: 0.75rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.05em; /* Spaced out letters look very professional */
-    border-bottom: 1px solid var(--app-border-color);
-}
 
 /* Grid Rows: Hover & Selection */
 vaadin-grid::part(row):hover {
@@ -120,7 +110,16 @@ vaadin-grid::part(row)[selected] {
 vaadin-grid::part(cell) {
     color: var(--app-text-primary);
     font-size: 0.875rem;
+    padding: 2px 12px;
 }
+
+/* 3. GRID HEADERS & EQUAL CELL SPACING */
+vaadin-grid::part(header-cell) {
+    background-color: #e2e8f0; /* A much stronger, distinct color for the header */
+    color: var(--app-text-primary);
+    font-weight: 800;
+}
+
 
 /* Custom Part from ManagerApprovalView */
 vaadin-grid::part(cancellation-row) {
@@ -209,7 +208,7 @@ vaadin-button {
 
 /* Standard Button Hover */
 vaadin-button:hover {
-    border-radius: 24px; /* Morphs into a softer pill shape */
+    border-radius: 14px; /* Morphs into a softer pill shape */
     transform: translateY(-2px); /* Slightly stronger lift */
     box-shadow: var(--app-shadow-subtle);
 }
@@ -229,22 +228,14 @@ vaadin-button[theme~="tertiary"][theme~="error"]:hover {
 vaadin-grid vaadin-button[theme~="tertiary"],
 vaadin-button[theme~="icon"],
 vaadin-button[theme~="small"] {
-    width: 48px;
-    height: 48px;
-    min-width: 48px;
-    min-height: 48px;
+    width: 36px;
+    height: 36px;
+    min-width: 36px;
+    min-height: 36px;
     padding: 0;
     margin: 3px;
     border-radius: 12px;
     transition: all 0.25s ease;
-}
-
-vaadin-grid vaadin-button[theme~="tertiary"] {
-    width: 48px;
-    height: 48px;
-    min-width: 48px;
-    border-radius: 12px;
-    transition: all .25s ease;
 }
 
 /* ==========================================================================
@@ -272,15 +263,7 @@ vaadin-grid vaadin-button[theme~="tertiary"][theme~="error"]:hover {
     border-radius: 50%;
 }
 
-/* 3. GRID HEADERS & EQUAL CELL SPACING */
-vaadin-grid::part(header-cell) {
-    background-color: #e2e8f0; /* A much stronger, distinct color for the header */
-    color: var(--app-text-primary);
-    font-weight: 800;
-}
-vaadin-grid::part(cell) {
-    padding: 2px 12px;
-}
+
 
 /* 4. SIDE NAVBAR HOVER EFFECT */
 vaadin-side-nav-item::part(item) {
@@ -308,6 +291,7 @@ vaadin-grid.monthly-calendar-grid::part(header-cell) {
 vaadin-grid.monthly-calendar-grid::part(cell) {
     padding: 2px;
     display: flex;
+    margin: 0px;
     justify-content: center; /* Centers horizontally */
     align-items: center;     /* Centers vertically */
 }
@@ -319,43 +303,41 @@ vaadin-grid.monthly-calendar-grid vaadin-button[theme~="tertiary"] {
     min-height: 32px !important;
     margin: 0 auto !important; /* Guarantees the element sits perfectly in the middle */
 }
-
 /* ==========================================================================
-   8. NOTIFICATION POLISH (Fixes the "Double Box" effect)
+   8. NOTIFICATION POLISH (Modern Toast UI)
    ========================================================================== */
 
+/* Make the master outer wrapper completely invisible */
 vaadin-notification-card {
-    /* Tell the notification to use your global theme variables */
-    --lumo-border-radius: var(--app-border-radius);
-    --lumo-box-shadow-m: var(--app-shadow-hover);
-}
-
-/* Strip away the hard borders from the inner overlay */
-vaadin-notification-card::part(overlay) {
+    background: transparent !important;
+    box-shadow: none !important;
     border: none !important;
-    outline: none !important;
+}
+
+/* Style the inner overlay to look exactly like your mockup */
+vaadin-notification-card::part(overlay) {
     background-color: var(--app-surface-color);
+    border-radius: var(--app-border-radius);
+    box-shadow: 0 12px 32px rgba(0,0,0,.12);
+    border: 1px solid var(--app-border-color) !important;
+    padding: 16px;
+    width: 340px;
+    min-height: 64px;
+    outline: none !important;
+    display: flex;
+    flex-direction: column;
 }
 
-/* Ensure colored variants (Success/Error) fill the whole box without a white gap */
+/* Optional: Add a subtle color accent border on the left based on theme */
 vaadin-notification-card[theme~="success"]::part(overlay) {
-    background-color: #defbe6;
-    color: var(--app-success-color);
-    border: 1px solid #8edba3 !important;
+    border-left: 4px solid var(--app-success-color) !important;
 }
-
 vaadin-notification-card[theme~="error"]::part(overlay) {
-    background-color: #fff1f1;
-    color: var(--app-error-color);
-    border: 1px solid #ffb3b8 !important;
+    border-left: 4px solid var(--app-error-color) !important;
 }
-
 vaadin-notification-card[theme~="warning"]::part(overlay) {
-    background-color: #fcf4d6;
-    color: var(--app-warning-color);
-    border: 1px solid #f5d661 !important;
+    border-left: 4px solid var(--app-warning-color) !important;
 }
-
 /* ==========================================================================
    9. CHECKBOX POLISH (Grid Multi-Select Visibility)
    ========================================================================== */
@@ -583,4 +565,59 @@ vaadin-tab[selected] {
 
 vaadin-tab::part(label) {
     white-space: nowrap;
+}
+
+/* ==========================================================================
+   GLOBAL SEARCH
+   ========================================================================== */
+
+.global-search {
+    width: 100%;
+    align-items: center;
+    gap: 8px;
+}
+
+.global-search vaadin-text-field {
+    flex: 1;
+    --lumo-border-radius: var(--app-border-radius);
+    --lumo-input-field-background: var(--app-surface-color);
+    --lumo-input-field-border: 1px solid var(--app-border-color);
+}
+
+.search-spinner {
+    color: var(--app-primary-color);
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+}
+/*
+
+adding*/
+
+
+/* ============================================
+   FIX COMBOBOX VALIDATION
+   ============================================ */
+
+/* Only highlight the input box */
+vaadin-combo-box[invalid]::part(input-field) {
+    border: 1px solid var(--app-error-color);
+    background: #fff1f1;
+    box-shadow: 0 0 0 2px rgba(218,30,40,.12);
+}
+
+/* Keep label normal */
+vaadin-combo-box::part(label) {
+    color: var(--app-text-secondary);
+}
+
+/* Keep dropdown button normal */
+vaadin-combo-box::part(toggle-button) {
+    color: inherit;
+    background: transparent;
+}
+
+/* Error text remains red */
+vaadin-combo-box::part(error-message) {
+    color: var(--app-error-color);
 }

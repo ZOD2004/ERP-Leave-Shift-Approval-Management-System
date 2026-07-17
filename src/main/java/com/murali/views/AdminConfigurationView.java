@@ -103,7 +103,7 @@ public class AdminConfigurationView extends VerticalLayout {
             }
         });
 
-        add(header, tabs, contentContainer);
+        add(header,tabs,contentContainer);
         expand(contentContainer);
     }
 
@@ -183,12 +183,16 @@ public class AdminConfigurationView extends VerticalLayout {
             try {
                 binder.writeBean(holiday);
                 holidayService.saveHoliday(holiday);
-                Notification.show("Holiday saved.", 3000, Notification.Position.TOP_END).addThemeVariants(NotificationVariant.LUMO_SUCCESS);
+                // Notification.show("Holiday saved.", 3000, Notification.Position.TOP_END).addThemeVariants(NotificationVariant.LUMO_SUCCESS);
+                showToast("Saved successfully", "Holiday has been saved.", NotificationVariant.LUMO_SUCCESS, VaadinIcon.CHECK_CIRCLE);
                 dialog.close();
                 refreshHolidays();
             } catch (ValidationException ex) {
-                Notification.show("Please fix errors.", 3000, Notification.Position.MIDDLE).addThemeVariants(NotificationVariant.LUMO_ERROR);
+//                Notification.show("Please fix errors.", 3000, Notification.Position.MIDDLE).addThemeVariants(NotificationVariant.LUMO_ERROR);
+                // Notification.show("Please fix errors.", 3000, Notification.Position.MIDDLE).addThemeVariants(NotificationVariant.LUMO_ERROR);
+                showToast("Validation Error", "Please fix errors in the form.", NotificationVariant.LUMO_ERROR, VaadinIcon.CLOSE_CIRCLE);
             }
+
         });
         saveBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
         Button cancelBtn = new Button("Cancel", e -> dialog.close());
@@ -226,12 +230,14 @@ public class AdminConfigurationView extends VerticalLayout {
     private Component createStatsCard(String title, String value, VaadinIcon icon, String color) {
         VerticalLayout card = new VerticalLayout();
         card.addClassNames("standard-surface", "hoverable");
-        card.setSpacing(false);
+        card.setSpacing(true);
         card.setWidth("250px");
+        card.setJustifyContentMode(JustifyContentMode.EVENLY);
         card.getStyle().set("border-top", "4px solid " + color).set("min-height", "110px");
 
         Icon iconComp = icon.create();
         iconComp.getStyle().set("color", color);
+
 
         Span titleSpan = new Span(title);
         titleSpan.addClassNames(LumoUtility.FontSize.SMALL, LumoUtility.TextColor.SECONDARY, LumoUtility.FontWeight.BOLD);
@@ -363,11 +369,15 @@ public class AdminConfigurationView extends VerticalLayout {
                 }
 
                 ruleService.savePolicy(policy);
-                Notification.show("Policy saved.", 3000, Notification.Position.TOP_END).addThemeVariants(NotificationVariant.LUMO_SUCCESS);
+                // Notification.show("Policy saved.", 3000, Notification.Position.TOP_END).addThemeVariants(NotificationVariant.LUMO_SUCCESS);
+                showToast("Saved successfully", "Policy has been updated.", NotificationVariant.LUMO_SUCCESS, VaadinIcon.CHECK_CIRCLE);
+//                Notification.show("Policy saved.", 3000, Notification.Position.TOP_END).addThemeVariants(NotificationVariant.LUMO_SUCCESS);
                 dialog.close();
                 refreshPolicies();
             } catch (ValidationException ex) {
-                Notification.show("Please fix the policy name.", 3000, Notification.Position.MIDDLE).addThemeVariants(NotificationVariant.LUMO_ERROR);
+//                Notification.show("Please fix the policy name.", 3000, Notification.Position.MIDDLE).addThemeVariants(NotificationVariant.LUMO_ERROR);
+                // Notification.show("Please fix the policy name.", 3000, Notification.Position.MIDDLE).addThemeVariants(NotificationVariant.LUMO_ERROR);
+                showToast("Validation Error", "Please fix the policy name.", NotificationVariant.LUMO_ERROR, VaadinIcon.CLOSE_CIRCLE);
             }
         });
         saveBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
@@ -475,7 +485,9 @@ public class AdminConfigurationView extends VerticalLayout {
         List<double[]> durationRanges = new ArrayList<>();
 
         if (memoryTiers.isEmpty()) {
-            Notification.show("Please add at least one duration group.", 3000, Notification.Position.MIDDLE).addThemeVariants(NotificationVariant.LUMO_ERROR);
+//            Notification.show("Please add at least one duration group.", 3000, Notification.Position.MIDDLE).addThemeVariants(NotificationVariant.LUMO_ERROR);
+            // Notification.show("Please add at least one duration group.", 3000, Notification.Position.MIDDLE).addThemeVariants(NotificationVariant.LUMO_ERROR);
+            showToast("Missing Configuration", "Please add at least one duration group.", NotificationVariant.LUMO_ERROR, VaadinIcon.WARNING);
             return null;
         }
 
@@ -483,7 +495,9 @@ public class AdminConfigurationView extends VerticalLayout {
 
         for (TierUIContext context : memoryTiers) {
             if (context.minField.getValue() == null) {
-                Notification.show("All Min day fields must be filled.", 3000, Notification.Position.MIDDLE).addThemeVariants(NotificationVariant.LUMO_ERROR);
+                // Notification.show("All Min day fields must be filled.", 3000, Notification.Position.MIDDLE).addThemeVariants(NotificationVariant.LUMO_ERROR);
+                showToast("Missing Value", "All Min day fields must be filled.", NotificationVariant.LUMO_ERROR, VaadinIcon.WARNING);
+//                Notification.show("All Min day fields must be filled.", 3000, Notification.Position.MIDDLE).addThemeVariants(NotificationVariant.LUMO_ERROR);
                 return null;
             }
 
@@ -493,13 +507,17 @@ public class AdminConfigurationView extends VerticalLayout {
             double max = context.maxField.getValue() != null ? context.maxField.getValue() : 999.0;
 
             if (min > max) {
-                Notification.show("Min days (" + min + ") cannot be greater than Max days (" + max + ").", 4000, Notification.Position.MIDDLE).addThemeVariants(NotificationVariant.LUMO_ERROR);
+                // Notification.show("Min days (" + min + ") cannot be greater than Max days (" + max + ").", 4000, Notification.Position.MIDDLE).addThemeVariants(NotificationVariant.LUMO_ERROR);
+                showToast("Invalid Range", "Min days cannot be greater than Max days.", NotificationVariant.LUMO_ERROR, VaadinIcon.WARNING);
+//                Notification.show("Min days (" + min + ") cannot be greater than Max days (" + max + ").", 4000, Notification.Position.MIDDLE).addThemeVariants(NotificationVariant.LUMO_ERROR);
                 return null;
             }
 
             for (double[] existingRange : durationRanges) {
                 if (min <= existingRange[1] && max >= existingRange[0]) {
-                    Notification.show("Duration groups cannot overlap! Group (" + min + " to " + (max >= 99.0 ? "∞" : max) + ") conflicts with another.", 5000, Notification.Position.MIDDLE).addThemeVariants(NotificationVariant.LUMO_ERROR);
+                    // Notification.show("Duration groups cannot overlap! Group (" + min + " to " + (max >= 99.0 ? "∞" : max) + ") conflicts with another.", 5000, Notification.Position.MIDDLE).addThemeVariants(NotificationVariant.LUMO_ERROR);
+                    showToast("Conflict Detected", "Duration groups cannot overlap.", NotificationVariant.LUMO_ERROR, VaadinIcon.WARNING);
+//                    Notification.show("Duration groups cannot overlap! Group (" + min + " to " + (max >= 99.0 ? "∞" : max) + ") conflicts with another.", 5000, Notification.Position.MIDDLE).addThemeVariants(NotificationVariant.LUMO_ERROR);
                     return null;
                 }
             }
@@ -525,7 +543,9 @@ public class AdminConfigurationView extends VerticalLayout {
             }
 
             if (!hasApprovers) {
-                Notification.show("Duration group (" + min + " to " + (max >= 99.0 ? "∞" : max) + " days) is missing approvers.", 4000, Notification.Position.MIDDLE).addThemeVariants(NotificationVariant.LUMO_ERROR);
+                // Notification.show("Duration group (" + min + " to " + (max >= 99.0 ? "∞" : max) + " days) is missing approvers.", 4000, Notification.Position.MIDDLE).addThemeVariants(NotificationVariant.LUMO_ERROR);
+                showToast("Missing Approvers", "Every duration group must have an approver.", NotificationVariant.LUMO_ERROR, VaadinIcon.WARNING);
+//                Notification.show("Duration group (" + min + " to " + (max >= 99.0 ? "∞" : max) + " days) is missing approvers.", 4000, Notification.Position.MIDDLE).addThemeVariants(NotificationVariant.LUMO_ERROR);
                 return null;
             }
         }
@@ -536,7 +556,9 @@ public class AdminConfigurationView extends VerticalLayout {
                     rule.setMaxDays(BigDecimal.valueOf(999.0));
                 }
             }
-            Notification.show("Note: The final duration group was automatically extended to ∞ to prevent gaps.", 5000, Notification.Position.BOTTOM_END).addThemeVariants(NotificationVariant.LUMO_SUCCESS);
+            // Notification.show("Note: The final duration group was automatically extended to ∞ to prevent gaps.", 5000, Notification.Position.BOTTOM_END).addThemeVariants(NotificationVariant.LUMO_SUCCESS);
+            showToast("Policy Adjusted", "The final duration group was extended to ∞.", NotificationVariant.LUMO_SUCCESS, VaadinIcon.INFO_CIRCLE);
+//            Notification.show("Note: The final duration group was automatically extended to ∞ to prevent gaps.", 5000, Notification.Position.BOTTOM_END).addThemeVariants(NotificationVariant.LUMO_SUCCESS);
         }
 
         return newRules;
@@ -651,5 +673,45 @@ public class AdminConfigurationView extends VerticalLayout {
 
         card.add(nameSpan, tiersLayout);
         return card;
+    }
+    private void showToast(String title, String description, NotificationVariant variant, VaadinIcon icon) {
+        Notification notification = new Notification();
+        notification.setPosition(Notification.Position.BOTTOM_START); // Anchors to Bottom Left
+        notification.setDuration(variant == NotificationVariant.LUMO_ERROR ? 6000 : 3000); // Errors stay longer
+        notification.addThemeVariants(variant);
+
+        Icon toastIcon = icon.create();
+        toastIcon.setSize("20px");
+        if (variant == NotificationVariant.LUMO_SUCCESS) toastIcon.setColor("var(--app-success-color)");
+        else if (variant == NotificationVariant.LUMO_ERROR) toastIcon.setColor("var(--app-error-color)");
+        else toastIcon.setColor("var(--app-warning-color)");
+
+        Span titleSpan = new Span(title);
+        titleSpan.addClassNames(LumoUtility.FontWeight.BOLD, LumoUtility.TextColor.BODY);
+        titleSpan.getStyle().set("margin-left", "8px");
+
+        HorizontalLayout header = new HorizontalLayout(toastIcon, titleSpan);
+        header.setAlignItems(FlexComponent.Alignment.CENTER);
+        header.setSpacing(false);
+
+        Button closeBtn = new Button(VaadinIcon.CLOSE.create(), e -> notification.close());
+        closeBtn.addThemeVariants(ButtonVariant.LUMO_ICON, ButtonVariant.LUMO_TERTIARY);
+        closeBtn.getStyle().set("margin-left", "auto");
+        closeBtn.getStyle().set("color", "var(--app-text-secondary)");
+
+        HorizontalLayout topRow = new HorizontalLayout(header, closeBtn);
+        topRow.setWidthFull();
+        topRow.setAlignItems(FlexComponent.Alignment.CENTER);
+
+        Span descSpan = new Span(description);
+        descSpan.addClassNames(LumoUtility.FontSize.SMALL, LumoUtility.TextColor.SECONDARY);
+        descSpan.getStyle().set("margin-left", "28px"); // Aligns text under the title, skipping the icon
+
+        VerticalLayout layout = new VerticalLayout(topRow, descSpan);
+        layout.setPadding(false);
+        layout.setSpacing(false);
+
+        notification.add(layout);
+        notification.open();
     }
 }

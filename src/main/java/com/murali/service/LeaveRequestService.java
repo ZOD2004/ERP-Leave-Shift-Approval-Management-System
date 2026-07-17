@@ -365,4 +365,13 @@ public class LeaveRequestService {
         LocalDate nextDay = durationEngineService.getNextWorkingDay(endDate, emp);
         return leaveRequestRepository.findAdjacentLeaves(employeeId, prevDay, nextDay);
     }
+
+    public void deleteDraft(Long id) {
+
+        LeaveRequest request = (id != null) ? leaveRequestRepository.findById(id).orElseThrow() : null;
+        if(request == null){
+            throw new IllegalArgumentException("No such Draft Id");
+        }
+        leaveRequestRepository.delete(request);
+    }
 }

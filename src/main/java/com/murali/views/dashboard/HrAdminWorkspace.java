@@ -123,6 +123,7 @@ public class HrAdminWorkspace extends VerticalLayout {
 
     private Component createGlobalKpiSection() {
         HorizontalLayout kpiLayout = new HorizontalLayout();
+//        kpiLayout.addClassName("text-ellipsis-inline");
         kpiLayout.setWidthFull();
         kpiLayout.setSpacing(false);
         kpiLayout.getStyle().set("gap", "var(--app-padding)");
@@ -156,37 +157,36 @@ public class HrAdminWorkspace extends VerticalLayout {
             }
         }
 
-        kpiLayout.add(
-                createStatCard("Total Headcount", String.valueOf(totalEmployees), VaadinIcon.GROUP, "var(--app-primary-color)"),
-                createStatCard("Present Today", String.valueOf(presentCount), VaadinIcon.CHECK_CIRCLE, "#24a148"),
-                createStatCard("Yet to Check-in", String.valueOf(expectedCount), VaadinIcon.CLOCK, "#f1c21b"),
-                createStatCard("On Leave / Off", String.valueOf(absentOrLeaveCount), VaadinIcon.FLIGHT_TAKEOFF, "var(--app-text-secondary)"),
-                createStatCard("Pending Leaves", String.valueOf(pendingApprovals), VaadinIcon.INBOX, "#f1c21b"),
-                createStatCard("Pending Anomalies", String.valueOf(pendingAnomalies), VaadinIcon.WARNING, "#da1e28")
-        );
+        kpiLayout.add(createStatCard("Total Headcount", String.valueOf(totalEmployees), VaadinIcon.GROUP, "var(--app-primary-color)"), createStatCard("Present Today", String.valueOf(presentCount), VaadinIcon.CHECK_CIRCLE, "#24a148"), createStatCard("Yet to Check-in", String.valueOf(expectedCount), VaadinIcon.CLOCK, "#f1c21b"), createStatCard("On Leave / Off", String.valueOf(absentOrLeaveCount), VaadinIcon.FLIGHT_TAKEOFF, "var(--app-text-secondary)"), createStatCard("Pending Leaves", String.valueOf(pendingApprovals), VaadinIcon.INBOX, "#f1c21b"), createStatCard("Pending Anomalies", String.valueOf(pendingAnomalies), VaadinIcon.WARNING, "#da1e28"));
 
         return kpiLayout;
     }
+
     private Component createStatCard(String title, String value, VaadinIcon iconEnum, String iconColor) {
         VerticalLayout card = new VerticalLayout();
-        card.addClassNames("standard-surface", "hoverable");
+        card.addClassNames("standard-surface", "hoverable","test");
         card.setSpacing(false);
         card.setMinWidth("180px");
         card.getStyle().set("flex-grow", "1");
 
         HorizontalLayout header = new HorizontalLayout();
+        header.addClassName("header");
         header.setWidthFull();
         header.setJustifyContentMode(FlexComponent.JustifyContentMode.BETWEEN);
         header.setAlignItems(FlexComponent.Alignment.CENTER);
 
         Span titleSpan = new Span(title);
         titleSpan.addClassNames(LumoUtility.FontSize.SMALL, LumoUtility.TextColor.SECONDARY, LumoUtility.FontWeight.BOLD);
+        titleSpan.addClassName("text-ellipsis");
+
+        titleSpan.getStyle().set("min-width", "0");
 
         Icon icon = iconEnum.create();
         icon.setSize("16px");
         icon.setColor(iconColor);
 
         header.add(titleSpan, icon);
+        header.expand(titleSpan);
 
         H2 valueSpan = new H2(value);
         valueSpan.addClassNames(LumoUtility.Margin.Top.SMALL, LumoUtility.Margin.Bottom.NONE);
@@ -281,11 +281,7 @@ public class HrAdminWorkspace extends VerticalLayout {
         GlobalSearchComponent[] searchBoxRef = new GlobalSearchComponent[1];
         searchBoxRef[0] = new GlobalSearchComponent(searchTerm -> {
             String term = searchTerm.toLowerCase();
-            List<AttendanceCorrection> filtered = allCorrections.stream()
-                    .filter(ac -> ac.getAttendance().getEmployee().getFirstName().toLowerCase().contains(term) ||
-                            ac.getStatus().toLowerCase().contains(term) ||
-                            (ac.getApprover() != null && ac.getApprover().getUsername().toLowerCase().contains(term)))
-                    .toList();
+            List<AttendanceCorrection> filtered = allCorrections.stream().filter(ac -> ac.getAttendance().getEmployee().getFirstName().toLowerCase().contains(term) || ac.getStatus().toLowerCase().contains(term) || (ac.getApprover() != null && ac.getApprover().getUsername().toLowerCase().contains(term))).toList();
 
             grid.setItems(filtered);
             boolean isEmpty = filtered.isEmpty();
@@ -521,23 +517,14 @@ public class HrAdminWorkspace extends VerticalLayout {
             String term = searchTerm.toLowerCase();
 
             // Filter departments: Keep if department name matches, OR if any employee inside matches
-            List<Object> filteredRoots = allDepartments.stream()
-                    .filter(dept -> dept.getName().toLowerCase().contains(term) ||
-                            allActiveEmployees.stream().anyMatch(e -> e.getDepartment() != null &&
-                                    e.getDepartment().getId().equals(dept.getId()) &&
-                                    (e.getFirstName().toLowerCase().contains(term) || e.getEmployeeCode().toLowerCase().contains(term))))
-                    .map(d -> (Object) d)
-                    .toList();
+            List<Object> filteredRoots = allDepartments.stream().filter(dept -> dept.getName().toLowerCase().contains(term) || allActiveEmployees.stream().anyMatch(e -> e.getDepartment() != null && e.getDepartment().getId().equals(dept.getId()) && (e.getFirstName().toLowerCase().contains(term) || e.getEmployeeCode().toLowerCase().contains(term)))).map(d -> (Object) d).toList();
 
             grid.setItems(filteredRoots, item -> {
                 if (item instanceof Department dept) {
                     boolean isDeptMatch = dept.getName().toLowerCase().contains(term);
-                    return allActiveEmployees.stream()
-                            .filter(e -> e.getDepartment() != null && e.getDepartment().getId().equals(dept.getId()))
+                    return allActiveEmployees.stream().filter(e -> e.getDepartment() != null && e.getDepartment().getId().equals(dept.getId()))
                             // If department matches, show all employees. If not, only show matching employees.
-                            .filter(e -> isDeptMatch || e.getFirstName().toLowerCase().contains(term) || e.getEmployeeCode().toLowerCase().contains(term))
-                            .map(e -> (Object) e)
-                            .toList();
+                            .filter(e -> isDeptMatch || e.getFirstName().toLowerCase().contains(term) || e.getEmployeeCode().toLowerCase().contains(term)).map(e -> (Object) e).toList();
                 }
                 return java.util.Collections.emptyList();
             });
@@ -566,9 +553,7 @@ public class HrAdminWorkspace extends VerticalLayout {
         // Initial Data Load
         grid.setItems(rootItems, item -> {
             if (item instanceof Department dept) {
-                return allActiveEmployees.stream()
-                        .filter(e -> e.getDepartment() != null && e.getDepartment().getId().equals(dept.getId()))
-                        .map(e -> (Object) e).toList();
+                return allActiveEmployees.stream().filter(e -> e.getDepartment() != null && e.getDepartment().getId().equals(dept.getId())).map(e -> (Object) e).toList();
             }
             return java.util.Collections.emptyList();
         });
@@ -583,6 +568,7 @@ public class HrAdminWorkspace extends VerticalLayout {
         section.add(title, searchBoxRef[0], grid, emptyState);
         return section;
     }
+
     private Button createViewLeavesBtn(Employee emp) {
         Button btn = new Button("Leaves", VaadinIcon.EYE.create());
         btn.addThemeVariants(ButtonVariant.LUMO_TERTIARY, ButtonVariant.LUMO_SMALL);

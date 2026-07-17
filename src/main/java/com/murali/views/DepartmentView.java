@@ -76,7 +76,8 @@ public class DepartmentView extends VerticalLayout {
         H2 title = new H2("Department Configuration");
         title.addClassNames(LumoUtility.Margin.Top.NONE, LumoUtility.Margin.Bottom.NONE);
 
-        HorizontalLayout toolbar = new HorizontalLayout(title, addBtn);
+        add(title);
+        HorizontalLayout toolbar = new HorizontalLayout(searchBox, addBtn);
         toolbar.setWidthFull();
         toolbar.setAlignItems(Alignment.CENTER);
         toolbar.setJustifyContentMode(JustifyContentMode.BETWEEN);
@@ -89,7 +90,7 @@ public class DepartmentView extends VerticalLayout {
         gridContentArea.setPadding(false);
         gridContentArea.setSpacing(false);
 
-        add(toolbar,searchBox, gridContentArea);
+        add(toolbar, gridContentArea);
 
         updateList();
     }

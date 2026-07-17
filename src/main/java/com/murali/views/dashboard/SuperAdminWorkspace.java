@@ -37,8 +37,8 @@ public class SuperAdminWorkspace extends VerticalLayout {
 
     private final EmployeeService employeeService;
     private final AuditLogService auditLogService;
-    private final DepartmentRepository departmentRepository; // Or DepartmentService
-    private final UserRepository userRepository; // Or UserService
+    private final DepartmentRepository departmentRepository;
+    private final UserRepository userRepository;
     private final LeaveRequestService leaveRequestService;
     private final AttendanceCorrectionService attendanceCorrectionService;
     private final AttendanceCronJobService attendanceCronJobService;
@@ -55,22 +55,18 @@ public class SuperAdminWorkspace extends VerticalLayout {
         setPadding(false);
         setSpacing(true);
         setWidthFull();
-        getStyle().set("gap", "var(--app-layout-margin)"); // Applies consistent global block spacing
+        getStyle().set("gap", "var(--app-layout-margin)");
 
         buildUI();
     }
 
     private void buildUI() {
-        // 1. Header
         H2 header = new H2("System Administrator Console");
         header.addClassNames(LumoUtility.Margin.Top.NONE, LumoUtility.Margin.Bottom.MEDIUM, LumoUtility.TextColor.PRIMARY);
         add(header);
 
-        // 2. KPI Cards Section
         add(createKpiSection());
-        // Removed unnecessary spacer Hr tag
 
-        // 3. Middle Section: System Health & Activity
         HorizontalLayout middleSection = new HorizontalLayout();
         middleSection.setWidthFull();
         middleSection.setAlignItems(FlexComponent.Alignment.START);
@@ -78,7 +74,6 @@ public class SuperAdminWorkspace extends VerticalLayout {
         Component systemHealth = createSystemHealthWidget();
         Component recentActivity = createAuditLogWidget();
 
-        // Give the Grid more space than the health cards
         middleSection.add(systemHealth, recentActivity);
         middleSection.setFlexGrow(1, systemHealth);
         middleSection.setFlexGrow(2, recentActivity);
@@ -91,11 +86,9 @@ public class SuperAdminWorkspace extends VerticalLayout {
         kpiLayout.setWidthFull();
         kpiLayout.setSpacing(false);
         kpiLayout.getStyle().set("gap", "var(--app-padding)");
-        // Force horizontal layout and allow horizontal scrolling on small screens
         kpiLayout.getStyle().set("overflow-x", "auto");
         kpiLayout.getStyle().set("padding-bottom", "8px");
 
-        // Fetch Data safely
         long totalEmployees = employeeService.findAllActive().size();
         long activeLogins = auditLogService.getActiveLoginsToday();
         long totalDepts = departmentRepository.count();
@@ -111,10 +104,8 @@ public class SuperAdminWorkspace extends VerticalLayout {
 
         kpiLayout.add(
                 createStatCard("Total Employees", String.valueOf(totalEmployees), VaadinIcon.USERS, "var(--app-primary-color)"),
-//                createStatCard("Active Logins Today", String.valueOf(activeLogins), VaadinIcon.SIGN_IN, "#24a148"),
                 createStatCard("Departments", String.valueOf(totalDepts), VaadinIcon.BUILDING, "var(--app-text-secondary)"),
                 createStatCard("Managers & HODs", String.valueOf(totalManagers), VaadinIcon.USER, "var(--app-text-secondary)"),
-//                createStatCard("System Pending Approvals", String.valueOf(totalPendingApprovals), VaadinIcon.INBOX, "#f1c21b"),
                 createStatCard("Audit Events Today", String.valueOf(auditEventsToday), VaadinIcon.RECORDS, "var(--app-text-secondary)")
         );
 
@@ -132,7 +123,8 @@ public class SuperAdminWorkspace extends VerticalLayout {
         header.setAlignItems(FlexComponent.Alignment.CENTER);
 
         Span titleSpan = new Span(title);
-        titleSpan.addClassNames(LumoUtility.FontSize.SMALL, LumoUtility.TextColor.SECONDARY, LumoUtility.FontWeight.BOLD);
+        titleSpan.addClassNames(LumoUtility.FontSize.SMALL, LumoUtility.TextColor.SECONDARY, LumoUtility.FontWeight.BOLD,"text-ellipsis");
+
 
         Icon icon = iconEnum.create();
         icon.setSize("16px");
@@ -155,11 +147,9 @@ public class SuperAdminWorkspace extends VerticalLayout {
         H3 title = new H3("System Health & Jobs");
         title.addClassNames(LumoUtility.Margin.Top.NONE, LumoUtility.Margin.Bottom.SMALL);
 
-        // Fetch Cron Job Status
         String cronStatus = attendanceCronJobService.getLastRunStatus();
         String lastRun = attendanceCronJobService.getLastRunTime() != null ? attendanceCronJobService.getLastRunTime().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")) : "Never Run";
 
-        // Build the Health Card
         VerticalLayout healthCard = new VerticalLayout();
         healthCard.addClassNames("standard-surface");
 
@@ -289,13 +279,13 @@ public class SuperAdminWorkspace extends VerticalLayout {
         oldStateArea.setValue(log.getOldState() != null ? log.getOldState() : "NULL");
         oldStateArea.setReadOnly(true);
         oldStateArea.setWidth("50%");
-        oldStateArea.getStyle().set("color", "#da1e28"); // Standard error color
+        oldStateArea.getStyle().set("color", "#da1e28");
 
         TextArea newStateArea = new TextArea("New State");
         newStateArea.setValue(log.getNewState() != null ? log.getNewState() : "NULL");
         newStateArea.setReadOnly(true);
         newStateArea.setWidth("50%");
-        newStateArea.getStyle().set("color", "#24a148"); // Standard success color
+        newStateArea.getStyle().set("color", "#24a148");
 
         diffLayout.add(oldStateArea, newStateArea);
 

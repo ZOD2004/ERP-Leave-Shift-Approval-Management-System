@@ -111,6 +111,7 @@ public class ShiftAssignmentView extends VerticalLayout {
         addClassName("standard-view-container");
         contentArea.setSizeFull();
         contentArea.getStyle().set("overflow", "hidden");
+        contentArea.getStyle().set("padding", "0px");
 
         buildDashboard();
         buildAssignmentDialog();

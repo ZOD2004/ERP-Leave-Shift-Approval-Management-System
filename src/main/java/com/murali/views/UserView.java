@@ -83,12 +83,15 @@ public class UserView extends VerticalLayout {
             updateList();
         });
 
-        HorizontalLayout toolbar = new HorizontalLayout(title, searchBox, addBtn);
+        add(title);
+        HorizontalLayout toolbar = new HorizontalLayout(searchBox, addBtn);
         toolbar.setWidthFull();
         toolbar.setAlignItems(Alignment.CENTER);
         toolbar.expand(searchBox);
+        toolbar.setJustifyContentMode(JustifyContentMode.BETWEEN);
+        add(toolbar);
+        add(grid, emptyState);
 
-        add(toolbar, grid, emptyState);
         updateList();
     }
 
